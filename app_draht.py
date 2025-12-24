@@ -75,24 +75,33 @@ def add_tor(modell, sl, th, saeule, zub, farbe):
     })
 def delete_tor(idx): st.session_state['tore'].pop(idx)
 
-# --- RECHNER (MIT LFM PREIS) ---
+# --- RECHNER (MIT INTELLIGENTEM LFM PREIS) ---
 def calculate_project(db, montage_std, montage_satz, rabatt):
     pos_liste = []
-    total_netto = 0
+    total_netto_material = 0
     total_saecke_projekt = 0
     
+    # Vorab-Berechnung für Verteilungsschlüssel der Montage
+    total_zaun_laenge = sum([z['laenge'] for z in st.session_state['zauene']])
+    total_montage_kosten = montage_std * montage_satz
+    
+    # Montagekosten pro Meter (nur für die Info-Anzeige, nicht für die Endsumme)
+    montage_anteil_pro_m = 0
+    if total_zaun_laenge > 0:
+        montage_anteil_pro_m = total_montage_kosten / total_zaun_laenge
+
     # 1. ZÄUNE
     for i, z in enumerate(st.session_state['zauene']):
         details = []
         farbfaktor = db.farben[z['farbe']]
-        sum_pos = 0
+        sum_pos_material = 0
 
         # A. Matten
         anz_matten = math.ceil(z['laenge'] / 2.5)
         p_matte_einzel = db.get_matte_preis(z['typ'], z['hoehe']) * farbfaktor
         k_matten = anz_matten * p_matte_einzel
         details.append({"txt": f"Gittermatten: {anz_matten} Stk {z['typ']} ({z['farbe']}, H={z['hoehe']})", "ep": p_matte_einzel, "sum": k_matten})
-        sum_pos += k_matten
+        sum_pos_material += k_matten
         
         # B. Steher
         anz_steher = anz_matten + 1 + z['ecken']
@@ -100,26 +109,25 @@ def calculate_project(db, montage_std, montage_satz, rabatt):
         k_steher = anz_steher * p_steher_raw
         l_steher_mm = z['hoehe'] + 600 if z['montage'] == "Einbetonieren" else z['hoehe'] + 100
         details.append({"txt": f"Steher: {anz_steher} Stk '{z['steher']}' (L={l_steher_mm}mm)", "ep": p_steher_raw, "sum": k_steher})
-        sum_pos += k_steher
+        sum_pos_material += k_steher
 
-        # C. Montage Material
+        # C. Montage Material (Beton/Konsolen)
         if z['montage'] == "Einbetonieren":
             beton_anz = anz_steher * z['beton_stk']
             k_beton = beton_anz * db.beton_sack_preis
             details.append({"txt": f"Fundament: {beton_anz} Säcke Fertigbeton", "ep": db.beton_sack_preis, "sum": k_beton})
-            sum_pos += k_beton
+            sum_pos_material += k_beton
             total_saecke_projekt += beton_anz
         else:
             p_kons_set = (db.konsole_preis + db.montagemat_preis) * db.faktor
             k_kons = anz_steher * p_kons_set
             details.append({"txt": f"Montage-Set: {anz_steher}x Konsole & Anker", "ep": p_kons_set, "sum": k_kons})
-            sum_pos += k_kons
+            sum_pos_material += k_kons
 
         # D. Sichtschutz
         if z['sicht'] != "Keiner":
             info = db.sichtschutz_daten[z['sicht']]
             reihen = z['reihen']
-            
             if "Rolle" in z['sicht']:
                 total_bahnen_m = z['laenge'] * reihen
                 anz_einheiten = math.ceil(total_bahnen_m / info['laenge'])
@@ -127,26 +135,26 @@ def calculate_project(db, montage_std, montage_satz, rabatt):
             else:
                 anz_einheiten = anz_matten * reihen
                 calc_txt = f"{reihen} Reihen für {anz_matten} Matten"
-
             p_sicht_einzel = info['preis'] 
             k_sicht = anz_einheiten * p_sicht_einzel
-            
             details.append({"txt": f"Sichtschutz: {anz_einheiten} {info['einheit']} ({z['sicht']})", "ep": p_sicht_einzel, "sum": k_sicht})
-            details.append({"txt": f"   > Kalkulation: {calc_txt}", "ep": 0, "sum": 0})
-            sum_pos += k_sicht
+            sum_pos_material += k_sicht
 
-        # --- NEU: LFM PREIS BERECHNUNG ---
-        lfm_preis = sum_pos / z['laenge']
-        # Wir fügen den LFM Preis als erstes Element in die Details ein, damit er oben steht
+        # --- BERECHNUNG DES "EHRLICHEN" LFM PREISES ---
+        # 1. Materialpreis rabattiert
+        mat_rabattiert = sum_pos_material * (1 - (rabatt/100))
+        # 2. Anteilige Montagekosten für diesen Abschnitt
+        montage_anteil = z['laenge'] * montage_anteil_pro_m
+        # 3. Summe durch Meter
+        real_lfm_preis = (mat_rabattiert + montage_anteil) / z['laenge']
+
         details.insert(0, {
-            "txt": f"KENNZAHL: entspricht {lfm_preis:.2f} EUR pro lfm", 
-            "ep": 0, 
-            "sum": 0,
-            "highlight": True # Markierung für PDF Generator
+            "txt": f"KENNZAHL: {real_lfm_preis:.2f} EUR / lfm (fertig montiert & rabattiert)", 
+            "ep": 0, "sum": 0, "highlight": True
         })
 
-        pos_liste.append({"titel": f"Zaun: {z['bezeichnung']} ({z['laenge']}m)", "details": details, "preis_total": sum_pos})
-        total_netto += sum_pos
+        pos_liste.append({"titel": f"Zaun: {z['bezeichnung']} ({z['laenge']}m)", "details": details, "preis_total": sum_pos_material})
+        total_netto_material += sum_pos_material
 
     # 2. TORE
     for i, t in enumerate(st.session_state['tore']):
@@ -168,38 +176,35 @@ def calculate_project(db, montage_std, montage_satz, rabatt):
             sum_tor += p_zub_ges
         
         pos_liste.append({"titel": f"Tor: {t['modell']} ({t['farbe']})", "details": details, "preis_total": sum_tor})
-        total_netto += sum_tor
+        total_netto_material += sum_tor
 
     # 3. GESAMT
-    rabatt_wert = total_netto * (rabatt / 100)
-    netto_rabattiert = total_netto - rabatt_wert
-    montage_kosten = montage_std * montage_satz
-    final_netto = netto_rabattiert + montage_kosten
+    rabatt_wert = total_netto_material * (rabatt / 100)
+    netto_rabattiert = total_netto_material - rabatt_wert
+    final_netto = netto_rabattiert + total_montage_kosten
     
     return {
         "positionen": pos_liste,
         "rabatt": rabatt_wert,
-        "montage": montage_kosten,
+        "montage": total_montage_kosten,
         "total_netto": final_netto,
         "mwst": final_netto * 0.20,
         "brutto": final_netto * 1.20,
         "beton_total": total_saecke_projekt
     }
 
-# --- PDF GENERATOR (MIT HIGHLIGHT) ---
+# --- PDF GENERATOR ---
 def create_pdf(res):
     pdf = FPDF()
     pdf.add_page()
     def txt(s): return str(s).encode('latin-1', 'replace').decode('latin-1')
 
-    # Header
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(0, 10, txt("ANGEBOT - ZAUNBAU"), ln=True, align='C')
     pdf.set_font("Arial", '', 10)
     pdf.cell(0, 10, txt(f"Datum: {datetime.date.today().strftime('%d.%m.%Y')}"), ln=True, align='R')
     pdf.ln(10)
 
-    # Tabellenkopf
     pdf.set_fill_color(230, 230, 230)
     pdf.set_font("Arial", 'B', 9)
     pdf.cell(10, 8, "#", 1, 0, 'C', 1)
@@ -208,39 +213,31 @@ def create_pdf(res):
     pdf.cell(45, 8, "Gesamt (Netto)", 1, 1, 'R', 1)
     
     for idx, pos in enumerate(res['positionen']):
-        # HAUPTZEILE
         pdf.set_font("Arial", 'B', 10)
         pdf.cell(10, 8, str(idx+1), "LRT", 0, 'C') 
         pdf.cell(135, 8, txt(pos['titel']), "LT", 0, 'L')
         pdf.cell(45, 8, txt(f"{pos['preis_total']:,.2f} EUR"), "LRT", 1, 'R')
         
-        # DETAILS
         pdf.set_font("Arial", '', 9)
         for d in pos['details']:
-            # Prüfung auf spezielle Zeilen
             is_highlight = d.get('highlight', False)
-            is_info = (d['ep'] == 0 and d['sum'] == 0 and not is_highlight)
-
-            pdf.cell(10, 5, "", "LR", 0) # Rand Links
             
+            pdf.cell(10, 5, "", "LR", 0)
             if is_highlight:
-                # KENNZAHL ZEILE (Fett & Kursiv)
-                pdf.set_font("Arial", 'BI', 9)
+                pdf.set_font("Arial", 'BI', 9) # Fett Kursiv
+                pdf.set_text_color(0, 0, 150) # Dunkelblau
                 pdf.cell(100, 5, txt(f" > {d['txt']}"), "L", 0, 'L')
-                pdf.cell(35, 5, "", 0, 0) # Kein EP
-                pdf.cell(45, 5, "", "R", 1) # Kein Gesamt
-                pdf.set_font("Arial", '', 9) # Reset Font
-            
-            elif is_info:
-                # Infozeile (Grau)
+                pdf.cell(35, 5, "", 0, 0)
+                pdf.cell(45, 5, "", "R", 1)
+                pdf.set_font("Arial", '', 9)
+                pdf.set_text_color(0,0,0)
+            elif d['ep'] == 0:
                 pdf.set_text_color(100,100,100)
                 pdf.cell(100, 5, txt(f"     {d['txt']}"), "L", 0, 'L')
                 pdf.cell(35, 5, "", 0, 0)
                 pdf.cell(45, 5, "", "R", 1)
                 pdf.set_text_color(0,0,0)
-            
             else:
-                # Normale Zeile
                 pdf.cell(100, 5, txt(f" - {d['txt']}"), "L", 0, 'L')
                 pdf.cell(35, 5, txt(f"à {d['ep']:,.2f} EUR"), 0, 0, 'R')
                 pdf.cell(45, 5, txt(f"{d['sum']:,.2f} EUR"), "R", 1, 'R')
@@ -257,7 +254,7 @@ def create_pdf(res):
         pdf.cell(45, 8, txt(f"{val:,.2f} EUR"), 1, 1, 'R', fill)
 
     if res['rabatt'] > 0: sum_row(f"Abzüglich Rabatt", -res['rabatt'])
-    if res['montage'] > 0: sum_row(f"Montageleistung", res['montage'])
+    if res['montage'] > 0: sum_row(f"Montageleistung (Pauschal)", res['montage'])
 
     pdf.ln(2)
     sum_row("GESAMT NETTO", res['total_netto'], bold=True)
@@ -273,7 +270,7 @@ def create_pdf(res):
 
 # --- GUI ---
 def main():
-    st.set_page_config(page_title="Profi Zaun V2.3", page_icon="🏗️", layout="wide")
+    st.set_page_config(page_title="Profi Zaun V2.4", page_icon="🏗️", layout="wide")
     
     with st.sidebar:
         st.header("Admin")
