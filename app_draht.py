@@ -11,7 +11,7 @@ class ZaunDatabase:
     def __init__(self, preisfaktor=1.0):
         self.faktor = preisfaktor
 
-        # PREISE MATTEN
+        # PREISE
         self.matten_preise = {
             "Leicht 6/5/6": {830: 35.00, 1030: 42.00, 1230: 49.00, 1430: 58.00, 1630: 65.00, 1830: 75.00, 2030: 85.00},
             "Schwer 8/6/8": {830: 48.00, 1030: 58.00, 1230: 69.00, 1430: 79.00, 1630: 89.00, 1830: 99.00, 2030: 110.00}
@@ -38,11 +38,10 @@ class ZaunDatabase:
         self.konsole_preis = 25.00
         self.montagemat_preis = 8.00
 
-        # NEU: PREISE FÜR SICHTSCHUTZ-EINHEITEN
         self.sichtschutz_daten = {
             "Keiner": {"preis": 0.00, "einheit": ""},
-            "Rolle (Weich 30m)": {"preis": 49.00, "einheit": "Rollen", "laenge": 30.0}, # Preis pro 30m Rolle
-            "Hart-PVC (Streifen 2,5m)": {"preis": 6.50, "einheit": "Streifen", "laenge": 2.5} # Preis pro 1 Streifen
+            "Rolle (Weich 30m)": {"preis": 49.00, "einheit": "Rollen", "laenge": 30.0},
+            "Hart-PVC (Streifen 2,5m)": {"preis": 6.50, "einheit": "Streifen", "laenge": 2.5}
         }
         
         self.tor_zubehoer = {"Schloss": 80.00, "E-Öffner": 45.00, "Bodenriegel": 30.00, "Zackenleiste": 25.00}
@@ -76,7 +75,7 @@ def add_tor(modell, sl, th, saeule, zub, farbe):
     })
 def delete_tor(idx): st.session_state['tore'].pop(idx)
 
-# --- RECHNER (LOGIK UPDATE) ---
+# --- RECHNER (MIT LFM PREIS) ---
 def calculate_project(db, montage_std, montage_satz, rabatt):
     pos_liste = []
     total_netto = 0
@@ -116,40 +115,35 @@ def calculate_project(db, montage_std, montage_satz, rabatt):
             details.append({"txt": f"Montage-Set: {anz_steher}x Konsole & Anker", "ep": p_kons_set, "sum": k_kons})
             sum_pos += k_kons
 
-        # D. SICHTSCHUTZ (NEUE LOGIK)
+        # D. Sichtschutz
         if z['sicht'] != "Keiner":
             info = db.sichtschutz_daten[z['sicht']]
-            reihen = z['reihen'] # Anzahl der horizontalen Bahnen
+            reihen = z['reihen']
             
             if "Rolle" in z['sicht']:
-                # WEICH PVC
-                # Gesamtlänge Bahnen = Zaunlänge * Anzahl Reihen
                 total_bahnen_m = z['laenge'] * reihen
-                # Anzahl Rollen = Gesamtbahnen / Rollenlänge (30m)
                 anz_einheiten = math.ceil(total_bahnen_m / info['laenge'])
-                calc_txt = f"{reihen} Reihen à {z['laenge']}m = {total_bahnen_m:.1f} lfm Bedarf"
+                calc_txt = f"{reihen} Reihen à {z['laenge']}m"
             else:
-                # HART PVC
-                # Anzahl Streifen = Anzahl Matten * Anzahl Reihen
-                # (Da 1 Streifen genau 2.5m ist und 1 Matte 2.5m ist)
                 anz_einheiten = anz_matten * reihen
                 calc_txt = f"{reihen} Reihen für {anz_matten} Matten"
 
-            p_sicht_einzel = info['preis'] # Hier meist kein Farbfaktor, da PVC eigene Preise hat, oder? 
-            # Falls Sichtschutz auch Farbeaufschlag hat, hier aktivieren:
-            # p_sicht_einzel *= farbfaktor 
-            
+            p_sicht_einzel = info['preis'] 
             k_sicht = anz_einheiten * p_sicht_einzel
             
-            details.append({
-                "txt": f"Sichtschutz: {anz_einheiten} {info['einheit']} ({z['sicht']})",
-                "ep": p_sicht_einzel,
-                "sum": k_sicht
-            })
-            # Zusatzinfo für PDF als separate Zeile ohne Preis
+            details.append({"txt": f"Sichtschutz: {anz_einheiten} {info['einheit']} ({z['sicht']})", "ep": p_sicht_einzel, "sum": k_sicht})
             details.append({"txt": f"   > Kalkulation: {calc_txt}", "ep": 0, "sum": 0})
-            
             sum_pos += k_sicht
+
+        # --- NEU: LFM PREIS BERECHNUNG ---
+        lfm_preis = sum_pos / z['laenge']
+        # Wir fügen den LFM Preis als erstes Element in die Details ein, damit er oben steht
+        details.insert(0, {
+            "txt": f"KENNZAHL: entspricht {lfm_preis:.2f} EUR pro lfm", 
+            "ep": 0, 
+            "sum": 0,
+            "highlight": True # Markierung für PDF Generator
+        })
 
         pos_liste.append({"titel": f"Zaun: {z['bezeichnung']} ({z['laenge']}m)", "details": details, "preis_total": sum_pos})
         total_netto += sum_pos
@@ -192,18 +186,20 @@ def calculate_project(db, montage_std, montage_satz, rabatt):
         "beton_total": total_saecke_projekt
     }
 
-# --- PDF GENERATOR ---
+# --- PDF GENERATOR (MIT HIGHLIGHT) ---
 def create_pdf(res):
     pdf = FPDF()
     pdf.add_page()
     def txt(s): return str(s).encode('latin-1', 'replace').decode('latin-1')
 
+    # Header
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(0, 10, txt("ANGEBOT - ZAUNBAU"), ln=True, align='C')
     pdf.set_font("Arial", '', 10)
     pdf.cell(0, 10, txt(f"Datum: {datetime.date.today().strftime('%d.%m.%Y')}"), ln=True, align='R')
     pdf.ln(10)
 
+    # Tabellenkopf
     pdf.set_fill_color(230, 230, 230)
     pdf.set_font("Arial", 'B', 9)
     pdf.cell(10, 8, "#", 1, 0, 'C', 1)
@@ -212,22 +208,39 @@ def create_pdf(res):
     pdf.cell(45, 8, "Gesamt (Netto)", 1, 1, 'R', 1)
     
     for idx, pos in enumerate(res['positionen']):
+        # HAUPTZEILE
         pdf.set_font("Arial", 'B', 10)
         pdf.cell(10, 8, str(idx+1), "LRT", 0, 'C') 
-        pdf.cell(135, 8, txt(pos['titel']), "LT", 0, 'L') 
+        pdf.cell(135, 8, txt(pos['titel']), "LT", 0, 'L')
         pdf.cell(45, 8, txt(f"{pos['preis_total']:,.2f} EUR"), "LRT", 1, 'R')
         
+        # DETAILS
         pdf.set_font("Arial", '', 9)
         for d in pos['details']:
-            if d['ep'] == 0 and d['sum'] == 0: # Infozeile ohne Preis
+            # Prüfung auf spezielle Zeilen
+            is_highlight = d.get('highlight', False)
+            is_info = (d['ep'] == 0 and d['sum'] == 0 and not is_highlight)
+
+            pdf.cell(10, 5, "", "LR", 0) # Rand Links
+            
+            if is_highlight:
+                # KENNZAHL ZEILE (Fett & Kursiv)
+                pdf.set_font("Arial", 'BI', 9)
+                pdf.cell(100, 5, txt(f" > {d['txt']}"), "L", 0, 'L')
+                pdf.cell(35, 5, "", 0, 0) # Kein EP
+                pdf.cell(45, 5, "", "R", 1) # Kein Gesamt
+                pdf.set_font("Arial", '', 9) # Reset Font
+            
+            elif is_info:
+                # Infozeile (Grau)
                 pdf.set_text_color(100,100,100)
-                pdf.cell(10, 5, "", "LR", 0)
                 pdf.cell(100, 5, txt(f"     {d['txt']}"), "L", 0, 'L')
                 pdf.cell(35, 5, "", 0, 0)
                 pdf.cell(45, 5, "", "R", 1)
                 pdf.set_text_color(0,0,0)
+            
             else:
-                pdf.cell(10, 5, "", "LR", 0)
+                # Normale Zeile
                 pdf.cell(100, 5, txt(f" - {d['txt']}"), "L", 0, 'L')
                 pdf.cell(35, 5, txt(f"à {d['ep']:,.2f} EUR"), 0, 0, 'R')
                 pdf.cell(45, 5, txt(f"{d['sum']:,.2f} EUR"), "R", 1, 'R')
@@ -260,7 +273,7 @@ def create_pdf(res):
 
 # --- GUI ---
 def main():
-    st.set_page_config(page_title="Profi Zaun V3.0", page_icon="🏗️", layout="wide")
+    st.set_page_config(page_title="Profi Zaun V2.3", page_icon="🏗️", layout="wide")
     
     with st.sidebar:
         st.header("Admin")
@@ -289,11 +302,10 @@ def main():
                 farbe = c5.selectbox("Farbe:", list(db.farben.keys()))
                 sicht = c6.selectbox("Sichtschutz:", list(db.sichtschutz_daten.keys()))
                 
-                # REIHEN BERECHNUNG
-                reihen_default = int(hoehe / 200) # Automatische Schätzung (z.B. 1030/200 = 5)
+                reihen_default = int(hoehe / 200)
                 reihen = 0
                 if sicht != "Keiner":
-                    reihen = st.number_input("Anzahl Reihen (Streifen):", 1, 15, reihen_default, help="Wieviele Bahnen werden eingezogen?")
+                    reihen = st.number_input("Anzahl Reihen (Streifen):", 1, 15, reihen_default)
                 
                 c7, c8 = st.columns(2)
                 mont = c7.radio("Montage:", ["Einbetonieren", "Auf Fundament"])
@@ -313,8 +325,6 @@ def main():
                 for i, z in enumerate(st.session_state['zauene']):
                     with st.expander(f"{i+1}. {z['bezeichnung']} ({z['laenge']}m)", expanded=True):
                         st.caption(f"{z['typ']} | H:{z['hoehe']}mm | {z['montage']}")
-                        if z['sicht'] != "Keiner":
-                             st.caption(f"Sichtschutz: {z['reihen']} Reihen ({z['sicht']})")
                         if st.button("Löschen", key=f"del_{i}"): delete_zaun(i); st.rerun()
 
         with tab2:
