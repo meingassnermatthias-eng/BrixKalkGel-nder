@@ -8,48 +8,50 @@ import json
 from streamlit_pdf_viewer import pdf_viewer
 
 # ==========================================
-# 1. STANDARD DATEN (Fallback)
+# 1. STANDARD DATEN (Neue Struktur: VZ vs FARBE)
 # ==========================================
 def get_default_data():
     return {
+        # MATTEN: p_vz = Preis Verzinkt, p_fb = Preis Farbe (Standard)
         "matten": {
             "Leicht 6/5/6": {
-                830: {'p': 35.00, 'nr': 'M-L-0830'}, 1030: {'p': 42.00, 'nr': 'M-L-1030'}, 
-                1230: {'p': 49.00, 'nr': 'M-L-1230'}, 1430: {'p': 58.00, 'nr': 'M-L-1430'}, 
-                1630: {'p': 65.00, 'nr': 'M-L-1630'}, 1830: {'p': 75.00, 'nr': 'M-L-1830'}, 
-                2030: {'p': 85.00, 'nr': 'M-L-2030'}
+                830:  {'p_vz': 28.00, 'nr_vz': 'M-L-0830-V', 'p_fb': 35.00, 'nr_fb': 'M-L-0830-F'}, 
+                1030: {'p_vz': 33.00, 'nr_vz': 'M-L-1030-V', 'p_fb': 42.00, 'nr_fb': 'M-L-1030-F'}, 
+                1230: {'p_vz': 39.00, 'nr_vz': 'M-L-1230-V', 'p_fb': 49.00, 'nr_fb': 'M-L-1230-F'}, 
+                1430: {'p_vz': 46.00, 'nr_vz': 'M-L-1430-V', 'p_fb': 58.00, 'nr_fb': 'M-L-1430-F'}, 
+                1630: {'p_vz': 52.00, 'nr_vz': 'M-L-1630-V', 'p_fb': 65.00, 'nr_fb': 'M-L-1630-F'}, 
+                1830: {'p_vz': 60.00, 'nr_vz': 'M-L-1830-V', 'p_fb': 75.00, 'nr_fb': 'M-L-1830-F'}, 
+                2030: {'p_vz': 68.00, 'nr_vz': 'M-L-2030-V', 'p_fb': 85.00, 'nr_fb': 'M-L-2030-F'}
             },
             "Schwer 8/6/8": {
-                830: {'p': 48.00, 'nr': 'M-S-0830'}, 1030: {'p': 58.00, 'nr': 'M-S-1030'}, 
-                1230: {'p': 69.00, 'nr': 'M-S-1230'}, 1430: {'p': 79.00, 'nr': 'M-S-1430'}, 
-                1630: {'p': 89.00, 'nr': 'M-S-1630'}, 1830: {'p': 99.00, 'nr': 'M-S-1830'}, 
-                2030: {'p': 110.00, 'nr': 'M-S-2030'}
+                830:  {'p_vz': 38.00, 'nr_vz': 'M-S-0830-V', 'p_fb': 48.00, 'nr_fb': 'M-S-0830-F'}, 
+                1030: {'p_vz': 46.00, 'nr_vz': 'M-S-1030-V', 'p_fb': 58.00, 'nr_fb': 'M-S-1030-F'}, 
+                1230: {'p_vz': 55.00, 'nr_vz': 'M-S-1230-V', 'p_fb': 69.00, 'nr_fb': 'M-S-1230-F'}, 
+                1430: {'p_vz': 63.00, 'nr_vz': 'M-S-1430-V', 'p_fb': 79.00, 'nr_fb': 'M-S-1430-F'}, 
+                1630: {'p_vz': 71.00, 'nr_vz': 'M-S-1630-V', 'p_fb': 89.00, 'nr_fb': 'M-S-1630-F'}, 
+                1830: {'p_vz': 79.00, 'nr_vz': 'M-S-1830-V', 'p_fb': 99.00, 'nr_fb': 'M-S-1830-F'}, 
+                2030: {'p_vz': 88.00, 'nr_vz': 'M-S-2030-V', 'p_fb': 110.00, 'nr_fb': 'M-S-2030-F'}
             }
         },
+        # STEHER
         "steher": {
-            "Rechteck 60x40": {'p': 30.00, 'nr': 'ST-RE-6040'}, 
-            "Rundrohr 60mm": {'p': 35.00, 'nr': 'ST-RD-60'}, 
-            "Typ SL 60 (Klemm)": {'p': 45.00, 'nr': 'ST-SL-60'}, 
-            "Typ 70k (Design)": {'p': 55.00, 'nr': 'ST-70K'}
+            "Rechteck 60x40":    {'p_vz': 24.00, 'nr_vz': 'ST-RE-V', 'p_fb': 30.00, 'nr_fb': 'ST-RE-F'}, 
+            "Rundrohr 60mm":     {'p_vz': 28.00, 'nr_vz': 'ST-RD-V', 'p_fb': 35.00, 'nr_fb': 'ST-RD-F'}, 
+            "Typ SL 60 (Klemm)": {'p_vz': 36.00, 'nr_vz': 'ST-SL-V', 'p_fb': 45.00, 'nr_fb': 'ST-SL-F'}, 
+            "Typ 70k (Design)":  {'p_vz': 44.00, 'nr_vz': 'ST-70-V', 'p_fb': 55.00, 'nr_fb': 'ST-70-F'}
         },
+        # TORE
         "tore": {
             "Gehtür 1-flg": [
-                {'max_b': 1000, 'max_h': 1250, 'p': 450.00, 'nr': 'GT-100-125'}, 
-                {'max_b': 1000, 'max_h': 2000, 'p': 550.00, 'nr': 'GT-100-200'},
-                {'max_b': 1250, 'max_h': 1250, 'p': 520.00, 'nr': 'GT-125-125'}, 
-                {'max_b': 1250, 'max_h': 2000, 'p': 620.00, 'nr': 'GT-125-200'}
+                {'max_b': 1000, 'max_h': 1250, 'p_vz': 360.00, 'nr_vz': 'GT-100-125-V', 'p_fb': 450.00, 'nr_fb': 'GT-100-125-F'}, 
+                {'max_b': 1000, 'max_h': 2000, 'p_vz': 440.00, 'nr_vz': 'GT-100-200-V', 'p_fb': 550.00, 'nr_fb': 'GT-100-200-F'}
             ],
             "Einfahrtstor 2-flg": [
-                {'max_b': 3000, 'max_h': 1250, 'p': 1200.00, 'nr': 'ET-300-125'}, 
-                {'max_b': 3000, 'max_h': 2000, 'p': 1400.00, 'nr': 'ET-300-200'},
-                {'max_b': 4000, 'max_h': 1250, 'p': 1500.00, 'nr': 'ET-400-125'}, 
-                {'max_b': 4000, 'max_h': 2000, 'p': 1800.00, 'nr': 'ET-400-200'}
-            ],
-            "Schiebetor": [
-                {'max_b': 3500, 'max_h': 1400, 'p': 2800.00, 'nr': 'ST-350-140'}, 
-                {'max_b': 4500, 'max_h': 1400, 'p': 3500.00, 'nr': 'ST-450-140'}
+                {'max_b': 3000, 'max_h': 1250, 'p_vz': 960.00, 'nr_vz': 'ET-300-125-V', 'p_fb': 1200.00, 'nr_fb': 'ET-300-125-F'}, 
+                {'max_b': 3000, 'max_h': 2000, 'p_vz': 1120.00, 'nr_vz': 'ET-300-200-V', 'p_fb': 1400.00, 'nr_fb': 'ET-300-200-F'}
             ]
         },
+        # ZUBEHÖR (Hat meistens keinen Unterschied VZ/Farbe, daher p_vz = p_fb oder neutral)
         "zubehoer": {
             "torsaeulen": {
                 "Standard": {'p': 150.00, 'nr': 'TS-STD'}, 
@@ -79,7 +81,12 @@ def get_default_data():
                 "Zackenleiste": {'p': 35.00, 'nr': 'ZACK-25'}
             }
         },
-        "farben": {"Verzinkt": 1.0, "Anthrazit (7016)": 1.15, "Moosgrün (6005)": 1.15, "Sonderfarbe": 1.30}
+        "farben": {
+            "Verzinkt": "VZ", 
+            "Anthrazit (7016)": "FB", 
+            "Moosgrün (6005)": "FB", 
+            "Sonderfarbe": "SONDER"
+        }
     }
 
 if 'db_data' not in st.session_state:
@@ -94,29 +101,74 @@ class ZaunDatabase:
         self.data = st.session_state['db_data']
         self.farben = self.data['farben']
 
-    def get_matte_preis(self, typ, hoehe):
+    def is_color(self, farbe_name):
+        code = self.farben.get(farbe_name, "FB")
+        return code # "VZ", "FB" oder "SONDER"
+
+    def get_matte_preis(self, typ, hoehe, farb_code):
         if typ not in self.data['matten']: return 0, "N/A"
+        
         verf = sorted([int(k) for k in self.data['matten'][typ].keys()])
         if not verf: return 0, "N/A"
         passende_h = min(verf, key=lambda x: abs(x - hoehe))
         item = self.data['matten'][typ][passende_h]
-        return item['p'] * self.faktor, item['nr']
+        
+        # Unterscheidung Verzinkt vs Farbe
+        if farb_code == "VZ":
+            preis = item.get('p_vz', 0)
+            nr = item.get('nr_vz', '')
+        else:
+            preis = item.get('p_fb', 0)
+            nr = item.get('nr_fb', '')
+            
+        if farb_code == "SONDER":
+            preis *= 1.15 # Aufschlag für Sonderfarbe auf den Farbpreis
+            nr += "-SON"
+            
+        return preis * self.faktor, nr
 
-    def get_steher_preis(self, typ, hoehe):
+    def get_steher_preis(self, typ, hoehe, farb_code):
         if typ not in self.data['steher']: return 0, "N/A"
         basis = self.data['steher'][typ]
-        p_raw = basis['p'] * (hoehe/1000) * self.faktor
-        return p_raw, basis['nr']
+        
+        if farb_code == "VZ":
+            p_meter = basis.get('p_vz', 0)
+            nr = basis.get('nr_vz', '')
+        else:
+            p_meter = basis.get('p_fb', 0)
+            nr = basis.get('nr_fb', '')
 
-    def get_tor_preis(self, modell, b, h):
+        if farb_code == "SONDER":
+            p_meter *= 1.15
+            nr += "-SON"
+
+        p_total = p_meter * (hoehe/1000) * self.faktor
+        return p_total, nr
+
+    def get_tor_preis(self, modell, b, h, farb_code):
         moegliche = self.data['tore'].get(modell, [])
         if not moegliche: return 0, "N/A"
         passende = [t for t in moegliche if t['max_b'] >= b and t['max_h'] >= h]
+        
         if not passende: 
-             t = max(moegliche, key=lambda x: x['p'])
-             return t['p'] * 1.20 * self.faktor, t['nr'] + "-SONDER"
-        t = min(passende, key=lambda x: x['p'])
-        return t['p'] * self.faktor, t['nr']
+             t = max(moegliche, key=lambda x: x.get('p_fb', 0))
+             base_p = t.get('p_fb', 0) * 1.30
+             return base_p * self.faktor, "SONDERGRÖSSE"
+        
+        t = min(passende, key=lambda x: x.get('p_fb', 0))
+        
+        if farb_code == "VZ":
+            preis = t.get('p_vz', 0)
+            nr = t.get('nr_vz', '')
+        else:
+            preis = t.get('p_fb', 0)
+            nr = t.get('nr_fb', '')
+            
+        if farb_code == "SONDER":
+            preis *= 1.15
+            nr += "-SON"
+            
+        return preis * self.faktor, nr
 
 # ==========================================
 # 3. HELPER FUNCTIONS
@@ -149,45 +201,41 @@ def calculate_project(db, montage_std, montage_satz, rabatt):
     total_montage_kosten = montage_std * montage_satz
     montage_anteil_pro_m = (total_montage_kosten / total_zaun_laenge) if total_zaun_laenge > 0 else 0
 
-    # A. Zäune
+    # A. ZÄUNE
     for i, z in enumerate(st.session_state['zauene']):
         details = []
-        farbfaktor = db.farben.get(z['farbe'], 1.0)
+        farb_code = db.is_color(z['farbe']) # VZ oder FB
         sum_pos_material = 0
 
         # Matten
         anz_matten = math.ceil(z['laenge'] / 2.5)
-        p_matte_einzel, nr_matte = db.get_matte_preis(z['typ'], z['hoehe'])
-        p_matte_einzel *= farbfaktor
+        p_matte_einzel, nr_matte = db.get_matte_preis(z['typ'], z['hoehe'], farb_code)
         k_matten = anz_matten * p_matte_einzel
-        details.append({"txt": f"Gittermatten: {anz_matten} Stk {z['typ']} ({z['farbe']}, H={z['hoehe']})", "nr": nr_matte, "ep": p_matte_einzel, "sum": k_matten})
+        details.append({"txt": f"Matte: {anz_matten} Stk {z['typ']} ({z['farbe']}, H={z['hoehe']})", "nr": nr_matte, "ep": p_matte_einzel, "sum": k_matten})
         sum_pos_material += k_matten
         
         # Steher
         anz_steher = anz_matten + 1 + z['ecken']
-        p_steher_raw, nr_steher = db.get_steher_preis(z['steher'], z['hoehe'])
-        p_steher_raw *= farbfaktor
-        k_steher = anz_steher * p_steher_raw
+        p_steher_total, nr_steher = db.get_steher_preis(z['steher'], z['hoehe'], farb_code)
+        k_steher = anz_steher * p_steher_total
         l_steher_mm = z['hoehe'] + 600 if z['montage'] == "Einbetonieren" else z['hoehe'] + 100
-        details.append({"txt": f"Steher: {anz_steher} Stk '{z['steher']}' (L={l_steher_mm}mm)", "nr": nr_steher, "ep": p_steher_raw, "sum": k_steher})
+        details.append({"txt": f"Steher: {anz_steher} Stk '{z['steher']}' (L={l_steher_mm}mm)", "nr": nr_steher, "ep": p_steher_total, "sum": k_steher})
         sum_pos_material += k_steher
 
         # Montage Material
         if z['montage'] == "Einbetonieren":
             beton_anz = anz_steher * z['beton_stk']
             p_beton = db.data['zubehoer']['montage']['Beton_Sack']['p']
-            nr_beton = db.data['zubehoer']['montage']['Beton_Sack']['nr']
             k_beton = beton_anz * p_beton
-            details.append({"txt": f"Fundament: {beton_anz} Säcke Fertigbeton", "nr": nr_beton, "ep": p_beton, "sum": k_beton})
+            details.append({"txt": f"Fundament: {beton_anz} Säcke Fertigbeton", "nr": "BETON", "ep": p_beton, "sum": k_beton})
             sum_pos_material += k_beton
             total_saecke_projekt += beton_anz
         else:
             p_kons = db.data['zubehoer']['montage']['Konsole']['p']
             p_mat = db.data['zubehoer']['montage']['Montagemat']['p']
             p_set = (p_kons + p_mat) * db.faktor
-            nr_set = db.data['zubehoer']['montage']['Konsole']['nr'] + "+MAT"
             k_kons = anz_steher * p_set
-            details.append({"txt": f"Montage-Set: {anz_steher}x Konsole & Anker", "nr": nr_set, "ep": p_set, "sum": k_kons})
+            details.append({"txt": f"Montage-Set: {anz_steher}x Konsole & Anker", "nr": "SET-KON", "ep": p_set, "sum": k_kons})
             sum_pos_material += k_kons
 
         # Sichtschutz
@@ -217,22 +265,20 @@ def calculate_project(db, montage_std, montage_satz, rabatt):
         pos_liste.append({"titel": f"Zaun: {z['bezeichnung']} ({z['laenge']}m)", "details": details, "preis_total": sum_pos_material})
         total_netto_material += sum_pos_material
 
-    # B. Tore
+    # B. TORE
     for i, t in enumerate(st.session_state['tore']):
         details = []
-        farbfaktor = db.farben.get(t['farbe'], 1.0)
+        farb_code = db.is_color(t['farbe'])
         sum_tor = 0
 
-        p_basis, nr_tor = db.get_tor_preis(t['modell'], t['sl'], t['th'])
-        p_basis *= farbfaktor
+        p_basis, nr_tor = db.get_tor_preis(t['modell'], t['sl'], t['th'], farb_code)
         details.append({"txt": f"Torflügel: {t['modell']} ({t['sl']}x{t['th']})", "nr": nr_tor, "ep": p_basis, "sum": p_basis})
         sum_tor += p_basis
 
-        if t['saeule'] in db.data['zubehoer']['torsaeulen']:
-            ts_info = db.data['zubehoer']['torsaeulen'][t['saeule']]
-            p_saeule = ts_info['p'] * db.faktor
-            details.append({"txt": f"Torsäulen-Set: {t['saeule']}", "nr": ts_info['nr'], "ep": p_saeule, "sum": p_saeule})
-            sum_tor += p_saeule
+        ts_info = db.data['zubehoer']['torsaeulen'][t['saeule']]
+        p_saeule = ts_info['p'] * db.faktor
+        details.append({"txt": f"Torsäulen-Set: {t['saeule']}", "nr": ts_info['nr'], "ep": p_saeule, "sum": p_saeule})
+        sum_tor += p_saeule
 
         if t['zub']:
             for z_name in t['zub']:
@@ -337,38 +383,42 @@ def create_pdf(res):
     if res['beton_total'] > 0:
         pdf.ln(10)
         pdf.set_font("Arial", 'I', 9)
-        pdf.multi_cell(0, 5, txt(f"Hinweis: Ca. {res['beton_total']} Sack Fertigbeton benötigt."))
+        pdf.multi_cell(0, 5, txt(f"Logistik: {res['beton_total']} Sack Fertigbeton."))
 
     return pdf.output(dest='S').encode('latin-1')
 
 def render_price_editor():
-    st.subheader("📝 Preisliste bearbeiten")
-    
-    # IMPORT / EXPORT
+    st.subheader("📝 Preis-Manager")
+    st.info("Hier kannst du Preise für Verzinkt (VZ) und Farbe (FB) getrennt anlegen. Vergiss nicht zu SPEICHERN!")
+
+    # JSON EXPORT
     c_dl, c_up = st.columns(2)
     with c_dl:
         json_str = json.dumps(st.session_state['db_data'], indent=2)
-        st.download_button("💾 Datenbank speichern", json_str, "preise.json", "application/json", type="primary")
+        st.download_button("💾 Datenbank sichern", json_str, "preise.json", "application/json", type="primary")
     with c_up:
         uploaded = st.file_uploader("📂 Datenbank laden", type=["json"])
         if uploaded is not None:
             try:
                 st.session_state['db_data'] = json.load(uploaded)
-                st.success("Geladen!")
+                st.success("Erfolgreich geladen!")
                 st.rerun()
-            except: st.error("Fehler!")
+            except: st.error("Fehler beim Laden!")
 
     st.divider()
     data = st.session_state['db_data']
     tab_m, tab_s, tab_t, tab_z = st.tabs(["Matten", "Steher", "Tore", "Zubehör"])
     
-    # 1. MATTEN
+    # 1. MATTEN EDITOR (VZ vs FB)
     with tab_m:
-        st.caption("Neue Zeile mit (+) hinzufügen.")
         rows = []
         for typ, heights in data['matten'].items():
             for h, info in heights.items():
-                rows.append({"Typ": typ, "Höhe": h, "Preis": info['p'], "ArtNr": info['nr']})
+                rows.append({
+                    "Typ": typ, "Höhe": h, 
+                    "Preis_VZ": info.get('p_vz',0), "ArtNr_VZ": info.get('nr_vz',''),
+                    "Preis_FB": info.get('p_fb',0), "ArtNr_FB": info.get('nr_fb','')
+                })
         
         df = pd.DataFrame(rows)
         edited_df = st.data_editor(df, num_rows="dynamic", key="edit_mat", use_container_width=True)
@@ -379,31 +429,46 @@ def render_price_editor():
                 if not row['Typ']: continue
                 t, h = row['Typ'], int(row['Höhe'])
                 if t not in new_mat: new_mat[t] = {}
-                new_mat[t][h] = {'p': row['Preis'], 'nr': row['ArtNr']}
+                new_mat[t][h] = {
+                    'p_vz': row['Preis_VZ'], 'nr_vz': row['ArtNr_VZ'],
+                    'p_fb': row['Preis_FB'], 'nr_fb': row['ArtNr_FB']
+                }
             st.session_state['db_data']['matten'] = new_mat
             st.success("Gespeichert!")
 
-    # 2. STEHER
+    # 2. STEHER EDITOR (VZ vs FB)
     with tab_s:
         rows = []
         for typ, info in data['steher'].items():
-            rows.append({"Typ": typ, "Preis_pro_m": info['p'], "ArtNr": info['nr']})
+            rows.append({
+                "Typ": typ, 
+                "Preis_VZ": info.get('p_vz',0), "ArtNr_VZ": info.get('nr_vz',''),
+                "Preis_FB": info.get('p_fb',0), "ArtNr_FB": info.get('nr_fb','')
+            })
         df_s = pd.DataFrame(rows)
         edited_s = st.data_editor(df_s, num_rows="dynamic", key="edit_st", use_container_width=True)
         
         if st.button("Steher speichern", type="primary"):
             new_st = {}
             for _, row in edited_s.iterrows():
-                if row['Typ']: new_st[row['Typ']] = {'p': row['Preis_pro_m'], 'nr': row['ArtNr']}
+                if row['Typ']: 
+                    new_st[row['Typ']] = {
+                        'p_vz': row['Preis_VZ'], 'nr_vz': row['ArtNr_VZ'],
+                        'p_fb': row['Preis_FB'], 'nr_fb': row['ArtNr_FB']
+                    }
             st.session_state['db_data']['steher'] = new_st
             st.success("Gespeichert!")
 
-    # 3. TORE (NEU & FIXIERT)
+    # 3. TORE EDITOR (VZ vs FB)
     with tab_t:
         rows = []
         for mod, variants in data['tore'].items():
             for v in variants:
-                rows.append({"Modell": mod, "Breite_bis": v['max_b'], "Höhe_bis": v['max_h'], "Preis": v['p'], "ArtNr": v['nr']})
+                rows.append({
+                    "Modell": mod, "Breite": v['max_b'], "Höhe": v['max_h'], 
+                    "Preis_VZ": v.get('p_vz',0), "ArtNr_VZ": v.get('nr_vz',''),
+                    "Preis_FB": v.get('p_fb',0), "ArtNr_FB": v.get('nr_fb','')
+                })
         
         df_t = pd.DataFrame(rows)
         edited_t = st.data_editor(df_t, num_rows="dynamic", key="edit_tore", use_container_width=True)
@@ -414,7 +479,11 @@ def render_price_editor():
                 m = row['Modell']
                 if not m: continue
                 if m not in new_tore: new_tore[m] = []
-                new_tore[m].append({'max_b': int(row['Breite_bis']), 'max_h': int(row['Höhe_bis']), 'p': float(row['Preis']), 'nr': row['ArtNr']})
+                new_tore[m].append({
+                    'max_b': int(row['Breite']), 'max_h': int(row['Höhe']), 
+                    'p_vz': float(row['Preis_VZ']), 'nr_vz': row['ArtNr_VZ'],
+                    'p_fb': float(row['Preis_FB']), 'nr_fb': row['ArtNr_FB']
+                })
             st.session_state['db_data']['tore'] = new_tore
             st.success("Gespeichert!")
 
@@ -430,28 +499,24 @@ def render_price_editor():
         edited_z = st.data_editor(df_z, num_rows="dynamic", key="edit_zub", use_container_width=True)
         
         if st.button("Zubehör speichern", type="primary"):
-            # Clean rebuild
             for _, row in edited_z.iterrows():
                 cat, name = row['Kategorie'], row['Artikel']
                 if not cat or not name: continue
-                
-                # Ensure structure
                 if cat not in st.session_state['db_data']['zubehoer']:
                     st.session_state['db_data']['zubehoer'][cat] = {}
                 
+                # Zubehör hat meist keine VZ/FB Trennung, wir bleiben beim einfachen Preis 'p'
                 st.session_state['db_data']['zubehoer'][cat][name] = {'p': row['Preis'], 'nr': row['ArtNr']}
-                
-                # Defaults restoration for Sichtschutz
+                # Fix für Sichtschutz
                 if cat == 'sichtschutz' and 'einheit' not in st.session_state['db_data']['zubehoer'][cat][name]:
                      st.session_state['db_data']['zubehoer'][cat][name].update({'einheit': "Stk", 'len': 1.0})
-            
             st.success("Gespeichert!")
 
 # ==========================================
 # 6. MAIN APP
 # ==========================================
 def main():
-    st.set_page_config(page_title="Zaun-Profi V5.1", page_icon="🏗️", layout="wide")
+    st.set_page_config(page_title="Zaun-Profi V6.0", page_icon="🏗️", layout="wide")
     
     c1, c2, c3 = st.columns([1,4,1])
     if os.path.exists("logo_firma.png"): c1.image("logo_firma.png", width=100)
@@ -479,9 +544,9 @@ def main():
             laenge = c3.number_input("Länge (m):", 1.0, 500.0, 10.0)
             
             if typ in st.session_state['db_data']['matten']:
-                h_opts = sorted(st.session_state['db_data']['matten'][typ].keys())
-            else:
-                h_opts = [1030]
+                h_opts = sorted([int(x) for x in st.session_state['db_data']['matten'][typ].keys()])
+            else: h_opts = [1030]
+            
             hoehe = c4.select_slider("Höhe (mm):", options=h_opts, value=h_opts[min(1, len(h_opts)-1)])
             
             c5, c6 = st.columns(2)
