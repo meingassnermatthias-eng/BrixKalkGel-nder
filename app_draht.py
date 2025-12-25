@@ -95,10 +95,7 @@ class ZaunDatabase:
         self.farben = self.data['farben']
 
     def get_matte_preis(self, typ, hoehe):
-        # Fallback falls Typ gelöscht wurde
         if typ not in self.data['matten']: return 0, "N/A"
-        
-        # Nächste Höhe finden
         verf = sorted([int(k) for k in self.data['matten'][typ].keys()])
         if not verf: return 0, "N/A"
         passende_h = min(verf, key=lambda x: abs(x - hoehe))
@@ -179,16 +176,18 @@ def calculate_project(db, montage_std, montage_satz, rabatt):
         if z['montage'] == "Einbetonieren":
             beton_anz = anz_steher * z['beton_stk']
             p_beton = db.data['zubehoer']['montage']['Beton_Sack']['p']
+            nr_beton = db.data['zubehoer']['montage']['Beton_Sack']['nr']
             k_beton = beton_anz * p_beton
-            details.append({"txt": f"Fundament: {beton_anz} Säcke Fertigbeton", "nr": db.data['zubehoer']['montage']['Beton_Sack']['nr'], "ep": p_beton, "sum": k_beton})
+            details.append({"txt": f"Fundament: {beton_anz} Säcke Fertigbeton", "nr": nr_beton, "ep": p_beton, "sum": k_beton})
             sum_pos_material += k_beton
             total_saecke_projekt += beton_anz
         else:
             p_kons = db.data['zubehoer']['montage']['Konsole']['p']
             p_mat = db.data['zubehoer']['montage']['Montagemat']['p']
             p_set = (p_kons + p_mat) * db.faktor
+            nr_set = db.data['zubehoer']['montage']['Konsole']['nr'] + "+MAT"
             k_kons = anz_steher * p_set
-            details.append({"txt": f"Montage-Set: {anz_steher}x Konsole & Anker", "nr": "SET-KON", "ep": p_set, "sum": k_kons})
+            details.append({"txt": f"Montage-Set: {anz_steher}x Konsole & Anker", "nr": nr_set, "ep": p_set, "sum": k_kons})
             sum_pos_material += k_kons
 
         # Sichtschutz
@@ -238,7 +237,6 @@ def calculate_project(db, montage_std, montage_satz, rabatt):
         if t['zub']:
             for z_name in t['zub']:
                 item_data = None
-                # Suche nach passendem Zubehör Key
                 for k, v in db.data['zubehoer']['tor_parts'].items():
                     if k in z_name:
                         item_data = v
@@ -294,8 +292,8 @@ def create_pdf(res):
         for d in pos['details']:
             is_hl = d.get('highlight', False)
             art_nr = d.get('nr', "")
-            
             pdf.cell(10, 5, "", "LR", 0)
+            
             if is_hl:
                 pdf.set_font("Arial", 'BI', 9)
                 pdf.set_text_color(0, 50, 150)
@@ -339,37 +337,34 @@ def create_pdf(res):
     if res['beton_total'] > 0:
         pdf.ln(10)
         pdf.set_font("Arial", 'I', 9)
-        pdf.multi_cell(0, 5, txt(f"Logistik: {res['beton_total']} Sack Fertigbeton."))
+        pdf.multi_cell(0, 5, txt(f"Hinweis: Ca. {res['beton_total']} Sack Fertigbeton benötigt."))
 
     return pdf.output(dest='S').encode('latin-1')
 
 def render_price_editor():
     st.subheader("📝 Preisliste bearbeiten")
     
-    # IMPORT / EXPORT BUTTONS
+    # IMPORT / EXPORT
     c_dl, c_up = st.columns(2)
     with c_dl:
         json_str = json.dumps(st.session_state['db_data'], indent=2)
-        st.download_button("💾 Datenbank speichern (JSON)", json_str, "preise.json", "application/json", type="primary")
+        st.download_button("💾 Datenbank speichern", json_str, "preise.json", "application/json", type="primary")
     with c_up:
         uploaded = st.file_uploader("📂 Datenbank laden", type=["json"])
         if uploaded is not None:
             try:
                 st.session_state['db_data'] = json.load(uploaded)
-                st.success("Datenbank geladen!")
+                st.success("Geladen!")
                 st.rerun()
-            except:
-                st.error("Fehler beim Laden!")
+            except: st.error("Fehler!")
 
     st.divider()
-    
-    # TABS FOR EDITORS
     data = st.session_state['db_data']
-    tab_m, tab_s, tab_z = st.tabs(["Gittermatten", "Steher", "Zubehör/Tore"])
+    tab_m, tab_s, tab_t, tab_z = st.tabs(["Matten", "Steher", "Tore", "Zubehör"])
     
-    # 1. MATTEN EDITOR
+    # 1. MATTEN
     with tab_m:
-        st.info("Tabelle ist bearbeitbar! Neue Zeile mit '+' unten.")
+        st.caption("Neue Zeile mit (+) hinzufügen.")
         rows = []
         for typ, heights in data['matten'].items():
             for h, info in heights.items():
@@ -388,27 +383,44 @@ def render_price_editor():
             st.session_state['db_data']['matten'] = new_mat
             st.success("Gespeichert!")
 
-    # 2. STEHER EDITOR
+    # 2. STEHER
     with tab_s:
         rows = []
         for typ, info in data['steher'].items():
             rows.append({"Typ": typ, "Preis_pro_m": info['p'], "ArtNr": info['nr']})
-        
         df_s = pd.DataFrame(rows)
         edited_s = st.data_editor(df_s, num_rows="dynamic", key="edit_st", use_container_width=True)
         
         if st.button("Steher speichern", type="primary"):
             new_st = {}
             for _, row in edited_s.iterrows():
-                if row['Typ']:
-                    new_st[row['Typ']] = {'p': row['Preis_pro_m'], 'nr': row['ArtNr']}
+                if row['Typ']: new_st[row['Typ']] = {'p': row['Preis_pro_m'], 'nr': row['ArtNr']}
             st.session_state['db_data']['steher'] = new_st
             st.success("Gespeichert!")
 
-    # 3. ZUBEHÖR EDITOR (Flat List)
+    # 3. TORE (NEU & FIXIERT)
+    with tab_t:
+        rows = []
+        for mod, variants in data['tore'].items():
+            for v in variants:
+                rows.append({"Modell": mod, "Breite_bis": v['max_b'], "Höhe_bis": v['max_h'], "Preis": v['p'], "ArtNr": v['nr']})
+        
+        df_t = pd.DataFrame(rows)
+        edited_t = st.data_editor(df_t, num_rows="dynamic", key="edit_tore", use_container_width=True)
+        
+        if st.button("Tore speichern", type="primary"):
+            new_tore = {}
+            for _, row in edited_t.iterrows():
+                m = row['Modell']
+                if not m: continue
+                if m not in new_tore: new_tore[m] = []
+                new_tore[m].append({'max_b': int(row['Breite_bis']), 'max_h': int(row['Höhe_bis']), 'p': float(row['Preis']), 'nr': row['ArtNr']})
+            st.session_state['db_data']['tore'] = new_tore
+            st.success("Gespeichert!")
+
+    # 4. ZUBEHÖR
     with tab_z:
         rows = []
-        # Flatten structure
         for cat in ['montage', 'sichtschutz', 'tor_parts', 'torsaeulen']:
             if cat in data['zubehoer']:
                 for name, info in data['zubehoer'][cat].items():
@@ -418,29 +430,28 @@ def render_price_editor():
         edited_z = st.data_editor(df_z, num_rows="dynamic", key="edit_zub", use_container_width=True)
         
         if st.button("Zubehör speichern", type="primary"):
-            # Rebuild structure (careful not to delete unspecified cats)
+            # Clean rebuild
             for _, row in edited_z.iterrows():
                 cat, name = row['Kategorie'], row['Artikel']
-                if cat in st.session_state['db_data']['zubehoer']:
-                    # Update or Add
-                    if name not in st.session_state['db_data']['zubehoer'][cat]:
-                        st.session_state['db_data']['zubehoer'][cat][name] = {}
-                    
-                    st.session_state['db_data']['zubehoer'][cat][name]['p'] = row['Preis']
-                    st.session_state['db_data']['zubehoer'][cat][name]['nr'] = row['ArtNr']
-                    
-                    # Special fields handling (restore defaults if new)
-                    if cat == 'sichtschutz' and 'einheit' not in st.session_state['db_data']['zubehoer'][cat][name]:
-                         st.session_state['db_data']['zubehoer'][cat][name]['einheit'] = "Stk"
-                         st.session_state['db_data']['zubehoer'][cat][name]['len'] = 1.0
-
+                if not cat or not name: continue
+                
+                # Ensure structure
+                if cat not in st.session_state['db_data']['zubehoer']:
+                    st.session_state['db_data']['zubehoer'][cat] = {}
+                
+                st.session_state['db_data']['zubehoer'][cat][name] = {'p': row['Preis'], 'nr': row['ArtNr']}
+                
+                # Defaults restoration for Sichtschutz
+                if cat == 'sichtschutz' and 'einheit' not in st.session_state['db_data']['zubehoer'][cat][name]:
+                     st.session_state['db_data']['zubehoer'][cat][name].update({'einheit': "Stk", 'len': 1.0})
+            
             st.success("Gespeichert!")
 
 # ==========================================
 # 6. MAIN APP
 # ==========================================
 def main():
-    st.set_page_config(page_title="Zaun-Profi V5.0", page_icon="🏗️", layout="wide")
+    st.set_page_config(page_title="Zaun-Profi V5.1", page_icon="🏗️", layout="wide")
     
     c1, c2, c3 = st.columns([1,4,1])
     if os.path.exists("logo_firma.png"): c1.image("logo_firma.png", width=100)
@@ -461,14 +472,12 @@ def main():
             c1, c2 = st.columns(2)
             bez = c1.text_input("Bezeichnung:", "Vorgarten")
             
-            # Dynamische Listen aus DB laden
             matten_opts = list(st.session_state['db_data']['matten'].keys())
             typ = c2.selectbox("Matten:", matten_opts)
             
             c3, c4 = st.columns(2)
             laenge = c3.number_input("Länge (m):", 1.0, 500.0, 10.0)
             
-            # Höhen passend zum Typ
             if typ in st.session_state['db_data']['matten']:
                 h_opts = sorted(st.session_state['db_data']['matten'][typ].keys())
             else:
@@ -518,8 +527,8 @@ def main():
             ts = st.selectbox("Säulen:", ts_opts)
             tf = st.selectbox("Farbe:", list(db.farben.keys()))
             
-            zub_opts = list(st.session_state['db_data']['zubehoer']['tor_parts'].keys())
-            tz = st.multiselect("Zubehör:", zub_opts)
+            zub_map = {k: k for k in st.session_state['db_data']['zubehoer']['tor_parts'].keys()}
+            tz = st.multiselect("Zubehör:", list(zub_map.keys()))
             
             if st.form_submit_button("➕ Tor speichern"):
                 add_tor(mod, sl, th, ts, tz, tf)
@@ -535,9 +544,9 @@ def main():
         h_satz = st.number_input("Satz (€):", 0.0, 200.0, 65.0)
         rabatt = st.slider("Rabatt %:", 0, 50, 0)
         
+        st.markdown("---")
         res = calculate_project(db, h_std, h_satz, rabatt)
         
-        st.subheader("Kalkulation")
         k1, k2 = st.columns(2)
         k1.metric("Netto", f"€ {res['total_netto']:,.2f}")
         k2.metric("Brutto", f"€ {res['brutto']:,.2f}")
