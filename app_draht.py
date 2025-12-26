@@ -8,39 +8,37 @@ import json
 from streamlit_pdf_viewer import pdf_viewer
 
 # ==========================================
-# 1. STANDARD DATEN (Korrigierte Schiebetore)
+# 1. DATENBANK MANAGEMENT (Hybrid)
 # ==========================================
-def get_default_data():
+def get_fallback_data():
+    # Das sind deine Standard-Daten (Sicherheitsnetz)
     return {
-        # MATTEN
         "matten": {
             "Leicht 6/5/6": {
-                830:  {'p_vz': 28.00, 'nr_vz': 'M-L-0830-V', 'p_fb': 35.00, 'nr_fb': 'M-L-0830-F'}, 
-                1030: {'p_vz': 33.00, 'nr_vz': 'M-L-1030-V', 'p_fb': 42.00, 'nr_fb': 'M-L-1030-F'}, 
-                1230: {'p_vz': 39.00, 'nr_vz': 'M-L-1230-V', 'p_fb': 49.00, 'nr_fb': 'M-L-1230-F'}, 
-                1430: {'p_vz': 46.00, 'nr_vz': 'M-L-1430-V', 'p_fb': 58.00, 'nr_fb': 'M-L-1430-F'}, 
-                1630: {'p_vz': 52.00, 'nr_vz': 'M-L-1630-V', 'p_fb': 65.00, 'nr_fb': 'M-L-1630-F'}, 
-                1830: {'p_vz': 60.00, 'nr_vz': 'M-L-1830-V', 'p_fb': 75.00, 'nr_fb': 'M-L-1830-F'}, 
-                2030: {'p_vz': 68.00, 'nr_vz': 'M-L-2030-V', 'p_fb': 85.00, 'nr_fb': 'M-L-2030-F'}
+                "830":  {'p_vz': 28.00, 'nr_vz': 'M-L-0830-V', 'p_fb': 35.00, 'nr_fb': 'M-L-0830-F'}, 
+                "1030": {'p_vz': 33.00, 'nr_vz': 'M-L-1030-V', 'p_fb': 42.00, 'nr_fb': 'M-L-1030-F'}, 
+                "1230": {'p_vz': 39.00, 'nr_vz': 'M-L-1230-V', 'p_fb': 49.00, 'nr_fb': 'M-L-1230-F'}, 
+                "1430": {'p_vz': 46.00, 'nr_vz': 'M-L-1430-V', 'p_fb': 58.00, 'nr_fb': 'M-L-1430-F'}, 
+                "1630": {'p_vz': 52.00, 'nr_vz': 'M-L-1630-V', 'p_fb': 65.00, 'nr_fb': 'M-L-1630-F'}, 
+                "1830": {'p_vz': 60.00, 'nr_vz': 'M-L-1830-V', 'p_fb': 75.00, 'nr_fb': 'M-L-1830-F'}, 
+                "2030": {'p_vz': 68.00, 'nr_vz': 'M-L-2030-V', 'p_fb': 85.00, 'nr_fb': 'M-L-2030-F'}
             },
             "Schwer 8/6/8": {
-                830:  {'p_vz': 38.00, 'nr_vz': 'M-S-0830-V', 'p_fb': 48.00, 'nr_fb': 'M-S-0830-F'}, 
-                1030: {'p_vz': 46.00, 'nr_vz': 'M-S-1030-V', 'p_fb': 58.00, 'nr_fb': 'M-S-1030-F'}, 
-                1230: {'p_vz': 55.00, 'nr_vz': 'M-S-1230-V', 'p_fb': 69.00, 'nr_fb': 'M-S-1230-F'}, 
-                1430: {'p_vz': 63.00, 'nr_vz': 'M-S-1430-V', 'p_fb': 79.00, 'nr_fb': 'M-S-1430-F'}, 
-                1630: {'p_vz': 71.00, 'nr_vz': 'M-S-1630-V', 'p_fb': 89.00, 'nr_fb': 'M-S-1630-F'}, 
-                1830: {'p_vz': 79.00, 'nr_vz': 'M-S-1830-V', 'p_fb': 99.00, 'nr_fb': 'M-S-1830-F'}, 
-                2030: {'p_vz': 88.00, 'nr_vz': 'M-S-2030-V', 'p_fb': 110.00, 'nr_fb': 'M-S-2030-F'}
+                "830":  {'p_vz': 38.00, 'nr_vz': 'M-S-0830-V', 'p_fb': 48.00, 'nr_fb': 'M-S-0830-F'}, 
+                "1030": {'p_vz': 46.00, 'nr_vz': 'M-S-1030-V', 'p_fb': 58.00, 'nr_fb': 'M-S-1030-F'}, 
+                "1230": {'p_vz': 55.00, 'nr_vz': 'M-S-1230-V', 'p_fb': 69.00, 'nr_fb': 'M-S-1230-F'}, 
+                "1430": {'p_vz': 63.00, 'nr_vz': 'M-S-1430-V', 'p_fb': 79.00, 'nr_fb': 'M-S-1430-F'}, 
+                "1630": {'p_vz': 71.00, 'nr_vz': 'M-S-1630-V', 'p_fb': 89.00, 'nr_fb': 'M-S-1630-F'}, 
+                "1830": {'p_vz': 79.00, 'nr_vz': 'M-S-1830-V', 'p_fb': 99.00, 'nr_fb': 'M-S-1830-F'}, 
+                "2030": {'p_vz': 88.00, 'nr_vz': 'M-S-2030-V', 'p_fb': 110.00, 'nr_fb': 'M-S-2030-F'}
             }
         },
-        # STEHER
         "steher": {
             "Rechteck 60x40":    {'p_vz': 24.00, 'nr_vz': 'ST-RE-V', 'p_fb': 30.00, 'nr_fb': 'ST-RE-F'}, 
             "Rundrohr 60mm":     {'p_vz': 28.00, 'nr_vz': 'ST-RD-V', 'p_fb': 35.00, 'nr_fb': 'ST-RD-F'}, 
             "Typ SL 60 (Klemm)": {'p_vz': 36.00, 'nr_vz': 'ST-SL-V', 'p_fb': 45.00, 'nr_fb': 'ST-SL-F'}, 
             "Typ 70k (Design)":  {'p_vz': 44.00, 'nr_vz': 'ST-70-V', 'p_fb': 55.00, 'nr_fb': 'ST-70-F'}
         },
-        # TORE (FIX: Jetzt alle mit VZ und FB Preisen)
         "tore": {
             "Gehtür 1-flg": [
                 {'max_b': 1000, 'max_h': 1250, 'p_vz': 360.00, 'nr_vz': 'GT-100-125-V', 'p_fb': 450.00, 'nr_fb': 'GT-100-125-F'}, 
@@ -50,23 +48,17 @@ def get_default_data():
                 {'max_b': 3000, 'max_h': 1250, 'p_vz': 960.00, 'nr_vz': 'ET-300-125-V', 'p_fb': 1200.00, 'nr_fb': 'ET-300-125-F'}, 
                 {'max_b': 3000, 'max_h': 2000, 'p_vz': 1120.00, 'nr_vz': 'ET-300-200-V', 'p_fb': 1400.00, 'nr_fb': 'ET-300-200-F'}
             ],
-            # HIER WAR DER FEHLER: Schiebetore brauchen auch p_vz und p_fb Struktur
             "Schiebetor": [
                 {'max_b': 3500, 'max_h': 1400, 'p_vz': 2500.00, 'nr_vz': 'ST-350-140-V', 'p_fb': 2800.00, 'nr_fb': 'ST-350-140-F'}, 
                 {'max_b': 4500, 'max_h': 1400, 'p_vz': 3100.00, 'nr_vz': 'ST-450-140-V', 'p_fb': 3500.00, 'nr_fb': 'ST-450-140-F'}
             ]
         },
-        # ZUBEHÖR
         "zubehoer": {
             "torsaeulen": {
-                "Standard": {'p': 150.00, 'nr': 'TS-STD'}, 
-                "Verstärkt": {'p': 300.00, 'nr': 'TS-HVY'}, 
-                "Alu-Design": {'p': 400.00, 'nr': 'TS-ALU'}
+                "Standard": {'p': 150.00, 'nr': 'TS-STD'}, "Verstärkt": {'p': 300.00, 'nr': 'TS-HVY'}, "Alu-Design": {'p': 400.00, 'nr': 'TS-ALU'}
             },
             "montage": {
-                "Beton_Sack": {'p': 9.00, 'nr': 'BET-25KG'},
-                "Konsole": {'p': 25.00, 'nr': 'ALU-FP'},
-                "Montagemat": {'p': 8.00, 'nr': 'MON-SET'}
+                "Beton_Sack": {'p': 9.00, 'nr': 'BET-25KG'}, "Konsole": {'p': 25.00, 'nr': 'ALU-FP'}, "Montagemat": {'p': 8.00, 'nr': 'MON-SET'}
             },
             "sichtschutz": {
                 "Keiner": {'p': 0.00, 'einheit': '', 'len': 0, 'nr': '-'},
@@ -74,28 +66,33 @@ def get_default_data():
                 "Hart-PVC (Streifen 2,5m)": {'p': 6.50, 'einheit': 'Streifen', 'len': 2.5, 'nr': 'PVC-H-25'}
             },
             "tor_parts": {
-                "Profilzylinder": {'p': 35.00, 'nr': 'PZ-3S'},
-                "Drücker ALU": {'p': 45.00, 'nr': 'DR-ALU'},
-                "Drücker NIRO": {'p': 75.00, 'nr': 'DR-NIRO'},
-                "Locinox-Schloss": {'p': 110.00, 'nr': 'LOC-IND'},
-                "E-Öffner Modul": {'p': 85.00, 'nr': 'E-OEFF'},
-                "Bodenanschlag": {'p': 40.00, 'nr': 'B-ANS'},
-                "Bodenriegel": {'p': 55.00, 'nr': 'B-RIE'},
-                "Tor-Feststeller": {'p': 65.00, 'nr': 'T-FEST'},
-                "Türschließer": {'p': 350.00, 'nr': 'SAMSON'},
-                "Zackenleiste": {'p': 35.00, 'nr': 'ZACK-25'}
+                "Profilzylinder": {'p': 35.00, 'nr': 'PZ-3S'}, "Drücker ALU": {'p': 45.00, 'nr': 'DR-ALU'}, "Drücker NIRO": {'p': 75.00, 'nr': 'DR-NIRO'},
+                "Locinox-Schloss": {'p': 110.00, 'nr': 'LOC-IND'}, "E-Öffner Modul": {'p': 85.00, 'nr': 'E-OEFF'},
+                "Bodenanschlag": {'p': 40.00, 'nr': 'B-ANS'}, "Bodenriegel": {'p': 55.00, 'nr': 'B-RIE'},
+                "Tor-Feststeller": {'p': 65.00, 'nr': 'T-FEST'}, "Türschließer": {'p': 350.00, 'nr': 'SAMSON'}, "Zackenleiste": {'p': 35.00, 'nr': 'ZACK-25'}
             }
         },
-        "farben": {
-            "Verzinkt": "VZ", 
-            "Anthrazit (7016)": "FB", 
-            "Moosgrün (6005)": "FB", 
-            "Sonderfarbe": "SONDER"
-        }
+        "farben": {"Verzinkt": "VZ", "Anthrazit (7016)": "FB", "Moosgrün (6005)": "FB", "Sonderfarbe": "SONDER"}
     }
 
+def load_database():
+    # 1. Priorität: katalog.json auf GitHub (bzw. im Ordner)
+    if os.path.exists('katalog.json'):
+        try:
+            with open('katalog.json', 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                # Kleiner Check, ob die Struktur passt
+                if 'matten' in data and 'tore' in data:
+                    return data
+        except:
+            pass # Bei Fehler einfach Fallback nehmen
+            
+    # 2. Priorität: Fallback Daten (fest im Code)
+    return get_fallback_data()
+
+# Initialisierung
 if 'db_data' not in st.session_state:
-    st.session_state['db_data'] = get_default_data()
+    st.session_state['db_data'] = load_database()
 
 # ==========================================
 # 2. LOGIK KLASSE
@@ -104,17 +101,27 @@ class ZaunDatabase:
     def __init__(self, preisfaktor=1.0):
         self.faktor = preisfaktor
         self.data = st.session_state['db_data']
-        self.farben = self.data['farben']
+        self.farben = self.data.get('farben', {"Verzinkt": "VZ", "Anthrazit": "FB"})
 
     def is_color(self, farbe_name):
         return self.farben.get(farbe_name, "FB")
 
     def get_matte_preis(self, typ, hoehe, farb_code):
         if typ not in self.data['matten']: return 0, "N/A"
-        verf = sorted([int(k) for k in self.data['matten'][typ].keys()])
+        # Umwandeln in Ints zum Sortieren, falls JSON Strings liefert
+        try:
+            verf = sorted([int(k) for k in self.data['matten'][typ].keys()])
+        except:
+            return 0, "Err"
+            
         if not verf: return 0, "N/A"
         passende_h = min(verf, key=lambda x: abs(x - hoehe))
-        item = self.data['matten'][typ][passende_h]
+        
+        # Zugriff wieder als String (JSON Keys sind immer Strings)
+        key_h = str(passende_h)
+        if key_h not in self.data['matten'][typ]: key_h = matching_h # Fallback falls Int
+        
+        item = self.data['matten'][typ][str(passende_h)]
         
         if farb_code == "VZ":
             preis = item.get('p_vz', 0)
@@ -173,7 +180,7 @@ class ZaunDatabase:
         return preis * self.faktor, nr
 
 # ==========================================
-# 3. HELPER FUNCTIONS
+# 3. HELPER & STATE
 # ==========================================
 if 'zauene' not in st.session_state: st.session_state['zauene'] = []
 if 'tore' not in st.session_state: st.session_state['tore'] = []
@@ -192,7 +199,7 @@ def add_tor(modell, sl, th, saeule, zub, farbe):
 def delete_tor(idx): st.session_state['tore'].pop(idx)
 
 # ==========================================
-# 4. RECHNER ENGINE
+# 4. RECHNER
 # ==========================================
 def calculate_project(db, montage_std, montage_satz, rabatt):
     pos_liste = []
@@ -258,7 +265,7 @@ def calculate_project(db, montage_std, montage_satz, rabatt):
             details.append({"txt": f"   > Kalkulation: {calc_txt}", "nr": "", "ep": 0, "sum": 0})
             sum_pos_material += k_sicht
 
-        # LFM
+        # LFM Preis
         mat_rabattiert = sum_pos_material * (1 - (rabatt/100))
         montage_anteil = z['laenge'] * montage_anteil_pro_m
         real_lfm_preis = (mat_rabattiert + montage_anteil) / z['laenge'] if z['laenge'] > 0 else 0
@@ -308,7 +315,7 @@ def calculate_project(db, montage_std, montage_satz, rabatt):
     }
 
 # ==========================================
-# 5. PDF & EDITOR UI
+# 5. PDF & GUI
 # ==========================================
 def create_pdf(res):
     pdf = FPDF()
@@ -385,136 +392,25 @@ def create_pdf(res):
         pdf.multi_cell(0, 5, txt(f"Logistik: {res['beton_total']} Sack Fertigbeton."))
     return pdf.output(dest='S').encode('latin-1')
 
-def render_price_editor():
-    st.subheader("📝 Preis-Manager")
-    c_dl, c_up = st.columns(2)
-    with c_dl:
-        json_str = json.dumps(st.session_state['db_data'], indent=2)
-        st.download_button("💾 Datenbank sichern", json_str, "preise.json", "application/json", type="primary")
-    with c_up:
-        uploaded = st.file_uploader("📂 Datenbank laden", type=["json"])
-        if uploaded is not None:
-            try:
-                st.session_state['db_data'] = json.load(uploaded)
-                st.success("Geladen!")
-                st.rerun()
-            except: st.error("Fehler!")
-
-    st.divider()
-    data = st.session_state['db_data']
-    tab_m, tab_s, tab_t, tab_z = st.tabs(["Matten", "Steher", "Tore", "Zubehör"])
-    
-    with tab_m:
-        rows = []
-        for typ, heights in data['matten'].items():
-            for h, info in heights.items():
-                rows.append({
-                    "Typ": typ, "Höhe": h, 
-                    "Preis_VZ": info.get('p_vz',0), "ArtNr_VZ": info.get('nr_vz',''),
-                    "Preis_FB": info.get('p_fb',0), "ArtNr_FB": info.get('nr_fb','')
-                })
-        df = pd.DataFrame(rows)
-        edited_df = st.data_editor(df, num_rows="dynamic", key="edit_mat", use_container_width=True)
-        if st.button("Matten speichern", type="primary"):
-            new_mat = {}
-            for _, row in edited_df.iterrows():
-                if not row['Typ']: continue
-                t, h = row['Typ'], int(row['Höhe'])
-                if t not in new_mat: new_mat[t] = {}
-                new_mat[t][h] = {
-                    'p_vz': row['Preis_VZ'], 'nr_vz': row['ArtNr_VZ'],
-                    'p_fb': row['Preis_FB'], 'nr_fb': row['ArtNr_FB']
-                }
-            st.session_state['db_data']['matten'] = new_mat
-            st.success("Gespeichert!")
-
-    with tab_s:
-        rows = []
-        for typ, info in data['steher'].items():
-            rows.append({
-                "Typ": typ, 
-                "Preis_VZ": info.get('p_vz',0), "ArtNr_VZ": info.get('nr_vz',''),
-                "Preis_FB": info.get('p_fb',0), "ArtNr_FB": info.get('nr_fb','')
-            })
-        df_s = pd.DataFrame(rows)
-        edited_s = st.data_editor(df_s, num_rows="dynamic", key="edit_st", use_container_width=True)
-        if st.button("Steher speichern", type="primary"):
-            new_st = {}
-            for _, row in edited_s.iterrows():
-                if row['Typ']: 
-                    new_st[row['Typ']] = {
-                        'p_vz': row['Preis_VZ'], 'nr_vz': row['ArtNr_VZ'],
-                        'p_fb': row['Preis_FB'], 'nr_fb': row['ArtNr_FB']
-                    }
-            st.session_state['db_data']['steher'] = new_st
-            st.success("Gespeichert!")
-
-    with tab_t:
-        rows = []
-        for mod, variants in data['tore'].items():
-            for v in variants:
-                rows.append({
-                    "Modell": mod, "Breite": v['max_b'], "Höhe": v['max_h'], 
-                    "Preis_VZ": v.get('p_vz',0), "ArtNr_VZ": v.get('nr_vz',''),
-                    "Preis_FB": v.get('p_fb',0), "ArtNr_FB": v.get('nr_fb','')
-                })
-        df_t = pd.DataFrame(rows)
-        edited_t = st.data_editor(df_t, num_rows="dynamic", key="edit_tore", use_container_width=True)
-        if st.button("Tore speichern", type="primary"):
-            new_tore = {}
-            for _, row in edited_t.iterrows():
-                m = row['Modell']
-                if not m: continue
-                if m not in new_tore: new_tore[m] = []
-                new_tore[m].append({
-                    'max_b': int(row['Breite']), 'max_h': int(row['Höhe']), 
-                    'p_vz': float(row['Preis_VZ']), 'nr_vz': row['ArtNr_VZ'],
-                    'p_fb': float(row['Preis_FB']), 'nr_fb': row['ArtNr_FB']
-                })
-            st.session_state['db_data']['tore'] = new_tore
-            st.success("Gespeichert!")
-
-    with tab_z:
-        rows = []
-        for cat in ['montage', 'sichtschutz', 'tor_parts', 'torsaeulen']:
-            if cat in data['zubehoer']:
-                for name, info in data['zubehoer'][cat].items():
-                    rows.append({"Kategorie": cat, "Artikel": name, "Preis": info['p'], "ArtNr": info.get('nr','')})
-        df_z = pd.DataFrame(rows)
-        edited_z = st.data_editor(df_z, num_rows="dynamic", key="edit_zub", use_container_width=True)
-        if st.button("Zubehör speichern", type="primary"):
-            for _, row in edited_z.iterrows():
-                cat, name = row['Kategorie'], row['Artikel']
-                if not cat or not name: continue
-                if cat not in st.session_state['db_data']['zubehoer']:
-                    st.session_state['db_data']['zubehoer'][cat] = {}
-                st.session_state['db_data']['zubehoer'][cat][name] = {'p': row['Preis'], 'nr': row['ArtNr']}
-                if cat == 'sichtschutz' and 'einheit' not in st.session_state['db_data']['zubehoer'][cat][name]:
-                     st.session_state['db_data']['zubehoer'][cat][name].update({'einheit': "Stk", 'len': 1.0})
-            st.success("Gespeichert!")
-
-# ==========================================
-# 6. MAIN APP
-# ==========================================
 def main():
-    st.set_page_config(page_title="Zaun-Profi V6.1", page_icon="🏗️", layout="wide")
+    st.set_page_config(page_title="Zaun-Profi V7.1", page_icon="🏗️", layout="wide")
     
+    # Header
     c1, c2, c3 = st.columns([1,4,1])
     if os.path.exists("logo_firma.png"): c1.image("logo_firma.png", width=100)
     c2.title("🏗️ Multi-Zaun Projektierung")
     if os.path.exists("logo_brix.png"): c3.image("logo_brix.png", width=100)
 
+    # Sidebar
     with st.sidebar:
         st.header("Admin")
         faktor = st.number_input("Globaler Faktor:", 0.5, 2.0, 1.0, 0.01)
         st.divider()
-        if st.button("⚠️ Datenbank RESET", help="Setzt alle Preise auf Standard zurück"):
-            st.session_state['db_data'] = get_default_data()
-            st.rerun()
+        st.caption(f"Datenquelle: {'katalog.json' if os.path.exists('katalog.json') else 'Interner Fallback'}")
 
     db = ZaunDatabase(faktor)
 
-    tab1, tab2, tab3, tab4 = st.tabs(["1️⃣ Zäune", "2️⃣ Tore", "3️⃣ Global", "📝 PREIS-MANAGER"])
+    tab1, tab2, tab3 = st.tabs(["1️⃣ Zäune", "2️⃣ Tore", "3️⃣ Global"])
 
     with tab1:
         st.subheader("Zaun hinzufügen")
@@ -526,7 +422,8 @@ def main():
             c3, c4 = st.columns(2)
             laenge = c3.number_input("Länge (m):", 1.0, 500.0, 10.0)
             if typ in st.session_state['db_data']['matten']:
-                h_opts = sorted([int(x) for x in st.session_state['db_data']['matten'][typ].keys()])
+                try: h_opts = sorted([int(x) for x in st.session_state['db_data']['matten'][typ].keys()])
+                except: h_opts = [1030]
             else: h_opts = [1030]
             hoehe = c4.select_slider("Höhe (mm):", options=h_opts, value=h_opts[min(1, len(h_opts)-1)])
             c5, c6 = st.columns(2)
@@ -588,9 +485,9 @@ def main():
         k2.metric("Brutto", f"€ {res['brutto']:,.2f}")
         pdf_bytes = create_pdf(res)
         st.download_button("📄 PDF Angebot (Final)", pdf_bytes, "Angebot.pdf", "application/pdf", type="primary")
-
-    with tab4:
-        render_price_editor()
+        if os.path.exists("preisliste_draht.pdf"):
+            with st.expander("Katalog"):
+                pdf_viewer("preisliste_draht.pdf", height=500)
 
 if __name__ == "__main__":
     main()
