@@ -1,0 +1,263 @@
+{
+  "meta": {},
+  "farben": {
+    "Verzinkt": "VZ",
+    "Anthrazit (7016)": "FB",
+    "Moosgrün (6005)": "FB",
+    "Sonderfarbe": "SONDER"
+  },
+  "matten": {
+    "Leicht 6/5/6": {
+      "830": {
+        "p_vz": 28.0,
+        "nr_vz": "M-L-0830-V",
+        "p_fb": 35.0,
+        "nr_fb": "M-L-0830-F"
+      },
+      "1030": {
+        "p_vz": 33.0,
+        "nr_vz": "M-L-1030-V",
+        "p_fb": 42.0,
+        "nr_fb": "M-L-1030-F"
+      },
+      "1230": {
+        "p_vz": 39.0,
+        "nr_vz": "M-L-1230-V",
+        "p_fb": 49.0,
+        "nr_fb": "M-L-1230-F"
+      },
+      "1430": {
+        "p_vz": 46.0,
+        "nr_vz": "M-L-1430-V",
+        "p_fb": 58.0,
+        "nr_fb": "M-L-1430-F"
+      },
+      "1630": {
+        "p_vz": 52.0,
+        "nr_vz": "M-L-1630-V",
+        "p_fb": 65.0,
+        "nr_fb": "M-L-1630-F"
+      },
+      "1830": {
+        "p_vz": 60.0,
+        "nr_vz": "M-L-1830-V",
+        "p_fb": 75.0,
+        "nr_fb": "M-L-1830-F"
+      },
+      "2030": {
+        "p_vz": 68.0,
+        "nr_vz": "M-L-2030-V",
+        "p_fb": 85.0,
+        "nr_fb": "M-L-2030-F"
+      }
+    },
+    "Schwer 8/6/8": {
+      "830": {
+        "p_vz": 38.0,
+        "nr_vz": "M-S-0830-V",
+        "p_fb": 48.0,
+        "nr_fb": "M-S-0830-F"
+      },
+      "1030": {
+        "p_vz": 46.0,
+        "nr_vz": "M-S-1030-V",
+        "p_fb": 58.0,
+        "nr_fb": "M-S-1030-F"
+      },
+      "1230": {
+        "p_vz": 55.0,
+        "nr_vz": "M-S-1230-V",
+        "p_fb": 69.0,
+        "nr_fb": "M-S-1230-F"
+      },
+      "1430": {
+        "p_vz": 63.0,
+        "nr_vz": "M-S-1430-V",
+        "p_fb": 79.0,
+        "nr_fb": "M-S-1430-F"
+      },
+      "1630": {
+        "p_vz": 71.0,
+        "nr_vz": "M-S-1630-V",
+        "p_fb": 89.0,
+        "nr_fb": "M-S-1630-F"
+      },
+      "1830": {
+        "p_vz": 79.0,
+        "nr_vz": "M-S-1830-V",
+        "p_fb": 99.0,
+        "nr_fb": "M-S-1830-F"
+      },
+      "2030": {
+        "p_vz": 88.0,
+        "nr_vz": "M-S-2030-V",
+        "p_fb": 110.0,
+        "nr_fb": "M-S-2030-F"
+      }
+    }
+  },
+  "steher": {
+    "Rechteck 60x40": {
+      "p_vz": 24.0,
+      "nr_vz": "ST-RE-V",
+      "p_fb": 30.0,
+      "nr_fb": "ST-RE-F"
+    },
+    "Rundrohr 60mm": {
+      "p_vz": 28.0,
+      "nr_vz": "ST-RD-V",
+      "p_fb": 35.0,
+      "nr_fb": "ST-RD-F"
+    },
+    "Typ SL 60 (Klemm)": {
+      "p_vz": 36.0,
+      "nr_vz": "ST-SL-V",
+      "p_fb": 45.0,
+      "nr_fb": "ST-SL-F"
+    },
+    "Typ 70k (Design)": {
+      "p_vz": 44.0,
+      "nr_vz": "ST-70-V",
+      "p_fb": 55.0,
+      "nr_fb": "ST-70-F"
+    }
+  },
+  "tore": {
+    "Gehtür 1-flg": [
+      {
+        "max_b": 1000,
+        "max_h": 1250,
+        "p_vz": 360.0,
+        "nr_vz": "GT-100-125-V",
+        "p_fb": 450.0,
+        "nr_fb": "GT-100-125-F"
+      },
+      {
+        "max_b": 1000,
+        "max_h": 2000,
+        "p_vz": 440.0,
+        "nr_vz": "GT-100-200-V",
+        "p_fb": 550.0,
+        "nr_fb": "GT-100-200-F"
+      }
+    ],
+    "Einfahrtstor 2-flg": [
+      {
+        "max_b": 3000,
+        "max_h": 1250,
+        "p_vz": 960.0,
+        "nr_vz": "ET-300-125-V",
+        "p_fb": 1200.0,
+        "nr_fb": "ET-300-125-F"
+      },
+      {
+        "max_b": 3000,
+        "max_h": 2000,
+        "p_vz": 1120.0,
+        "nr_vz": "ET-300-200-V",
+        "p_fb": 1400.0,
+        "nr_fb": "ET-300-200-F"
+      }
+    ],
+    "tetstor": [
+      {
+        "max_b": 455,
+        "max_h": 454,
+        "p_vz": 456.0,
+        "nr_vz": "454",
+        "p_fb": 1234.0,
+        "nr_fb": "4567"
+      }
+    ]
+  },
+  "zubehoer": {
+    "montage": {
+      "Beton_Sack": {
+        "p": 9.0,
+        "nr": "BET-25KG"
+      },
+      "Konsole": {
+        "p": 25.0,
+        "nr": "ALU-FP"
+      },
+      "Montagemat": {
+        "p": 8.0,
+        "nr": "MON-SET"
+      }
+    },
+    "sichtschutz": {
+      "Keiner": {
+        "p": 0.0,
+        "nr": "-"
+      },
+      "Rolle (Weich 30m)": {
+        "p": 49.0,
+        "nr": "PVC-R-30",
+        "einheit": "Rollen",
+        "len": 30.0
+      },
+      "Hart-PVC (Streifen 2,5m)": {
+        "p": 6.5,
+        "nr": "PVC-H-25",
+        "einheit": "Streifen",
+        "len": 2.5
+      }
+    },
+    "tor_parts": {
+      "Profilzylinder": {
+        "p": 35.0,
+        "nr": "PZ-3S"
+      },
+      "Drücker ALU": {
+        "p": 45.0,
+        "nr": "DR-ALU"
+      },
+      "Drücker NIRO": {
+        "p": 75.0,
+        "nr": "DR-NIRO"
+      },
+      "Locinox-Schloss": {
+        "p": 110.0,
+        "nr": "LOC-IND"
+      },
+      "E-Öffner Modul": {
+        "p": 85.0,
+        "nr": "E-OEFF"
+      },
+      "Bodenanschlag": {
+        "p": 40.0,
+        "nr": "B-ANS"
+      },
+      "Bodenriegel": {
+        "p": 55.0,
+        "nr": "B-RIE"
+      },
+      "Tor-Feststeller": {
+        "p": 65.0,
+        "nr": "T-FEST"
+      },
+      "Türschließer": {
+        "p": 350.0,
+        "nr": "SAMSON"
+      },
+      "Zackenleiste": {
+        "p": 35.0,
+        "nr": "ZACK-25"
+      }
+    },
+    "torsaeulen": {
+      "Standard": {
+        "p": 150.0,
+        "nr": "TS-STD"
+      },
+      "Verstärkt": {
+        "p": 300.0,
+        "nr": "TS-HVY"
+      },
+      "Alu-Design": {
+        "p": 400.0,
+        "nr": "TS-ALU"
+      }
+    }
+  }
+}
