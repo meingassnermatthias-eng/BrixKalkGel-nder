@@ -8,11 +8,11 @@ import json
 from streamlit_pdf_viewer import pdf_viewer
 
 # ==========================================
-# 1. STANDARD DATEN (Neue Struktur: VZ vs FARBE)
+# 1. STANDARD DATEN (Korrigierte Schiebetore)
 # ==========================================
 def get_default_data():
     return {
-        # MATTEN: p_vz = Preis Verzinkt, p_fb = Preis Farbe (Standard)
+        # MATTEN
         "matten": {
             "Leicht 6/5/6": {
                 830:  {'p_vz': 28.00, 'nr_vz': 'M-L-0830-V', 'p_fb': 35.00, 'nr_fb': 'M-L-0830-F'}, 
@@ -40,7 +40,7 @@ def get_default_data():
             "Typ SL 60 (Klemm)": {'p_vz': 36.00, 'nr_vz': 'ST-SL-V', 'p_fb': 45.00, 'nr_fb': 'ST-SL-F'}, 
             "Typ 70k (Design)":  {'p_vz': 44.00, 'nr_vz': 'ST-70-V', 'p_fb': 55.00, 'nr_fb': 'ST-70-F'}
         },
-        # TORE
+        # TORE (FIX: Jetzt alle mit VZ und FB Preisen)
         "tore": {
             "Gehtür 1-flg": [
                 {'max_b': 1000, 'max_h': 1250, 'p_vz': 360.00, 'nr_vz': 'GT-100-125-V', 'p_fb': 450.00, 'nr_fb': 'GT-100-125-F'}, 
@@ -49,9 +49,14 @@ def get_default_data():
             "Einfahrtstor 2-flg": [
                 {'max_b': 3000, 'max_h': 1250, 'p_vz': 960.00, 'nr_vz': 'ET-300-125-V', 'p_fb': 1200.00, 'nr_fb': 'ET-300-125-F'}, 
                 {'max_b': 3000, 'max_h': 2000, 'p_vz': 1120.00, 'nr_vz': 'ET-300-200-V', 'p_fb': 1400.00, 'nr_fb': 'ET-300-200-F'}
+            ],
+            # HIER WAR DER FEHLER: Schiebetore brauchen auch p_vz und p_fb Struktur
+            "Schiebetor": [
+                {'max_b': 3500, 'max_h': 1400, 'p_vz': 2500.00, 'nr_vz': 'ST-350-140-V', 'p_fb': 2800.00, 'nr_fb': 'ST-350-140-F'}, 
+                {'max_b': 4500, 'max_h': 1400, 'p_vz': 3100.00, 'nr_vz': 'ST-450-140-V', 'p_fb': 3500.00, 'nr_fb': 'ST-450-140-F'}
             ]
         },
-        # ZUBEHÖR (Hat meistens keinen Unterschied VZ/Farbe, daher p_vz = p_fb oder neutral)
+        # ZUBEHÖR
         "zubehoer": {
             "torsaeulen": {
                 "Standard": {'p': 150.00, 'nr': 'TS-STD'}, 
@@ -102,18 +107,15 @@ class ZaunDatabase:
         self.farben = self.data['farben']
 
     def is_color(self, farbe_name):
-        code = self.farben.get(farbe_name, "FB")
-        return code # "VZ", "FB" oder "SONDER"
+        return self.farben.get(farbe_name, "FB")
 
     def get_matte_preis(self, typ, hoehe, farb_code):
         if typ not in self.data['matten']: return 0, "N/A"
-        
         verf = sorted([int(k) for k in self.data['matten'][typ].keys()])
         if not verf: return 0, "N/A"
         passende_h = min(verf, key=lambda x: abs(x - hoehe))
         item = self.data['matten'][typ][passende_h]
         
-        # Unterscheidung Verzinkt vs Farbe
         if farb_code == "VZ":
             preis = item.get('p_vz', 0)
             nr = item.get('nr_vz', '')
@@ -122,7 +124,7 @@ class ZaunDatabase:
             nr = item.get('nr_fb', '')
             
         if farb_code == "SONDER":
-            preis *= 1.15 # Aufschlag für Sonderfarbe auf den Farbpreis
+            preis *= 1.15 
             nr += "-SON"
             
         return preis * self.faktor, nr
@@ -201,10 +203,10 @@ def calculate_project(db, montage_std, montage_satz, rabatt):
     total_montage_kosten = montage_std * montage_satz
     montage_anteil_pro_m = (total_montage_kosten / total_zaun_laenge) if total_zaun_laenge > 0 else 0
 
-    # A. ZÄUNE
+    # ZÄUNE
     for i, z in enumerate(st.session_state['zauene']):
         details = []
-        farb_code = db.is_color(z['farbe']) # VZ oder FB
+        farb_code = db.is_color(z['farbe'])
         sum_pos_material = 0
 
         # Matten
@@ -256,7 +258,7 @@ def calculate_project(db, montage_std, montage_satz, rabatt):
             details.append({"txt": f"   > Kalkulation: {calc_txt}", "nr": "", "ep": 0, "sum": 0})
             sum_pos_material += k_sicht
 
-        # LFM Preis
+        # LFM
         mat_rabattiert = sum_pos_material * (1 - (rabatt/100))
         montage_anteil = z['laenge'] * montage_anteil_pro_m
         real_lfm_preis = (mat_rabattiert + montage_anteil) / z['laenge'] if z['laenge'] > 0 else 0
@@ -265,7 +267,7 @@ def calculate_project(db, montage_std, montage_satz, rabatt):
         pos_liste.append({"titel": f"Zaun: {z['bezeichnung']} ({z['laenge']}m)", "details": details, "preis_total": sum_pos_material})
         total_netto_material += sum_pos_material
 
-    # B. TORE
+    # TORE
     for i, t in enumerate(st.session_state['tore']):
         details = []
         farb_code = db.is_color(t['farbe'])
@@ -339,7 +341,6 @@ def create_pdf(res):
             is_hl = d.get('highlight', False)
             art_nr = d.get('nr', "")
             pdf.cell(10, 5, "", "LR", 0)
-            
             if is_hl:
                 pdf.set_font("Arial", 'BI', 9)
                 pdf.set_text_color(0, 50, 150)
@@ -374,24 +375,18 @@ def create_pdf(res):
 
     if res['rabatt'] > 0: sum_row(f"Abzüglich Rabatt", -res['rabatt'])
     if res['montage'] > 0: sum_row(f"Montageleistung", res['montage'])
-
     pdf.ln(2)
     sum_row("GESAMT NETTO", res['total_netto'], bold=True)
     sum_row("MwSt (20%)", res['mwst'])
     sum_row("GESAMT BRUTTO", res['brutto'], bold=True, color=True)
-
     if res['beton_total'] > 0:
         pdf.ln(10)
         pdf.set_font("Arial", 'I', 9)
         pdf.multi_cell(0, 5, txt(f"Logistik: {res['beton_total']} Sack Fertigbeton."))
-
     return pdf.output(dest='S').encode('latin-1')
 
 def render_price_editor():
     st.subheader("📝 Preis-Manager")
-    st.info("Hier kannst du Preise für Verzinkt (VZ) und Farbe (FB) getrennt anlegen. Vergiss nicht zu SPEICHERN!")
-
-    # JSON EXPORT
     c_dl, c_up = st.columns(2)
     with c_dl:
         json_str = json.dumps(st.session_state['db_data'], indent=2)
@@ -401,15 +396,14 @@ def render_price_editor():
         if uploaded is not None:
             try:
                 st.session_state['db_data'] = json.load(uploaded)
-                st.success("Erfolgreich geladen!")
+                st.success("Geladen!")
                 st.rerun()
-            except: st.error("Fehler beim Laden!")
+            except: st.error("Fehler!")
 
     st.divider()
     data = st.session_state['db_data']
     tab_m, tab_s, tab_t, tab_z = st.tabs(["Matten", "Steher", "Tore", "Zubehör"])
     
-    # 1. MATTEN EDITOR (VZ vs FB)
     with tab_m:
         rows = []
         for typ, heights in data['matten'].items():
@@ -419,10 +413,8 @@ def render_price_editor():
                     "Preis_VZ": info.get('p_vz',0), "ArtNr_VZ": info.get('nr_vz',''),
                     "Preis_FB": info.get('p_fb',0), "ArtNr_FB": info.get('nr_fb','')
                 })
-        
         df = pd.DataFrame(rows)
         edited_df = st.data_editor(df, num_rows="dynamic", key="edit_mat", use_container_width=True)
-        
         if st.button("Matten speichern", type="primary"):
             new_mat = {}
             for _, row in edited_df.iterrows():
@@ -436,7 +428,6 @@ def render_price_editor():
             st.session_state['db_data']['matten'] = new_mat
             st.success("Gespeichert!")
 
-    # 2. STEHER EDITOR (VZ vs FB)
     with tab_s:
         rows = []
         for typ, info in data['steher'].items():
@@ -447,7 +438,6 @@ def render_price_editor():
             })
         df_s = pd.DataFrame(rows)
         edited_s = st.data_editor(df_s, num_rows="dynamic", key="edit_st", use_container_width=True)
-        
         if st.button("Steher speichern", type="primary"):
             new_st = {}
             for _, row in edited_s.iterrows():
@@ -459,7 +449,6 @@ def render_price_editor():
             st.session_state['db_data']['steher'] = new_st
             st.success("Gespeichert!")
 
-    # 3. TORE EDITOR (VZ vs FB)
     with tab_t:
         rows = []
         for mod, variants in data['tore'].items():
@@ -469,10 +458,8 @@ def render_price_editor():
                     "Preis_VZ": v.get('p_vz',0), "ArtNr_VZ": v.get('nr_vz',''),
                     "Preis_FB": v.get('p_fb',0), "ArtNr_FB": v.get('nr_fb','')
                 })
-        
         df_t = pd.DataFrame(rows)
         edited_t = st.data_editor(df_t, num_rows="dynamic", key="edit_tore", use_container_width=True)
-        
         if st.button("Tore speichern", type="primary"):
             new_tore = {}
             for _, row in edited_t.iterrows():
@@ -487,27 +474,21 @@ def render_price_editor():
             st.session_state['db_data']['tore'] = new_tore
             st.success("Gespeichert!")
 
-    # 4. ZUBEHÖR
     with tab_z:
         rows = []
         for cat in ['montage', 'sichtschutz', 'tor_parts', 'torsaeulen']:
             if cat in data['zubehoer']:
                 for name, info in data['zubehoer'][cat].items():
                     rows.append({"Kategorie": cat, "Artikel": name, "Preis": info['p'], "ArtNr": info.get('nr','')})
-        
         df_z = pd.DataFrame(rows)
         edited_z = st.data_editor(df_z, num_rows="dynamic", key="edit_zub", use_container_width=True)
-        
         if st.button("Zubehör speichern", type="primary"):
             for _, row in edited_z.iterrows():
                 cat, name = row['Kategorie'], row['Artikel']
                 if not cat or not name: continue
                 if cat not in st.session_state['db_data']['zubehoer']:
                     st.session_state['db_data']['zubehoer'][cat] = {}
-                
-                # Zubehör hat meist keine VZ/FB Trennung, wir bleiben beim einfachen Preis 'p'
                 st.session_state['db_data']['zubehoer'][cat][name] = {'p': row['Preis'], 'nr': row['ArtNr']}
-                # Fix für Sichtschutz
                 if cat == 'sichtschutz' and 'einheit' not in st.session_state['db_data']['zubehoer'][cat][name]:
                      st.session_state['db_data']['zubehoer'][cat][name].update({'einheit': "Stk", 'len': 1.0})
             st.success("Gespeichert!")
@@ -516,7 +497,7 @@ def render_price_editor():
 # 6. MAIN APP
 # ==========================================
 def main():
-    st.set_page_config(page_title="Zaun-Profi V6.0", page_icon="🏗️", layout="wide")
+    st.set_page_config(page_title="Zaun-Profi V6.1", page_icon="🏗️", layout="wide")
     
     c1, c2, c3 = st.columns([1,4,1])
     if os.path.exists("logo_firma.png"): c1.image("logo_firma.png", width=100)
@@ -526,7 +507,11 @@ def main():
     with st.sidebar:
         st.header("Admin")
         faktor = st.number_input("Globaler Faktor:", 0.5, 2.0, 1.0, 0.01)
-    
+        st.divider()
+        if st.button("⚠️ Datenbank RESET", help="Setzt alle Preise auf Standard zurück"):
+            st.session_state['db_data'] = get_default_data()
+            st.rerun()
+
     db = ZaunDatabase(faktor)
 
     tab1, tab2, tab3, tab4 = st.tabs(["1️⃣ Zäune", "2️⃣ Tore", "3️⃣ Global", "📝 PREIS-MANAGER"])
@@ -536,34 +521,26 @@ def main():
         with st.form("zaun_form", clear_on_submit=True):
             c1, c2 = st.columns(2)
             bez = c1.text_input("Bezeichnung:", "Vorgarten")
-            
             matten_opts = list(st.session_state['db_data']['matten'].keys())
             typ = c2.selectbox("Matten:", matten_opts)
-            
             c3, c4 = st.columns(2)
             laenge = c3.number_input("Länge (m):", 1.0, 500.0, 10.0)
-            
             if typ in st.session_state['db_data']['matten']:
                 h_opts = sorted([int(x) for x in st.session_state['db_data']['matten'][typ].keys()])
             else: h_opts = [1030]
-            
             hoehe = c4.select_slider("Höhe (mm):", options=h_opts, value=h_opts[min(1, len(h_opts)-1)])
-            
             c5, c6 = st.columns(2)
             farbe = c5.selectbox("Farbe:", list(db.farben.keys()))
             sicht_opts = list(st.session_state['db_data']['zubehoer']['sichtschutz'].keys())
             sicht = c6.selectbox("Sichtschutz:", sicht_opts)
-            
             reihen = 0
             if sicht != "Keiner":
                 reihen = st.number_input("Reihen:", 1, 15, int(hoehe/200))
-            
             c7, c8 = st.columns(2)
             mont = c7.radio("Montage:", ["Einbetonieren", "Auf Fundament"])
             steher_opts = list(st.session_state['db_data']['steher'].keys())
             steher = c8.selectbox("Steher:", steher_opts)
             ecken = st.number_input("Ecken:", 0, 20, 0)
-            
             beton = 2
             if mont == "Einbetonieren":
                 beton = st.number_input("Säcke Beton/Steher:", 1, 10, 2)
@@ -587,18 +564,14 @@ def main():
             c1, c2 = st.columns(2)
             sl = c1.number_input("Lichte (mm):", 800, 5000, 1000, 50)
             th = c2.number_input("Höhe (mm):", 800, 2500, 1200, 50)
-            
             ts_opts = list(st.session_state['db_data']['zubehoer']['torsaeulen'].keys())
             ts = st.selectbox("Säulen:", ts_opts)
             tf = st.selectbox("Farbe:", list(db.farben.keys()))
-            
             zub_map = {k: k for k in st.session_state['db_data']['zubehoer']['tor_parts'].keys()}
             tz = st.multiselect("Zubehör:", list(zub_map.keys()))
-            
             if st.form_submit_button("➕ Tor speichern"):
                 add_tor(mod, sl, th, ts, tz, tf)
                 st.rerun()
-        
         if st.session_state['tore']:
             for i, t in enumerate(st.session_state['tore']):
                 with st.expander(f"Tor: {t['modell']}", expanded=True):
@@ -608,14 +581,11 @@ def main():
         h_std = st.number_input("Montage (h):", 0.0, 500.0, 0.0)
         h_satz = st.number_input("Satz (€):", 0.0, 200.0, 65.0)
         rabatt = st.slider("Rabatt %:", 0, 50, 0)
-        
         st.markdown("---")
         res = calculate_project(db, h_std, h_satz, rabatt)
-        
         k1, k2 = st.columns(2)
         k1.metric("Netto", f"€ {res['total_netto']:,.2f}")
         k2.metric("Brutto", f"€ {res['brutto']:,.2f}")
-        
         pdf_bytes = create_pdf(res)
         st.download_button("📄 PDF Angebot (Final)", pdf_bytes, "Angebot.pdf", "application/pdf", type="primary")
 
