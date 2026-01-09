@@ -87,6 +87,15 @@
         "z_mont": 4.0,
         "optionen": {}
       }
+    },
+    "Geländer": {
+      "Mit Glas": {
+        "einheit": "lfm",
+        "mat": 200.0,
+        "z_fert": 2.0,
+        "z_mont": 3.0,
+        "optionen": {}
+      }
     }
   },
   "brix": {
