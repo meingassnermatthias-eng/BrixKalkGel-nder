@@ -108,6 +108,17 @@
       "kat": "S"
     }
   },
+  "brix_extras": {
+    "steher": {
+      "Steher Standard 50x50": 120.0,
+      "Steher Verstärkt 60x60": 160.0
+    },
+    "konsole": {
+      "Wandkonsole (Stirnseite)": 45.0,
+      "Bodenplatte (Aufgesetzt)": 35.0,
+      "Wandanker (Mauerwerk)": 15.0
+    }
+  },
   "matten": {
     "Leicht 6/5/6": {
       "1030": {
@@ -134,10 +145,6 @@
     "Rechteck mit Fußplatte": {
       "p_vz": 38.0,
       "p_fb": 45.0
-    },
-    "Rundsteher 42mm": {
-      "p_vz": 22.0,
-      "p_fb": 28.0
     }
   }
 }
