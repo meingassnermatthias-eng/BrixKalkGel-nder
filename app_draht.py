@@ -4,8 +4,15 @@ from fpdf import FPDF
 import base64
 
 # --- SEITEN KONFIGURATION ---
-st.set_page_config(page_title="Meingassner Kalkulation & Angebot", layout="wide")
-
+# --- SEITEN KONFIGURATION ---
+# Das Bild "logo.png" muss im gleichen Ordner liegen wie diese Datei!
+st.set_page_config(
+    page_title="Meingassner App",    # <--- Der Name der App
+    page_icon="logo.png",            # <--- Dein Logo als App-Icon
+    layout="wide"
+)
+# Logo oben links in der Sidebar anzeigen
+st.logo("logo.png")
 # --- SESSION STATE (Hier speichern wir die Positionen) ---
 if 'positionen' not in st.session_state:
     st.session_state['positionen'] = []
