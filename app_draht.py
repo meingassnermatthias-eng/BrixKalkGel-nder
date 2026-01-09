@@ -209,25 +209,71 @@ def render_zaun():
 
 def render_brix():
     st.markdown("<div class='main-header'>🏢 Brix Geländer</div>", unsafe_allow_html=True)
-    # Hier prüfen wir jetzt, ob Brix Daten da sind
+    
+    # Check ob Daten da sind
     if 'brix' not in DB or not DB['brix']:
-        st.warning("⚠️ Keine Brix-Daten in der Datenbank gefunden.")
+        st.warning("⚠️ Keine Brix-Daten (Modelle) gefunden.")
         return
 
-    mod = st.selectbox("Modell", list(DB['brix'].keys()))
-    lfm = st.number_input("Länge (m)", 1.0, 100.0, 5.0)
-    
-    if st.button("Berechnen", type="primary"):
-        dat = DB['brix'][mod]
-        preis = lfm * dat['preis']
-        st.session_state.cart.append({
-            "titel": f"Brix: {mod}",
-            "menge_txt": f"{lfm}m",
-            "preis": preis,
-            "details": [f"Kategorie: {dat['kat']}", "Inkl. Standardmontage"]
-        })
-        st.rerun()
+    # Formular
+    with st.form("brix_form"):
+        # 1. Modell Wahl
+        mod = st.selectbox("Modell", list(DB['brix'].keys()))
+        
+        c1, c2 = st.columns(2)
+        lfm = c1.number_input("Länge (m)", 1.0, 100.0, 5.0)
+        farbe_aufschlag = c2.selectbox("Farbe", ["Standard", "Sonderfarbe (+15%)"])
 
+        st.markdown("---")
+        st.markdown("**Zubehör & Montage**")
+        
+        # 2. Zubehör Wahl (Daten aus DB['brix_extras'])
+        extras = DB.get('brix_extras', {'steher': {}, 'konsole': {}})
+        
+        # Fallback, falls Excel leer war
+        steher_opts = list(extras.get('steher', {}).keys())
+        konsole_opts = list(extras.get('konsole', {}).keys())
+        
+        c3, c4 = st.columns(2)
+        steher_wahl = c3.selectbox("Steher Typ", steher_opts) if steher_opts else None
+        konsole_wahl = c4.selectbox("Montage/Konsole", konsole_opts) if konsole_opts else None
+
+        if st.form_submit_button("Berechnen", type="primary", use_container_width=True):
+            # Preise holen
+            dat_mod = DB['brix'][mod]
+            p_mod = dat_mod['preis']
+            if "Sonderfarbe" in farbe_aufschlag: p_mod *= 1.15
+            
+            p_steher = extras['steher'].get(steher_wahl, 0) if steher_wahl else 0
+            p_konsole = extras['konsole'].get(konsole_wahl, 0) if konsole_wahl else 0
+            
+            # Mengen Berechnung
+            # Faustformel: Alle 1,3m ein Steher, plus einer am Ende
+            anz_steher = math.ceil(lfm / 1.3) + 1
+            
+            # Kosten
+            kosten_gel = lfm * p_mod
+            kosten_steher = anz_steher * p_steher
+            kosten_konsole = anz_steher * p_konsole # Pro Steher eine Konsole
+            
+            total = kosten_gel + kosten_steher + kosten_konsole
+            
+            # Details für Warenkorb
+            det = [
+                f"Modell: {mod} ({dat_mod['kat']})",
+                f"Farbe: {farbe_aufschlag}",
+                f"Steher: {anz_steher}x {steher_wahl} (à {p_steher:.2f})",
+                f"Konsole: {anz_steher}x {konsole_wahl} (à {p_konsole:.2f})"
+            ]
+            
+            st.session_state.cart.append({
+                "titel": f"Brix: {mod}",
+                "menge_txt": f"{lfm:.2f}m",
+                "preis": total,
+                "details": det
+            })
+            st.success("Hinzugefügt!")
+            st.rerun()
 # ==========================================
 # 4. MAIN & WARENKORB
 # ==========================================
