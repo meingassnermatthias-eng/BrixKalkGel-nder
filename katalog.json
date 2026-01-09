@@ -35,7 +35,7 @@
         "einheit": "Stufe",
         "mat": 120.0,
         "z_fert": 2.0,
-        "z_mont": 46143.0,
+        "z_mont": 4.0,
         "optionen": {
           "Wangen aus Flachstahl": {
             "p": 40.0,
@@ -58,6 +58,34 @@
             "z_plus": 0.0
           }
         }
+      },
+      "mit seiten wangen": {
+        "einheit": "Höhe ",
+        "mat": 120.0,
+        "z_fert": 2.0,
+        "z_mont": 4.0,
+        "optionen": {}
+      },
+      "Keinen ahnung was": {
+        "einheit": "B",
+        "mat": 120.0,
+        "z_fert": 2.0,
+        "z_mont": 4.0,
+        "optionen": {}
+      },
+      "irgen": {
+        "einheit": "Stufe",
+        "mat": 120.0,
+        "z_fert": 2.0,
+        "z_mont": 4.0,
+        "optionen": {}
+      },
+      "ihgioh": {
+        "einheit": "Stufe",
+        "mat": 200.0,
+        "z_fert": 2.0,
+        "z_mont": 4.0,
+        "optionen": {}
       }
     }
   },
