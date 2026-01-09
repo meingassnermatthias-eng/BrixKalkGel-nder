@@ -98,25 +98,46 @@
       }
     }
   },
-  "brix": {
-    "Decor 22 (Stäbe)": {
-      "preis": 204.0,
-      "kat": "L"
+  "systems": {
+    "Brix": {
+      "models": {
+        "Decor 22": {
+          "preis": 204.0,
+          "kat": "Geländer"
+        },
+        "Glasal": {
+          "preis": 307.0,
+          "kat": "Geländer"
+        }
+      },
+      "parts": {
+        "steher": {
+          "Steher Standard": 120.0
+        },
+        "konsole": {
+          "Wandkonsole": 45.0
+        }
+      }
     },
-    "Glasal (Glas)": {
-      "preis": 307.0,
-      "kat": "S"
-    }
-  },
-  "brix_extras": {
-    "steher": {
-      "Steher Standard 50x50": 120.0,
-      "Steher Verstärkt 60x60": 160.0
-    },
-    "konsole": {
-      "Wandkonsole (Stirnseite)": 45.0,
-      "Bodenplatte (Aufgesetzt)": 35.0,
-      "Wandanker (Mauerwerk)": 15.0
+    "Terrassendach": {
+      "models": {
+        "Modell Standard": {
+          "preis": 450.0,
+          "kat": "Überdachung"
+        },
+        "Modell Premium": {
+          "preis": 600.0,
+          "kat": "Überdachung"
+        }
+      },
+      "parts": {
+        "steher": {
+          "Pfosten 10x10": 180.0
+        },
+        "konsole": {
+          "Wandanschluss": 50.0
+        }
+      }
     }
   },
   "matten": {
