@@ -5,489 +5,597 @@ from fpdf import FPDF
 import datetime
 import os
 import json
-from streamlit_pdf_viewer import pdf_viewer
+import io
 
 # ==========================================
-# 1. DATENBANK MANAGEMENT (Hybrid)
+# 0. KONFIGURATION & STYLES
 # ==========================================
-def get_fallback_data():
-    # Das sind deine Standard-Daten (Sicherheitsnetz)
+st.set_page_config(page_title="Meingassner V8", page_icon="🏗️", layout="wide")
+
+# Custom CSS für Touch-Optimierung auf Tablets
+st.markdown("""
+    <style>
+    .main-header { font-size: 2.2rem; font-weight: 700; color: #1E3A8A; margin-bottom: 15px; }
+    .sub-header { font-size: 1.5rem; font-weight: 600; color: #444; margin-top: 20px; margin-bottom: 10px; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
+    .card { background-color: #f9f9f9; padding: 20px; border-radius: 10px; border: 1px solid #ddd; margin-bottom: 20px; }
+    /* Größere Buttons für Touch */
+    div.stButton > button { min-height: 50px; font-size: 18px !important; border-radius: 8px; }
+    input { font-size: 16px !important; }
+    </style>
+""", unsafe_allow_html=True)
+
+# ==========================================
+# 1. DATENBANK & STATE MANAGEMENT
+# ==========================================
+
+def get_full_default_data():
+    """Liefert die Standard-Datenbankstruktur zurück."""
     return {
+        # --- BEREICH 1: INDIVIDUAL (EXCEL EDITIERBAR) ---
+        "individual": {
+            "Überdachung": {
+                "Carport Stahl Flachdach": {
+                    "einheit": "Stk", "mat": 1500.00, "z_fert": 20.0, "z_mont": 15.0,
+                    "optionen": {
+                        "Sandwichpaneel Eindeckung": {"p": 45.00, "einheit": "pro_m2", "z_plus": 0.2},
+                        "Dachrinne Titanzink": {"p": 35.00, "einheit": "pro_lfm", "z_plus": 0.3},
+                        "Wandanschlussblech": {"p": 18.00, "einheit": "pro_lfm", "z_plus": 0.1},
+                        "Punktfundamente": {"p": 150.00, "einheit": "Pauschal", "z_plus": 2.0}
+                    }
+                }
+            },
+            "Treppe": {
+                "Stahltreppe Gerade": {
+                    "einheit": "Stufe", "mat": 120.00, "z_fert": 2.5, "z_mont": 1.5,
+                    "optionen": {
+                        "Wangen aus U-Profil": {"p": 0.00, "einheit": "Pauschal", "z_plus": 0.0},
+                        "Wangen aus Flachstahl": {"p": 40.00, "einheit": "Pauschal", "z_plus": 0.5},
+                        "Stufen Gitterrost": {"p": 35.00, "einheit": "Pauschal", "z_plus": 0.0},
+                        "Geländer einseitig": {"p": 140.00, "einheit": "pro_lfm", "z_plus": 2.0}
+                    }
+                }
+            }
+        },
+        # --- BEREICH 2: GITTERZÄUNE (STATISCH) ---
         "matten": {
             "Leicht 6/5/6": {
-                "830":  {'p_vz': 28.00, 'nr_vz': 'M-L-0830-V', 'p_fb': 35.00, 'nr_fb': 'M-L-0830-F'}, 
-                "1030": {'p_vz': 33.00, 'nr_vz': 'M-L-1030-V', 'p_fb': 42.00, 'nr_fb': 'M-L-1030-F'}, 
-                "1230": {'p_vz': 39.00, 'nr_vz': 'M-L-1230-V', 'p_fb': 49.00, 'nr_fb': 'M-L-1230-F'}, 
-                "1430": {'p_vz': 46.00, 'nr_vz': 'M-L-1430-V', 'p_fb': 58.00, 'nr_fb': 'M-L-1430-F'}, 
-                "1630": {'p_vz': 52.00, 'nr_vz': 'M-L-1630-V', 'p_fb': 65.00, 'nr_fb': 'M-L-1630-F'}, 
-                "1830": {'p_vz': 60.00, 'nr_vz': 'M-L-1830-V', 'p_fb': 75.00, 'nr_fb': 'M-L-1830-F'}, 
-                "2030": {'p_vz': 68.00, 'nr_vz': 'M-L-2030-V', 'p_fb': 85.00, 'nr_fb': 'M-L-2030-F'}
+                "1030": {'p_vz': 33.00, 'p_fb': 42.00}, 
+                "1230": {'p_vz': 39.00, 'p_fb': 49.00},
+                "1430": {'p_vz': 46.00, 'p_fb': 58.00}
             },
             "Schwer 8/6/8": {
-                "830":  {'p_vz': 38.00, 'nr_vz': 'M-S-0830-V', 'p_fb': 48.00, 'nr_fb': 'M-S-0830-F'}, 
-                "1030": {'p_vz': 46.00, 'nr_vz': 'M-S-1030-V', 'p_fb': 58.00, 'nr_fb': 'M-S-1030-F'}, 
-                "1230": {'p_vz': 55.00, 'nr_vz': 'M-S-1230-V', 'p_fb': 69.00, 'nr_fb': 'M-S-1230-F'}, 
-                "1430": {'p_vz': 63.00, 'nr_vz': 'M-S-1430-V', 'p_fb': 79.00, 'nr_fb': 'M-S-1430-F'}, 
-                "1630": {'p_vz': 71.00, 'nr_vz': 'M-S-1630-V', 'p_fb': 89.00, 'nr_fb': 'M-S-1630-F'}, 
-                "1830": {'p_vz': 79.00, 'nr_vz': 'M-S-1830-V', 'p_fb': 99.00, 'nr_fb': 'M-S-1830-F'}, 
-                "2030": {'p_vz': 88.00, 'nr_vz': 'M-S-2030-V', 'p_fb': 110.00, 'nr_fb': 'M-S-2030-F'}
+                "1030": {'p_vz': 46.00, 'p_fb': 58.00},
+                "1230": {'p_vz': 55.00, 'p_fb': 69.00}
             }
         },
         "steher": {
-            "Rechteck 60x40":    {'p_vz': 24.00, 'nr_vz': 'ST-RE-V', 'p_fb': 30.00, 'nr_fb': 'ST-RE-F'}, 
-            "Rundrohr 60mm":     {'p_vz': 28.00, 'nr_vz': 'ST-RD-V', 'p_fb': 35.00, 'nr_fb': 'ST-RD-F'}, 
-            "Typ SL 60 (Klemm)": {'p_vz': 36.00, 'nr_vz': 'ST-SL-V', 'p_fb': 45.00, 'nr_fb': 'ST-SL-F'}, 
-            "Typ 70k (Design)":  {'p_vz': 44.00, 'nr_vz': 'ST-70-V', 'p_fb': 55.00, 'nr_fb': 'ST-70-F'}
+            "Rechteck 60x40": {'p_vz': 24.00, 'p_fb': 30.00},
+            "Rechteck mit Fußplatte": {'p_vz': 38.00, 'p_fb': 45.00}
         },
-        "tore": {
-            "Gehtür 1-flg": [
-                {'max_b': 1000, 'max_h': 1250, 'p_vz': 360.00, 'nr_vz': 'GT-100-125-V', 'p_fb': 450.00, 'nr_fb': 'GT-100-125-F'}, 
-                {'max_b': 1000, 'max_h': 2000, 'p_vz': 440.00, 'nr_vz': 'GT-100-200-V', 'p_fb': 550.00, 'nr_fb': 'GT-100-200-F'}
-            ],
-            "Einfahrtstor 2-flg": [
-                {'max_b': 3000, 'max_h': 1250, 'p_vz': 960.00, 'nr_vz': 'ET-300-125-V', 'p_fb': 1200.00, 'nr_fb': 'ET-300-125-F'}, 
-                {'max_b': 3000, 'max_h': 2000, 'p_vz': 1120.00, 'nr_vz': 'ET-300-200-V', 'p_fb': 1400.00, 'nr_fb': 'ET-300-200-F'}
-            ],
-            "Schiebetor": [
-                {'max_b': 3500, 'max_h': 1400, 'p_vz': 2500.00, 'nr_vz': 'ST-350-140-V', 'p_fb': 2800.00, 'nr_fb': 'ST-350-140-F'}, 
-                {'max_b': 4500, 'max_h': 1400, 'p_vz': 3100.00, 'nr_vz': 'ST-450-140-V', 'p_fb': 3500.00, 'nr_fb': 'ST-450-140-F'}
-            ]
-        },
-        "zubehoer": {
-            "torsaeulen": {
-                "Standard": {'p': 150.00, 'nr': 'TS-STD'}, "Verstärkt": {'p': 300.00, 'nr': 'TS-HVY'}, "Alu-Design": {'p': 400.00, 'nr': 'TS-ALU'}
-            },
-            "montage": {
-                "Beton_Sack": {'p': 9.00, 'nr': 'BET-25KG'}, "Konsole": {'p': 25.00, 'nr': 'ALU-FP'}, "Montagemat": {'p': 8.00, 'nr': 'MON-SET'}
-            },
-            "sichtschutz": {
-                "Keiner": {'p': 0.00, 'einheit': '', 'len': 0, 'nr': '-'},
-                "Rolle (Weich 30m)": {'p': 49.00, 'einheit': 'Rollen', 'len': 30.0, 'nr': 'PVC-R-30'},
-                "Hart-PVC (Streifen 2,5m)": {'p': 6.50, 'einheit': 'Streifen', 'len': 2.5, 'nr': 'PVC-H-25'}
-            },
-            "tor_parts": {
-                "Profilzylinder": {'p': 35.00, 'nr': 'PZ-3S'}, "Drücker ALU": {'p': 45.00, 'nr': 'DR-ALU'}, "Drücker NIRO": {'p': 75.00, 'nr': 'DR-NIRO'},
-                "Locinox-Schloss": {'p': 110.00, 'nr': 'LOC-IND'}, "E-Öffner Modul": {'p': 85.00, 'nr': 'E-OEFF'},
-                "Bodenanschlag": {'p': 40.00, 'nr': 'B-ANS'}, "Bodenriegel": {'p': 55.00, 'nr': 'B-RIE'},
-                "Tor-Feststeller": {'p': 65.00, 'nr': 'T-FEST'}, "Türschließer": {'p': 350.00, 'nr': 'SAMSON'}, "Zackenleiste": {'p': 35.00, 'nr': 'ZACK-25'}
-            }
-        },
-        "farben": {"Verzinkt": "VZ", "Anthrazit (7016)": "FB", "Moosgrün (6005)": "FB", "Sonderfarbe": "SONDER"}
+        # --- BEREICH 3: BRIX (STATISCH) ---
+        "brix": {
+            "Decor 22 (Stäbe)": {"preis": 204.00, "kat": "L"},
+            "Latten-Classic": {"preis": 206.00, "kat": "S"},
+            "Glasal (Glas)": {"preis": 307.00, "kat": "S"}
+        }
     }
 
-def load_database():
-    # 1. Priorität: katalog.json auf GitHub (bzw. im Ordner)
-    if os.path.exists('katalog.json'):
-        try:
-            with open('katalog.json', 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                # Kleiner Check, ob die Struktur passt
-                if 'matten' in data and 'tore' in data:
-                    return data
-        except:
-            pass # Bei Fehler einfach Fallback nehmen
-            
-    # 2. Priorität: Fallback Daten (fest im Code)
-    return get_fallback_data()
-
-# Initialisierung
-if 'db_data' not in st.session_state:
-    st.session_state['db_data'] = load_database()
-
-# ==========================================
-# 2. LOGIK KLASSE
-# ==========================================
-class ZaunDatabase:
-    def __init__(self, preisfaktor=1.0):
-        self.faktor = preisfaktor
-        self.data = st.session_state['db_data']
-        self.farben = self.data.get('farben', {"Verzinkt": "VZ", "Anthrazit": "FB"})
-
-    def is_color(self, farbe_name):
-        return self.farben.get(farbe_name, "FB")
-
-    def get_matte_preis(self, typ, hoehe, farb_code):
-        if typ not in self.data['matten']: return 0, "N/A"
-        # Umwandeln in Ints zum Sortieren, falls JSON Strings liefert
-        try:
-            verf = sorted([int(k) for k in self.data['matten'][typ].keys()])
-        except:
-            return 0, "Err"
-            
-        if not verf: return 0, "N/A"
-        passende_h = min(verf, key=lambda x: abs(x - hoehe))
-        
-        # Zugriff wieder als String (JSON Keys sind immer Strings)
-        key_h = str(passende_h)
-        if key_h not in self.data['matten'][typ]: key_h = matching_h # Fallback falls Int
-        
-        item = self.data['matten'][typ][str(passende_h)]
-        
-        if farb_code == "VZ":
-            preis = item.get('p_vz', 0)
-            nr = item.get('nr_vz', '')
+def init_session():
+    if 'db' not in st.session_state:
+        # Lade DB oder Defaults
+        if os.path.exists('katalog.json'):
+            try:
+                with open('katalog.json', 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    defaults = get_full_default_data()
+                    # Fehlende Keys ergänzen
+                    for k in defaults:
+                        if k not in data: data[k] = defaults[k]
+                    st.session_state.db = data
+            except:
+                st.session_state.db = get_full_default_data()
         else:
-            preis = item.get('p_fb', 0)
-            nr = item.get('nr_fb', '')
+            st.session_state.db = get_full_default_data()
             
-        if farb_code == "SONDER":
-            preis *= 1.15 
-            nr += "-SON"
-            
-        return preis * self.faktor, nr
+    if 'cart' not in st.session_state: st.session_state.cart = []
 
-    def get_steher_preis(self, typ, hoehe, farb_code):
-        if typ not in self.data['steher']: return 0, "N/A"
-        basis = self.data['steher'][typ]
-        
-        if farb_code == "VZ":
-            p_meter = basis.get('p_vz', 0)
-            nr = basis.get('nr_vz', '')
-        else:
-            p_meter = basis.get('p_fb', 0)
-            nr = basis.get('nr_fb', '')
-
-        if farb_code == "SONDER":
-            p_meter *= 1.15
-            nr += "-SON"
-
-        p_total = p_meter * (hoehe/1000) * self.faktor
-        return p_total, nr
-
-    def get_tor_preis(self, modell, b, h, farb_code):
-        moegliche = self.data['tore'].get(modell, [])
-        if not moegliche: return 0, "N/A"
-        passende = [t for t in moegliche if t['max_b'] >= b and t['max_h'] >= h]
-        
-        if not passende: 
-             t = max(moegliche, key=lambda x: x.get('p_fb', 0))
-             base_p = t.get('p_fb', 0) * 1.30
-             return base_p * self.faktor, "SONDERGRÖSSE"
-        
-        t = min(passende, key=lambda x: x.get('p_fb', 0))
-        
-        if farb_code == "VZ":
-            preis = t.get('p_vz', 0)
-            nr = t.get('nr_vz', '')
-        else:
-            preis = t.get('p_fb', 0)
-            nr = t.get('nr_fb', '')
-            
-        if farb_code == "SONDER":
-            preis *= 1.15
-            nr += "-SON"
-            
-        return preis * self.faktor, nr
+init_session()
+DB = st.session_state.db
 
 # ==========================================
-# 3. HELPER & STATE
+# 2. PDF GENERATOR
 # ==========================================
-if 'zauene' not in st.session_state: st.session_state['zauene'] = []
-if 'tore' not in st.session_state: st.session_state['tore'] = []
+def txt_clean(s):
+    """Reinigt Text für FPDF (Latin-1) und ersetzt €."""
+    if not isinstance(s, str): s = str(s)
+    s = s.replace("€", "EUR").replace("–", "-")
+    # Mapping für Umlaute, falls encoding='latin-1' strict ist
+    return s.encode('latin-1', 'replace').decode('latin-1')
 
-def add_zaun(bez, typ, farbe, laenge, hoehe, steher, ecken, sicht, reihen, montage, beton):
-    st.session_state['zauene'].append({
-        "bezeichnung": bez, "typ": typ, "farbe": farbe, "laenge": laenge, "hoehe": hoehe,
-        "steher": steher, "ecken": ecken, "sicht": sicht, "reihen": reihen, "montage": montage, "beton_stk": beton
-    })
-
-def delete_zaun(idx): st.session_state['zauene'].pop(idx)
-def add_tor(modell, sl, th, saeule, zub, farbe):
-    st.session_state['tore'].append({
-        "modell": modell, "sl": sl, "th": th, "saeule": saeule, "zub": zub, "farbe": farbe
-    })
-def delete_tor(idx): st.session_state['tore'].pop(idx)
-
-# ==========================================
-# 4. RECHNER
-# ==========================================
-def calculate_project(db, montage_std, montage_satz, rabatt):
-    pos_liste = []
-    total_netto_material = 0
-    total_saecke_projekt = 0
-    
-    total_zaun_laenge = sum([z['laenge'] for z in st.session_state['zauene']])
-    total_montage_kosten = montage_std * montage_satz
-    montage_anteil_pro_m = (total_montage_kosten / total_zaun_laenge) if total_zaun_laenge > 0 else 0
-
-    # ZÄUNE
-    for i, z in enumerate(st.session_state['zauene']):
-        details = []
-        farb_code = db.is_color(z['farbe'])
-        sum_pos_material = 0
-
-        # Matten
-        anz_matten = math.ceil(z['laenge'] / 2.5)
-        p_matte_einzel, nr_matte = db.get_matte_preis(z['typ'], z['hoehe'], farb_code)
-        k_matten = anz_matten * p_matte_einzel
-        details.append({"txt": f"Matte: {anz_matten} Stk {z['typ']} ({z['farbe']}, H={z['hoehe']})", "nr": nr_matte, "ep": p_matte_einzel, "sum": k_matten})
-        sum_pos_material += k_matten
-        
-        # Steher
-        anz_steher = anz_matten + 1 + z['ecken']
-        p_steher_total, nr_steher = db.get_steher_preis(z['steher'], z['hoehe'], farb_code)
-        k_steher = anz_steher * p_steher_total
-        l_steher_mm = z['hoehe'] + 600 if z['montage'] == "Einbetonieren" else z['hoehe'] + 100
-        details.append({"txt": f"Steher: {anz_steher} Stk '{z['steher']}' (L={l_steher_mm}mm)", "nr": nr_steher, "ep": p_steher_total, "sum": k_steher})
-        sum_pos_material += k_steher
-
-        # Montage Material
-        if z['montage'] == "Einbetonieren":
-            beton_anz = anz_steher * z['beton_stk']
-            p_beton = db.data['zubehoer']['montage']['Beton_Sack']['p']
-            k_beton = beton_anz * p_beton
-            details.append({"txt": f"Fundament: {beton_anz} Säcke Fertigbeton", "nr": "BETON", "ep": p_beton, "sum": k_beton})
-            sum_pos_material += k_beton
-            total_saecke_projekt += beton_anz
-        else:
-            p_kons = db.data['zubehoer']['montage']['Konsole']['p']
-            p_mat = db.data['zubehoer']['montage']['Montagemat']['p']
-            p_set = (p_kons + p_mat) * db.faktor
-            k_kons = anz_steher * p_set
-            details.append({"txt": f"Montage-Set: {anz_steher}x Konsole & Anker", "nr": "SET-KON", "ep": p_set, "sum": k_kons})
-            sum_pos_material += k_kons
-
-        # Sichtschutz
-        if z['sicht'] != "Keiner":
-            info = db.data['zubehoer']['sichtschutz'][z['sicht']]
-            reihen = z['reihen']
-            if "Rolle" in z['sicht']:
-                total_bahnen_m = z['laenge'] * reihen
-                anz_einheiten = math.ceil(total_bahnen_m / info['len'])
-                calc_txt = f"{reihen} Reihen à {z['laenge']}m"
-            else:
-                anz_einheiten = anz_matten * reihen
-                calc_txt = f"{reihen} Reihen für {anz_matten} Matten"
-            
-            p_sicht = info['p']
-            k_sicht = anz_einheiten * p_sicht
-            details.append({"txt": f"Sichtschutz: {anz_einheiten} {info['einheit']} ({z['sicht']})", "nr": info['nr'], "ep": p_sicht, "sum": k_sicht})
-            details.append({"txt": f"   > Kalkulation: {calc_txt}", "nr": "", "ep": 0, "sum": 0})
-            sum_pos_material += k_sicht
-
-        # LFM Preis
-        mat_rabattiert = sum_pos_material * (1 - (rabatt/100))
-        montage_anteil = z['laenge'] * montage_anteil_pro_m
-        real_lfm_preis = (mat_rabattiert + montage_anteil) / z['laenge'] if z['laenge'] > 0 else 0
-        details.insert(0, {"txt": f"KENNZAHL: {real_lfm_preis:.2f} EUR / lfm (fertig montiert & rabattiert)", "nr":"", "ep": 0, "sum": 0, "highlight": True})
-
-        pos_liste.append({"titel": f"Zaun: {z['bezeichnung']} ({z['laenge']}m)", "details": details, "preis_total": sum_pos_material})
-        total_netto_material += sum_pos_material
-
-    # TORE
-    for i, t in enumerate(st.session_state['tore']):
-        details = []
-        farb_code = db.is_color(t['farbe'])
-        sum_tor = 0
-
-        p_basis, nr_tor = db.get_tor_preis(t['modell'], t['sl'], t['th'], farb_code)
-        details.append({"txt": f"Torflügel: {t['modell']} ({t['sl']}x{t['th']})", "nr": nr_tor, "ep": p_basis, "sum": p_basis})
-        sum_tor += p_basis
-
-        ts_info = db.data['zubehoer']['torsaeulen'][t['saeule']]
-        p_saeule = ts_info['p'] * db.faktor
-        details.append({"txt": f"Torsäulen-Set: {t['saeule']}", "nr": ts_info['nr'], "ep": p_saeule, "sum": p_saeule})
-        sum_tor += p_saeule
-
-        if t['zub']:
-            for z_name in t['zub']:
-                item_data = None
-                for k, v in db.data['zubehoer']['tor_parts'].items():
-                    if k in z_name:
-                        item_data = v
-                        break
-                if item_data:
-                    p_item = item_data['p'] * db.faktor
-                    details.append({"txt": f"Zubehör: {z_name}", "nr": item_data['nr'], "ep": p_item, "sum": p_item})
-                    sum_tor += p_item
-        
-        pos_liste.append({"titel": f"Tor: {t['modell']} ({t['farbe']})", "details": details, "preis_total": sum_tor})
-        total_netto_material += sum_tor
-
-    rabatt_wert = total_netto_material * (rabatt / 100)
-    netto_rabattiert = total_netto_material - rabatt_wert
-    final_netto = netto_rabattiert + total_montage_kosten
-    
-    return {
-        "positionen": pos_liste, "rabatt": rabatt_wert, "montage": total_montage_kosten,
-        "total_netto": final_netto, "mwst": final_netto * 0.20, "brutto": final_netto * 1.20,
-        "beton_total": total_saecke_projekt
-    }
-
-# ==========================================
-# 5. PDF & GUI
-# ==========================================
-def create_pdf(res):
+def create_pdf(cart_items):
     pdf = FPDF()
     pdf.add_page()
-    def txt(s): return str(s).encode('latin-1', 'replace').decode('latin-1')
-
+    
+    # Logo
+    if os.path.exists("logo_firma.png"): 
+        pdf.image("logo_firma.png", 10, 8, 40)
+        pdf.ln(25)
+    else: 
+        pdf.ln(10)
+    
+    # Header
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, txt("ANGEBOT - ZAUNBAU"), ln=True, align='C')
+    pdf.cell(0, 10, txt_clean("ANGEBOT"), ln=True, align='C')
     pdf.set_font("Arial", '', 10)
-    pdf.cell(0, 10, txt(f"Datum: {datetime.date.today().strftime('%d.%m.%Y')}"), ln=True, align='R')
+    pdf.cell(0, 10, txt_clean(f"Datum: {datetime.date.today().strftime('%d.%m.%Y')}"), ln=True, align='R')
     pdf.ln(10)
-
+    
+    # Tabelle Header
     pdf.set_fill_color(230, 230, 230)
     pdf.set_font("Arial", 'B', 9)
     pdf.cell(10, 8, "#", 1, 0, 'C', 1)
-    pdf.cell(25, 8, "ArtNr", 1, 0, 'C', 1)
-    pdf.cell(85, 8, "Position / Beschreibung", 1, 0, 'L', 1)
-    pdf.cell(30, 8, "Einzelpreis", 1, 0, 'R', 1)
-    pdf.cell(40, 8, "Gesamt", 1, 1, 'R', 1)
+    pdf.cell(110, 8, "Position / Beschreibung", 1, 0, 'L', 1)
+    pdf.cell(25, 8, "Menge", 1, 0, 'C', 1)
+    pdf.cell(45, 8, "Gesamt (Netto)", 1, 1, 'R', 1)
     
-    for idx, pos in enumerate(res['positionen']):
-        pdf.set_font("Arial", 'B', 10)
-        pdf.cell(10, 8, str(idx+1), "LRT", 0, 'C')
-        pdf.cell(25, 8, "", "LRT", 0) 
-        pdf.cell(115, 8, txt(pos['titel']), "LRT", 0, 'L')
-        pdf.cell(40, 8, txt(f"{pos['preis_total']:,.2f}"), "LRT", 1, 'R')
+    # Positionen
+    total_net = 0
+    pdf.set_font("Arial", '', 9)
+    
+    for idx, item in enumerate(cart_items):
+        total_net += item['preis']
         
-        pdf.set_font("Arial", '', 9)
-        for d in pos['details']:
-            is_hl = d.get('highlight', False)
-            art_nr = d.get('nr', "")
+        # Hauptzeile
+        pdf.set_font("Arial", 'B', 9)
+        pdf.cell(10, 8, str(idx+1), "LRT", 0, 'C')
+        pdf.cell(110, 8, txt_clean(item['titel']), "LRT", 0, 'L')
+        pdf.cell(25, 8, txt_clean(item['menge_txt']), "LRT", 0, 'C')
+        pdf.cell(45, 8, txt_clean(f"{item['preis']:,.2f}"), "LRT", 1, 'R')
+        
+        # Details
+        pdf.set_font("Arial", '', 8)
+        for d in item.get('details', []):
             pdf.cell(10, 5, "", "LR", 0)
-            if is_hl:
-                pdf.set_font("Arial", 'BI', 9)
-                pdf.set_text_color(0, 50, 150)
-                pdf.cell(25, 5, "", "LR", 0)
-                pdf.cell(85, 5, txt(f" > {d['txt']}"), "L", 0, 'L')
-                pdf.cell(30, 5, "", 0, 0)
-                pdf.cell(40, 5, "", "R", 1)
-                pdf.set_font("Arial", '', 9)
-                pdf.set_text_color(0,0,0)
-            elif d['ep'] == 0:
-                pdf.set_text_color(100,100,100)
-                pdf.cell(25, 5, "", "LR", 0)
-                pdf.cell(85, 5, txt(f"     {d['txt']}"), "L", 0, 'L')
-                pdf.cell(30, 5, "", 0, 0)
-                pdf.cell(40, 5, "", "R", 1)
-                pdf.set_text_color(0,0,0)
-            else:
-                pdf.cell(25, 5, txt(art_nr), "LR", 0, 'C')
-                pdf.cell(85, 5, txt(f" - {d['txt']}"), "L", 0, 'L')
-                pdf.cell(30, 5, txt(f"{d['ep']:,.2f}"), 0, 0, 'R')
-                pdf.cell(40, 5, txt(f"{d['sum']:,.2f}"), "R", 1, 'R')
-        pdf.cell(190, 1, "", "T", 1) 
+            pdf.cell(110, 5, txt_clean(f"  - {d}"), "LR", 0, 'L')
+            pdf.cell(25, 5, "", "LR", 0)
+            pdf.cell(45, 5, "", "LR", 1)
+            
+        # Abschlusslinie Item
+        pdf.cell(190, 1, "", "T", 1)
 
+    # Summenblock
+    mwst = total_net * 0.20
+    brutto = total_net + mwst
+    
     pdf.ln(5)
-    def sum_row(lab, val, bold=False, color=False):
-        if bold: pdf.set_font("Arial", 'B', 11)
-        else: pdf.set_font("Arial", '', 10)
-        if color: pdf.set_fill_color(200, 255, 200)
-        fill = 1 if color else 0
-        pdf.cell(150, 8, txt(lab), 0, 0, 'R', fill)
-        pdf.cell(40, 8, txt(f"{val:,.2f} EUR"), 1, 1, 'R', fill)
-
-    if res['rabatt'] > 0: sum_row(f"Abzüglich Rabatt", -res['rabatt'])
-    if res['montage'] > 0: sum_row(f"Montageleistung", res['montage'])
-    pdf.ln(2)
-    sum_row("GESAMT NETTO", res['total_netto'], bold=True)
-    sum_row("MwSt (20%)", res['mwst'])
-    sum_row("GESAMT BRUTTO", res['brutto'], bold=True, color=True)
-    if res['beton_total'] > 0:
-        pdf.ln(10)
-        pdf.set_font("Arial", 'I', 9)
-        pdf.multi_cell(0, 5, txt(f"Logistik: {res['beton_total']} Sack Fertigbeton."))
+    pdf.set_font("Arial", '', 10)
+    pdf.cell(145, 7, "Netto Summe:", 0, 0, 'R')
+    pdf.cell(45, 7, txt_clean(f"{total_net:,.2f} EUR"), 1, 1, 'R')
+    
+    pdf.cell(145, 7, "20% MwSt:", 0, 0, 'R')
+    pdf.cell(45, 7, txt_clean(f"{mwst:,.2f} EUR"), 1, 1, 'R')
+    
+    pdf.set_font("Arial", 'B', 11)
+    pdf.cell(145, 8, "Gesamt Brutto:", 0, 0, 'R')
+    pdf.cell(45, 8, txt_clean(f"{brutto:,.2f} EUR"), 1, 1, 'R')
+    
     return pdf.output(dest='S').encode('latin-1')
 
-def main():
-    st.set_page_config(page_title="Zaun-Profi V7.1", page_icon="🏗️", layout="wide")
+# ==========================================
+# 3. MODUL A: INDIVIDUAL (CORE FEATURE)
+# ==========================================
+def render_individual():
+    st.markdown("<div class='main-header'>🛠️ Metallbau Individual</div>", unsafe_allow_html=True)
     
-    # Header
-    c1, c2, c3 = st.columns([1,4,1])
-    if os.path.exists("logo_firma.png"): c1.image("logo_firma.png", width=100)
-    c2.title("🏗️ Multi-Zaun Projektierung")
-    if os.path.exists("logo_brix.png"): c3.image("logo_brix.png", width=100)
+    # 1. Parameter Sidebar für dieses Modul
+    with st.expander("⚙️ Kalkulations-Parameter (Stundensatz/Faktor)", expanded=False):
+        c_p1, c_p2 = st.columns(2)
+        std_satz = c_p1.number_input("Stundensatz (€/h)", 40.0, 150.0, 65.0)
+        mat_faktor = c_p2.number_input("Material-Aufschlag (Faktor)", 1.0, 3.0, 1.20)
 
-    # Sidebar
-    with st.sidebar:
-        st.header("Admin")
-        faktor = st.number_input("Globaler Faktor:", 0.5, 2.0, 1.0, 0.01)
-        st.divider()
-        st.caption(f"Datenquelle: {'katalog.json' if os.path.exists('katalog.json') else 'Interner Fallback'}")
+    # 2. Produktauswahl
+    raw_indiv = DB.get('individual', {})
+    if not raw_indiv:
+        st.error("Datenbank leer! Bitte im Admin-Bereich Daten importieren.")
+        return
 
-    db = ZaunDatabase(faktor)
+    col_cat, col_mod = st.columns(2)
+    kats = sorted(list(raw_indiv.keys()))
+    kat = col_cat.selectbox("Kategorie", kats)
+    
+    modelle = raw_indiv[kat]
+    mod = col_mod.selectbox("Modell / Ausführung", list(modelle.keys()))
+    
+    data = modelle[mod]
+    base_unit = data.get('einheit', 'Stk')
+    
+    # 3. Dimensionen
+    st.markdown("<div class='sub-header'>1. Maße & Menge</div>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    menge = c1.number_input(f"Anzahl ({base_unit})", 0.0, 1000.0, 1.0, step=1.0)
+    laenge = c2.number_input("Länge (m)", 0.0, 100.0, 0.0, step=0.1)
+    breite = c3.number_input("Breite (m)", 0.0, 20.0, 0.0, step=0.1)
+    
+    flaeche = round(laenge * breite, 2)
+    if flaeche > 0:
+        st.caption(f"ℹ️ Berechnete Fläche: **{flaeche} m²** (für Quadratmeter-Optionen relevant)")
 
-    tab1, tab2, tab3 = st.tabs(["1️⃣ Zäune", "2️⃣ Tore", "3️⃣ Global"])
+    # 4. Optionen
+    st.markdown("<div class='sub-header'>2. Ausstattung & Optionen</div>", unsafe_allow_html=True)
+    
+    selected_options = []
+    avail_opts = data.get('optionen', {})
+    
+    if not avail_opts:
+        st.info("Keine Optionen für dieses Modell hinterlegt.")
+    else:
+        # Wir nutzen Container für bessere Touch-Bedienung
+        for opt_name, opt_data in avail_opts.items():
+            p = opt_data.get('p', 0.0)
+            unit = opt_data.get('einheit', 'Pauschal')
+            z_plus = opt_data.get('z_plus', 0.0) # Zeit pro Einheit
+            
+            # Preisberechnungsvorschau
+            calc_factor = 0
+            if unit == 'Pauschal':
+                calc_factor = menge
+                desc = "pro Stk/Pauschal"
+            elif unit == 'pro_lfm':
+                calc_factor = laenge * menge
+                desc = "pro lfm"
+            elif unit == 'pro_m2':
+                calc_factor = flaeche * menge
+                desc = "pro m²"
+            
+            surcharge = p * calc_factor
+            
+            # Checkbox mit dynamischem Text
+            if st.checkbox(f"{opt_name} (+ {p:.2f}€ {desc})", key=f"opt_{mod}_{opt_name}"):
+                # Validierung
+                if calc_factor == 0 and unit != 'Pauschal':
+                    st.warning(f"⚠️ '{opt_name}' benötigt {'Länge' if unit=='pro_lfm' else 'Fläche (LxB)'} > 0!")
+                else:
+                    selected_options.append({
+                        "name": opt_name,
+                        "price_sum": surcharge,
+                        "time_sum": z_plus * calc_factor,
+                        "detail_txt": f"{opt_name} ({calc_factor:.1f} {unit.replace('pro_', '')})"
+                    })
 
+    # 5. Berechnung
+    base_mat = data.get('mat', 0.0) * menge
+    base_time = (data.get('z_fert', 0.0) + data.get('z_mont', 0.0)) * menge
+    
+    opt_mat_sum = sum(x['price_sum'] for x in selected_options)
+    opt_time_sum = sum(x['time_sum'] for x in selected_options)
+    
+    total_mat = (base_mat + opt_mat_sum) * mat_faktor
+    total_time = (base_time + opt_time_sum) * std_satz
+    
+    endpreis = total_mat + total_time
+    
+    # 6. Ergebnis & Add
+    st.markdown("---")
+    res_col1, res_col2 = st.columns([2, 1])
+    
+    with res_col1:
+        st.markdown(f"### Gesamtpreis: {endpreis:,.2f} €")
+        st.caption("Inkl. Material, Fertigung, Montage & Gewinnaufschlag (Netto)")
+        
+    with res_col2:
+        if st.button("🛒 In den Warenkorb", type="primary", use_container_width=True):
+            details = [f"Basis: {mod} ({menge} {base_unit})"]
+            if laenge > 0: details.append(f"Maße: {laenge}m x {breite}m")
+            details.extend([x['detail_txt'] for x in selected_options])
+            
+            item = {
+                "titel": f"{kat}: {mod}",
+                "menge_txt": f"{menge} {base_unit}",
+                "preis": endpreis,
+                "details": details
+            }
+            st.session_state.cart.append(item)
+            st.success("Hinzugefügt!")
+            st.rerun()
+
+# ==========================================
+# 4. MODUL B: ZÄUNE (Optimiert)
+# ==========================================
+def render_zaun():
+    st.markdown("<div class='main-header'>🚧 Gitterzäune</div>", unsafe_allow_html=True)
+    
+    with st.form("zaun_calc"):
+        c1, c2 = st.columns(2)
+        typ = c1.selectbox("Matten-Typ", list(DB['matten'].keys()))
+        h_opts = sorted(list(DB['matten'][typ].keys()), key=lambda x: int(x))
+        hoehe = c2.selectbox("Höhe (mm)", h_opts)
+        
+        c3, c4 = st.columns(2)
+        laenge = c3.number_input("Länge des Zauns (m)", 1.0, 1000.0, 10.0)
+        farbe = c4.selectbox("Oberfläche", ["Verzinkt", "Anthrazit", "Moosgrün"])
+        
+        steher = st.selectbox("Steher Typ", list(DB['steher'].keys()))
+        faktor = st.number_input("Preisfaktor (Marge)", 0.5, 2.0, 1.0)
+        
+        if st.form_submit_button("Berechnen & Hinzufügen", type="primary", use_container_width=True):
+            key_p = 'p_vz' if farbe == "Verzinkt" else 'p_fb'
+            
+            # Logik
+            anz_matten = math.ceil(laenge / 2.5)
+            p_matte = DB['matten'][typ][hoehe].get(key_p, 0)
+            
+            anz_steher = anz_matten + 1
+            p_steher_m = DB['steher'][steher].get(key_p, 0)
+            # Steher ist immer etwas länger als der Zaun hoch ist (Fundament)
+            steher_laenge = (int(hoehe) / 1000) + 0.6 
+            p_steher_stk = p_steher_m * steher_laenge
+            
+            mat_total = (anz_matten * p_matte) + (anz_steher * p_steher_stk)
+            endpreis = mat_total * faktor
+            
+            details = [
+                f"Typ: {typ} H{hoehe}, {farbe}",
+                f"{anz_matten} Stk Matten (à 2,5m)",
+                f"{anz_steher} Stk Steher ({steher})"
+            ]
+            
+            st.session_state.cart.append({
+                "titel": "Gitterzaun-Anlage",
+                "menge_txt": f"{laenge}m",
+                "preis": endpreis,
+                "details": details
+            })
+            st.success("Wurde zum Angebot hinzugefügt.")
+            st.rerun()
+
+# ==========================================
+# 5. MODUL C: BRIX (Optimiert)
+# ==========================================
+def render_brix():
+    st.markdown("<div class='main-header'>🏢 Brix Balkone</div>", unsafe_allow_html=True)
+    
+    with st.form("brix_calc"):
+        mod = st.selectbox("Modell", list(DB['brix'].keys()))
+        
+        c1, c2 = st.columns(2)
+        l_ger = c1.number_input("Länge Gerade (m)", 0.0, 100.0, 5.0)
+        l_schr = c2.number_input("Länge Schräg (m)", 0.0, 50.0, 0.0)
+        
+        c3, c4 = st.columns(2)
+        farbe_sel = c3.selectbox("Farbe", ["Standard", "Sonderfarbe (+15%)"])
+        montage = c4.selectbox("Montageart", ["Boden", "Wand"])
+        
+        if st.form_submit_button("Berechnen & Hinzufügen", type="primary", use_container_width=True):
+            info = DB['brix'][mod]
+            l_ges = l_ger + l_schr
+            
+            if l_ges <= 0:
+                st.error("Länge muss > 0 sein.")
+            else:
+                preis_m = info['preis']
+                if "Sonderfarbe" in farbe_sel: preis_m *= 1.15
+                
+                # Schätzung Steher (ca alle 1.3m)
+                anz_steher = math.ceil(l_ges / 1.3) + 1
+                preis_steher_pauschal = anz_steher * 120.00 
+                
+                total = (l_ges * preis_m) + preis_steher_pauschal
+                
+                details = [
+                    f"Modell: {mod}",
+                    f"Ausführung: {farbe_sel}",
+                    f"Montage: {montage} (inkl. ca. {anz_steher} Steher)"
+                ]
+                
+                st.session_state.cart.append({
+                    "titel": f"Brix Geländer ({mod})",
+                    "menge_txt": f"{l_ges:.2f}m",
+                    "preis": total,
+                    "details": details
+                })
+                st.success("Hinzugefügt!")
+                st.rerun()
+
+# ==========================================
+# 6. WARENKORB (SIDEBAR & PDF)
+# ==========================================
+def render_cart_ui():
+    st.markdown("### 📋 Aktuelles Angebot")
+    
+    if not st.session_state.cart:
+        st.info("Warenkorb ist leer.")
+        return
+
+    total = 0
+    for i, item in enumerate(st.session_state.cart):
+        with st.expander(f"{item['titel']} ({item['preis']:,.2f} €)", expanded=False):
+            for d in item['details']:
+                st.text(f"- {d}")
+            if st.button("🗑️ Entfernen", key=f"del_{i}"):
+                st.session_state.cart.pop(i)
+                st.rerun()
+        total += item['preis']
+    
+    st.markdown("---")
+    mwst = total * 0.2
+    brutto = total * 1.2
+    
+    st.markdown(f"**Netto:** {total:,.2f} €")
+    st.markdown(f"**Brutto:** {brutto:,.2f} €")
+    
+    # PDF Generieren
+    if st.button("📄 PDF Erstellen", type="primary", use_container_width=True):
+        pdf_bytes = create_pdf(st.session_state.cart)
+        st.download_button(
+            label="⬇️ Download PDF",
+            data=pdf_bytes,
+            file_name=f"Angebot_{datetime.date.today()}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+        
+    if st.button("Alles löschen", use_container_width=True):
+        st.session_state.cart = []
+        st.rerun()
+
+# ==========================================
+# 7. ADMIN & EXCEL LOGIK
+# ==========================================
+def render_admin():
+    st.markdown("<div class='main-header'>⚙️ Datenbank Verwaltung</div>", unsafe_allow_html=True)
+    
+    tab1, tab2 = st.tabs(["💾 Backup (JSON)", "📊 Excel Import/Export (Individual)"])
+    
+    # --- JSON BACKUP ---
     with tab1:
-        st.subheader("Zaun hinzufügen")
-        with st.form("zaun_form", clear_on_submit=True):
-            c1, c2 = st.columns(2)
-            bez = c1.text_input("Bezeichnung:", "Vorgarten")
-            matten_opts = list(st.session_state['db_data']['matten'].keys())
-            typ = c2.selectbox("Matten:", matten_opts)
-            c3, c4 = st.columns(2)
-            laenge = c3.number_input("Länge (m):", 1.0, 500.0, 10.0)
-            if typ in st.session_state['db_data']['matten']:
-                try: h_opts = sorted([int(x) for x in st.session_state['db_data']['matten'][typ].keys()])
-                except: h_opts = [1030]
-            else: h_opts = [1030]
-            hoehe = c4.select_slider("Höhe (mm):", options=h_opts, value=h_opts[min(1, len(h_opts)-1)])
-            c5, c6 = st.columns(2)
-            farbe = c5.selectbox("Farbe:", list(db.farben.keys()))
-            sicht_opts = list(st.session_state['db_data']['zubehoer']['sichtschutz'].keys())
-            sicht = c6.selectbox("Sichtschutz:", sicht_opts)
-            reihen = 0
-            if sicht != "Keiner":
-                reihen = st.number_input("Reihen:", 1, 15, int(hoehe/200))
-            c7, c8 = st.columns(2)
-            mont = c7.radio("Montage:", ["Einbetonieren", "Auf Fundament"])
-            steher_opts = list(st.session_state['db_data']['steher'].keys())
-            steher = c8.selectbox("Steher:", steher_opts)
-            ecken = st.number_input("Ecken:", 0, 20, 0)
-            beton = 2
-            if mont == "Einbetonieren":
-                beton = st.number_input("Säcke Beton/Steher:", 1, 10, 2)
+        st.info("Sichert die **gesamte** Datenbank (Individual + Zäune + Brix).")
+        json_str = json.dumps(st.session_state.db, indent=2, ensure_ascii=False)
+        st.download_button("⬇️ Full Backup Download", json_str, "db_backup.json", "application/json")
+        
+        uploaded_json = st.file_uploader("Backup wiederherstellen (JSON)", type=['json'])
+        if uploaded_json:
+            try:
+                data = json.load(uploaded_json)
+                st.session_state.db = data
+                st.success("Datenbank erfolgreich wiederhergestellt!")
+            except Exception as e:
+                st.error(f"Fehler beim Laden: {e}")
 
-            if st.form_submit_button("➕ Zaun speichern"):
-                add_zaun(bez, typ, farbe, laenge, hoehe, steher, ecken, sicht, reihen, mont, beton)
-                st.rerun()
-
-        if st.session_state['zauene']:
-            st.write("📋 **Liste:**")
-            for i, z in enumerate(st.session_state['zauene']):
-                with st.expander(f"{i+1}. {z['bezeichnung']} ({z['laenge']}m)", expanded=True):
-                    st.caption(f"{z['typ']} | H:{z['hoehe']}mm")
-                    if st.button("Löschen", key=f"del_{i}"): delete_zaun(i); st.rerun()
-
+    # --- EXCEL LOGIK ---
     with tab2:
-        st.subheader("Tore")
-        with st.form("tor_form"):
-            tore_opts = list(st.session_state['db_data']['tore'].keys())
-            mod = st.selectbox("Modell:", tore_opts)
-            c1, c2 = st.columns(2)
-            sl = c1.number_input("Lichte (mm):", 800, 5000, 1000, 50)
-            th = c2.number_input("Höhe (mm):", 800, 2500, 1200, 50)
-            ts_opts = list(st.session_state['db_data']['zubehoer']['torsaeulen'].keys())
-            ts = st.selectbox("Säulen:", ts_opts)
-            tf = st.selectbox("Farbe:", list(db.farben.keys()))
-            zub_map = {k: k for k in st.session_state['db_data']['zubehoer']['tor_parts'].keys()}
-            tz = st.multiselect("Zubehör:", list(zub_map.keys()))
-            if st.form_submit_button("➕ Tor speichern"):
-                add_tor(mod, sl, th, ts, tz, tf)
-                st.rerun()
-        if st.session_state['tore']:
-            for i, t in enumerate(st.session_state['tore']):
-                with st.expander(f"Tor: {t['modell']}", expanded=True):
-                    if st.button("Löschen", key=f"delt_{i}"): delete_tor(i); st.rerun()
+        st.info("Hier können die Produkte für 'Metallbau Individual' bearbeitet werden.")
+        
+        # 1. EXPORT
+        if st.button("⬇️ Excel Template herunterladen"):
+            # Flatten Logic
+            rows_prod = []
+            rows_opt = []
+            
+            indiv_data = st.session_state.db.get('individual', {})
+            for cat, models in indiv_data.items():
+                for mod_name, mod_data in models.items():
+                    # Produkt Zeile
+                    rows_prod.append({
+                        "Kategorie": cat,
+                        "Produkt": mod_name,
+                        "Einheit": mod_data.get('einheit', 'Stk'),
+                        "Materialpreis": mod_data.get('mat', 0),
+                        "Zeit_Fertigung": mod_data.get('z_fert', 0),
+                        "Zeit_Montage": mod_data.get('z_mont', 0)
+                    })
+                    # Optionen Zeilen
+                    for opt_name, opt_data in mod_data.get('optionen', {}).items():
+                        rows_opt.append({
+                            "Produkt": mod_name,
+                            "Option": opt_name,
+                            "Preis": opt_data.get('p', 0),
+                            "Einheit_Typ": opt_data.get('einheit', 'Pauschal'), # Pauschal, pro_lfm, pro_m2
+                            "Zeit_Plus": opt_data.get('z_plus', 0)
+                        })
+            
+            # Create Excel
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                pd.DataFrame(rows_prod).to_excel(writer, sheet_name='Produkte', index=False)
+                pd.DataFrame(rows_opt).to_excel(writer, sheet_name='Optionen', index=False)
+            
+            st.download_button(
+                label="Excel Datei speichern",
+                data=buffer.getvalue(),
+                file_name="individual_katalog.xlsx",
+                mime="application/vnd.ms-excel"
+            )
 
-    with tab3:
-        h_std = st.number_input("Montage (h):", 0.0, 500.0, 0.0)
-        h_satz = st.number_input("Satz (€):", 0.0, 200.0, 65.0)
-        rabatt = st.slider("Rabatt %:", 0, 50, 0)
         st.markdown("---")
-        res = calculate_project(db, h_std, h_satz, rabatt)
-        k1, k2 = st.columns(2)
-        k1.metric("Netto", f"€ {res['total_netto']:,.2f}")
-        k2.metric("Brutto", f"€ {res['brutto']:,.2f}")
-        pdf_bytes = create_pdf(res)
-        st.download_button("📄 PDF Angebot (Final)", pdf_bytes, "Angebot.pdf", "application/pdf", type="primary")
-        if os.path.exists("preisliste_draht.pdf"):
-            with st.expander("Katalog"):
-                pdf_viewer("preisliste_draht.pdf", height=500)
+        
+        # 2. IMPORT
+        st.write("Excel Datei hochladen, um 'Individual' zu aktualisieren:")
+        excel_file = st.file_uploader("Excel Datei (.xlsx)", type=['xlsx'])
+        
+        if excel_file and st.button("🚀 Import starten"):
+            try:
+                df_p = pd.read_excel(excel_file, 'Produkte')
+                df_o = pd.read_excel(excel_file, 'Optionen')
+                
+                new_indiv = {}
+                
+                # Aufbau Produkte
+                for _, row in df_p.iterrows():
+                    cat = str(row['Kategorie']).strip()
+                    prod = str(row['Produkt']).strip()
+                    
+                    if cat not in new_indiv: new_indiv[cat] = {}
+                    
+                    new_indiv[cat][prod] = {
+                        "einheit": str(row['Einheit']),
+                        "mat": float(row['Materialpreis']),
+                        "z_fert": float(row['Zeit_Fertigung']),
+                        "z_mont": float(row['Zeit_Montage']),
+                        "optionen": {}
+                    }
+                
+                # Aufbau Optionen
+                count_opt = 0
+                for _, row in df_o.iterrows():
+                    p_ref = str(row['Produkt']).strip()
+                    opt_name = str(row['Option']).strip()
+                    
+                    # Option nur einfügen, wenn Produkt existiert
+                    found = False
+                    for c in new_indiv:
+                        if p_ref in new_indiv[c]:
+                            new_indiv[c][p_ref]['optionen'][opt_name] = {
+                                "p": float(row['Preis']),
+                                "einheit": str(row['Einheit_Typ']),
+                                "z_plus": float(row['Zeit_Plus'])
+                            }
+                            found = True
+                            count_opt += 1
+                            break
+                
+                # Update Session State (Nur Individual überschreiben)
+                st.session_state.db['individual'] = new_indiv
+                
+                # Speichern auf Disk optional
+                with open('katalog.json', 'w', encoding='utf-8') as f:
+                    json.dump(st.session_state.db, f, indent=2, ensure_ascii=False)
+                    
+                st.success(f"Import erfolgreich! {len(df_p)} Produkte und {count_opt} Optionen geladen.")
+                
+            except Exception as e:
+                st.error(f"Fehler beim Import: {e}")
+
+# ==========================================
+# 8. MAIN APP LOGIC
+# ==========================================
+def main():
+    # Sidebar Navigation
+    with st.sidebar:
+        if os.path.exists("logo_firma.png"): 
+            st.image("logo_firma.png", width=150)
+        else:
+            st.header("Meingassner")
+            
+        st.markdown("---")
+        app_mode = st.radio("Modus", ["🏗️ Kalkulator", "⚙️ Datenbank Admin"])
+        st.markdown("---")
+        
+        if app_mode == "🏗️ Kalkulator":
+            module = st.radio("Bereich wählen", 
+                              ["Metallbau Individual", "Gitterzäune", "Brix Balkone"])
+            st.markdown("---")
+            render_cart_ui()
+    
+    # Main Content
+    if app_mode == "⚙️ Datenbank Admin":
+        render_admin()
+    else:
+        if module == "Metallbau Individual":
+            render_individual()
+        elif module == "Gitterzäune":
+            render_zaun()
+        elif module == "Brix Balkone":
+            render_brix()
 
 if __name__ == "__main__":
     main()
