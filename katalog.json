@@ -60,14 +60,14 @@
         }
       },
       "mit seiten wangen": {
-        "einheit": "Höhe ",
+        "einheit": "Stufe",
         "mat": 120.0,
         "z_fert": 2.0,
         "z_mont": 4.0,
         "optionen": {}
       },
       "Keinen ahnung was": {
-        "einheit": "B",
+        "einheit": "Stufe",
         "mat": 120.0,
         "z_fert": 2.0,
         "z_mont": 4.0,
