@@ -145,6 +145,14 @@
     "Rechteck mit Fußplatte": {
       "p_vz": 38.0,
       "p_fb": 45.0
+    },
+    "Rundsteher 42mm": {
+      "p_vz": 22.0,
+      "p_fb": 28.0
+    },
+    "IPE 80 (Schwer)": {
+      "p_vz": 45.0,
+      "p_fb": 55.0
     }
   }
 }
