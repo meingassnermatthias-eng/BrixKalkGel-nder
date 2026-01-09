@@ -34,8 +34,8 @@
       "Stahltreppe Gerade": {
         "einheit": "Stufe",
         "mat": 120.0,
-        "z_fert": 0.0,
-        "z_mont": 0.0,
+        "z_fert": 2.0,
+        "z_mont": 46143.0,
         "optionen": {
           "Wangen aus Flachstahl": {
             "p": 40.0,
