@@ -1,132 +1,178 @@
 import streamlit as st
+import pandas as pd
+from fpdf import FPDF
+import base64
 
-# --- Seitenkonfiguration ---
-st.set_page_config(page_title="Meingassner Kalkulation", layout="wide")
+# --- SEITEN KONFIGURATION ---
+st.set_page_config(page_title="Meingassner Kalkulation & Angebot", layout="wide")
 
-# --- TITEL & LOGO (oben) ---
-st.title("Meingassner Metalltechnik - Kalkulation")
+# --- SESSION STATE (Hier speichern wir die Positionen) ---
+if 'positionen' not in st.session_state:
+    st.session_state['positionen'] = []
 
-# --- SIDEBAR (Die saubere Navigation) ---
-st.sidebar.header("Menü")
+# --- HILFSFUNKTION: PDF ERSTELLEN ---
+def create_pdf(positionen_liste):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    
+    # Kopfzeile
+    pdf.cell(0, 10, "Angebot - Meingassner Metalltechnik", ln=True, align='C')
+    pdf.set_font("Arial", size=10)
+    pdf.cell(0, 10, "Spezialist für Geländer, Treppen, Zäune & Überdachungen", ln=True, align='C')
+    pdf.ln(10)
+    
+    # Tabellenkopf
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(80, 10, "Beschreibung", 1)
+    pdf.cell(30, 10, "Menge", 1)
+    pdf.cell(40, 10, "Einzelpreis", 1)
+    pdf.cell(40, 10, "Gesamt", 1)
+    pdf.ln()
+    
+    # Inhalt
+    pdf.set_font("Arial", size=12)
+    gesamt_netto = 0
+    
+    for pos in positionen_liste:
+        # Umlaute fixen für FPDF (einfache Methode)
+        beschreibung = pos['Beschreibung'].encode('latin-1', 'replace').decode('latin-1')
+        menge = str(pos['Menge'])
+        preis = f"{pos['Preis']:.2f}"
+        
+        pdf.cell(80, 10, beschreibung, 1)
+        pdf.cell(30, 10, menge, 1)
+        pdf.cell(40, 10, "", 1) # Einzelpreis hier vereinfacht leer oder berechnen
+        pdf.cell(40, 10, preis + " EUR", 1)
+        pdf.ln()
+        
+        gesamt_netto += pos['Preis']
+        
+    pdf.ln(10)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(110, 10, "", 0)
+    pdf.cell(40, 10, "Gesamtsumme:", 1)
+    pdf.cell(40, 10, f"{gesamt_netto:.2f} EUR", 1)
+    
+    # Rückgabe als String (latin-1 encoding für PDF byte stream)
+    return pdf.output(dest='S').encode('latin-1')
 
-# 1. Hauptauswahl: Eigenfertigung oder Zukauf/Systeme
-bereich = st.sidebar.radio(
-    "Bereich wählen:",
-    ["Eigenfertigung", "Handel & Systeme"],
-    index=0
-)
+# --- SIDEBAR NAVIGATION ---
+st.sidebar.header("Menü Auswahl")
+bereich = st.sidebar.radio("Hauptbereich:", ["Eigenfertigung", "Handel & Systeme"], index=0)
+st.sidebar.markdown("---")
 
-st.sidebar.markdown("---") # Trennlinie
-
-# 2. Untermenü (ändert sich je nach Bereich)
 if bereich == "Eigenfertigung":
-    # Deine gefertigten Produkte
-    modus = st.sidebar.radio(
-        "Produkt:",
-        ["Individuell (Treppen/Geländer)", "Gitterstabmattenzäune", "Vordächer"]
-    )
-    
-else: # Handel & Systeme
-    # Deine Zukauf-Produkte
-    modus = st.sidebar.radio(
-        "System:",
-        ["Brix Zaun", "Terrassendach / Sommergarten", "Alu Fenster & Türen"]
-    )
+    modus = st.sidebar.radio("Produkt:", ["Individuell (Treppen/Geländer)", "Gitterstabmatten", "Vordächer"])
+else:
+    modus = st.sidebar.radio("System:", ["Brix Zaun", "Terrassendach", "Fenster & Türen"])
 
-# --- HAUPTBEREICH (Rechts) ---
+# --- HAUPTBEREICH ---
+st.title(f"Kalkulation: {modus}")
 
-# ---------------------------------------------------------
-# MODUS: INDIVIDUELL (Treppen & Geländer) - Dein Screenshot
-# ---------------------------------------------------------
-if modus == "Individuell (Treppen/Geländer)":
-    st.subheader("🛠️ Metallbau Individual Kalkulation")
+# Variablen initialisieren (damit sie später verfügbar sind)
+preis_dieser_position = 0.0
+beschreibung_text = ""
+menge_text = 1.0
 
-    # Parameter Block (wie im Screenshot)
-    with st.expander("Grundeinstellungen & Parameter", expanded=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            stundensatz = st.number_input("Stundensatz (€)", value=65.00, step=1.0)
-        with col2:
-            material_faktor = st.number_input("Material Faktor", value=1.20, step=0.05)
-            
-        c1, c2 = st.columns(2)
-        with c1:
-            kategorie = st.selectbox("Kategorie", ["Treppe", "Geländer Edelstahl", "Geländer Stahl verzinkt"])
-        with c2:
-            modell = st.selectbox("Modell", ["Stahltreppe Gerade", "Stahltreppe Gewendelt", "Individual"])
+# === 1. EINGABEMASKE ===
+col_input, col_summary = st.columns([2, 1])
 
-    # Maße
-    st.markdown("### Maße")
-    m1, m2, m3 = st.columns(3)
-    with m1:
-        anzahl = st.number_input("Anzahl (Stufen/Lfm)", value=1.0, step=1.0)
-    with m2:
-        laenge = st.number_input("Länge (m)", value=0.0, step=0.1)
-    with m3:
-        breite = st.number_input("Breite (m)", value=0.0, step=0.1)
+with col_input:
+    # ---------------------------------------------------------
+    # MODUS: INDIVIDUELL (Treppen & Geländer)
+    # ---------------------------------------------------------
+    if modus == "Individuell (Treppen/Geländer)":
+        with st.expander("Parameter", expanded=True):
+            c1, c2 = st.columns(2)
+            stundensatz = c1.number_input("Stundensatz (€)", value=65.0)
+            mat_faktor = c2.number_input("Material Faktor", value=1.2)
+            modell = st.selectbox("Modell", ["Stahltreppe Gerade", "Geländer Edelstahl", "Geländer Verzinkt"])
 
-    # Optionen (Checkboxen aus Screenshot)
-    st.markdown("### Optionen")
-    opt_wangen = st.checkbox("Wangen aus Flachstahl (40.00€ Pauschal)")
-    opt_gitterrost = st.checkbox("Stufen Gitterrost (35.0€ Pauschal)")
-    opt_gelaender = st.checkbox("Geländer einseitig (140.0€ pro lfm)")
-    opt_pulver = st.checkbox("Pulverbeschichtung (80.0€ pro lfm)")
+        m1, m2, m3 = st.columns(3)
+        anzahl = m1.number_input("Anzahl / Stk.", value=1.0)
+        laenge = m2.number_input("Länge (m)", value=3.0)
+        breite = m3.number_input("Breite (m)", value=1.0)
+        
+        # Checkboxen
+        opt_wangen = st.checkbox("Wangen (40€)")
+        opt_rost = st.checkbox("Gitterrost (35€)")
+        
+        # Berechnung (Dummy Logik)
+        material = (laenge * breite * 50) * mat_faktor
+        arbeit = (anzahl * 5) * stundensatz
+        extras = 0
+        if opt_wangen: extras += 40
+        if opt_rost: extras += 35
+        
+        preis_dieser_position = material + arbeit + extras
+        beschreibung_text = f"{modell} ({laenge}x{breite}m)"
+        menge_text = anzahl
 
-    # Einfache Dummy-Berechnung (damit du ein Ergebnis siehst)
-    # Hier musst du später deine echten Formeln hinterlegen
-    material_kosten = (laenge * breite * 100) * material_faktor
-    arbeits_kosten = (anzahl * 2) * stundensatz
-    zusatz_kosten = 0
-    
-    if opt_wangen: zusatz_kosten += 40
-    if opt_gitterrost: zusatz_kosten += 35
-    if opt_gelaender: zusatz_kosten += (140 * laenge)
-    if opt_pulver: zusatz_kosten += (80 * laenge)
+    # ---------------------------------------------------------
+    # MODUS: BRIX ZAUN (Beispiel)
+    # ---------------------------------------------------------
+    elif modus == "Brix Zaun":
+        modell = st.selectbox("Brix Modell", ["Lattenzaun", "Palisaden"])
+        lfm = st.number_input("Laufmeter", value=10.0)
+        preis_pro_m = 150.0 # Beispielpreis
+        
+        preis_dieser_position = lfm * preis_pro_m
+        beschreibung_text = f"Brix {modell} ({lfm} lfm)"
+        menge_text = lfm
 
-    gesamtpreis = material_kosten + arbeits_kosten + zusatz_kosten
+    # ---------------------------------------------------------
+    # Andere Modi (Platzhalter)
+    # ---------------------------------------------------------
+    else:
+        st.info("Für diesen Bereich ist noch keine Formel hinterlegt.")
+        preis_dieser_position = 0.0
+        beschreibung_text = modus
 
+    # === PREIS ANZEIGE & BUTTON ===
     st.markdown("---")
-    # Ergebnis Box
-    st.info(f"💰 Kalkulierter Preis: **{gesamtpreis:.2f} €**")
+    st.subheader(f"Positionspreis: {preis_dieser_position:.2f} €")
     
-    if st.button("In den Warenkorb / Angebot erstellen"):
-        st.success("Position zum Angebot hinzugefügt!")
+    if st.button("➕ Position zum Angebot hinzufügen", type="primary"):
+        if preis_dieser_position > 0:
+            neue_pos = {
+                "Beschreibung": beschreibung_text,
+                "Menge": menge_text,
+                "Preis": preis_dieser_position
+            }
+            st.session_state['positionen'].append(neue_pos)
+            st.success("Hinzugefügt!")
+            st.rerun()
+        else:
+            st.warning("Preis ist 0, kann nicht hinzugefügt werden.")
 
-# ---------------------------------------------------------
-# MODUS: BRIX ZAUN
-# ---------------------------------------------------------
-elif modus == "Brix Zaun":
-    st.subheader("🧱 Brix Zaun Konfigurator")
-    st.write("Hier folgt die Eingabemaske für Brix Zäune.")
-    # Platzhalter für Brix Logik
-    modell_brix = st.selectbox("Brix Modell", ["Lattenzaun", "Palisaden", "Sichtschutz"])
-    lfm_brix = st.number_input("Laufmeter", value=10.0)
-    st.info(f"Geschätzter Preis für {lfm_brix}m {modell_brix}: (Formel einfügen)")
-
-# ---------------------------------------------------------
-# MODUS: VORDÄCHER
-# ---------------------------------------------------------
-elif modus == "Vordächer":
-    st.subheader("☔ Vordächer")
-    st.write("Planung für Vordächer.")
-
-# ---------------------------------------------------------
-# MODUS: GITTERSTABMATTEN
-# ---------------------------------------------------------
-elif modus == "Gitterstabmattenzäune":
-    st.subheader("🚧 Gitterstabmatten")
-    st.write("Kalkulation für Standard-Zäune.")
-
-# ---------------------------------------------------------
-# MODUS: TERRASSENDACH
-# ---------------------------------------------------------
-elif modus == "Terrassendach / Sommergarten":
-    st.subheader("☀️ Terrassendach & Sommergarten")
-    st.write("Konfigurator für Überdachungen.")
-
-# ---------------------------------------------------------
-# MODUS: FENSTER & TÜREN
-# ---------------------------------------------------------
-elif modus == "Alu Fenster & Türen":
-    st.subheader("🚪 Aluminium Fenster & Türen (Montage)")
-    st.write("Erfassung für Zukaufteile und Montageaufwand.")
+# === 2. ANGEBOTS-ZUSAMMENFASSUNG (Rechts oder Unten) ===
+with col_summary:
+    st.write("### 📝 Aktuelles Angebot")
+    
+    if len(st.session_state['positionen']) > 0:
+        # Tabelle anzeigen
+        df = pd.DataFrame(st.session_state['positionen'])
+        st.dataframe(df, hide_index=True)
+        
+        # Gesamtsumme
+        total = sum(item['Preis'] for item in st.session_state['positionen'])
+        st.markdown(f"### Summe: {total:.2f} €")
+        
+        # PDF DOWNLOAD BUTTON
+        pdf_bytes = create_pdf(st.session_state['positionen'])
+        
+        st.download_button(
+            label="📄 Angebot als PDF herunterladen",
+            data=pdf_bytes,
+            file_name="angebot_meingassner.pdf",
+            mime="application/pdf"
+        )
+        
+        # Liste löschen Button
+        if st.button("🗑️ Angebot leeren"):
+            st.session_state['positionen'] = []
+            st.rerun()
+            
+    else:
+        st.info("Noch keine Positionen im Angebot.")
