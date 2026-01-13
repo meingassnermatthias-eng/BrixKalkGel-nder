@@ -54,9 +54,11 @@ def speichere_excel(df, blatt_name):
 
 # --- 3. SESSION STATE ---
 if 'positionen' not in st.session_state: st.session_state['positionen'] = []
-# Hier speichern wir Kundendaten zwischen, damit sie beim Wechseln nicht weg sind
 if 'kunden_daten' not in st.session_state: 
     st.session_state['kunden_daten'] = {"Name": "", "Strasse": "", "Ort": "", "Tel": "", "Email": "", "Notiz": ""}
+# Neu: Speicher für das fertige PDF, damit der Download-Button stehen bleibt
+if 'fertiges_pdf' not in st.session_state:
+    st.session_state['fertiges_pdf'] = None
 
 # --- 4. PDF ENGINE MIT FOTOS ---
 class PDF(FPDF):
@@ -74,6 +76,7 @@ class PDF(FPDF):
 
 def clean_text(text):
     if not isinstance(text, str): text = str(text)
+    # Euro und Bindestriche ersetzen, um Abstürze zu verhindern
     text = text.replace("€", "EUR").replace("–", "-")
     return text.encode('latin-1', 'replace').decode('latin-1')
 
@@ -95,7 +98,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos):
     pdf.cell(0, 6, "Kundeninformation:", ln=True)
     pdf.set_font("Arial", size=10)
     
-    # Wir bauen einen sauberen Adressblock
     k_text = ""
     if kunden_dict["Name"]: k_text += f"{kunden_dict['Name']}\n"
     if kunden_dict["Strasse"]: k_text += f"{kunden_dict['Strasse']}\n"
@@ -143,13 +145,15 @@ def create_pdf(positionen_liste, kunden_dict, fotos):
 
         final_desc_text = clean_text(f"{main_title}{details}")
         
-        # Zeilenhöhe
+        # Zeilenhöhe berechnen
         x_start, y_start = pdf.get_x(), pdf.get_y()
         pdf.multi_cell(w_desc, 5, final_desc_text, border=1, align='L')
         y_end = pdf.get_y()
         row_height = y_end - y_start
         
+        # Cursor zurücksetzen
         pdf.set_xy(x_start + w_desc, y_start)
+        
         pdf.cell(w_menge, row_height, clean_text(str(pos['Menge'])), 1, 0, 'C')
         pdf.cell(w_ep, row_height, f"{pos['Einzelpreis']:.2f}", 1, 0, 'R')
         pdf.cell(w_gesamt, row_height, f"{pos['Preis']:.2f}", 1, 1, 'R')
@@ -167,20 +171,18 @@ def create_pdf(positionen_liste, kunden_dict, fotos):
         pdf.cell(0, 10, "Baustellen-Dokumentation / Fotos", 0, 1, 'L')
         
         for foto_upload in fotos:
-            # Foto temporär speichern, damit FPDF es lesen kann
             try:
+                # Temporäre Datei erstellen
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
                     tmp_file.write(foto_upload.getvalue())
                     tmp_path = tmp_file.name
                 
-                # Bild auf Seite platzieren (Breite 100mm)
-                # Prüfen wie viel Platz noch ist, sonst neue Seite
+                # Platzprüfung
                 if pdf.get_y() > 200: pdf.add_page()
                 
                 pdf.image(tmp_path, w=150)
-                pdf.ln(10) # Abstand
+                pdf.ln(10)
                 
-                # Aufräumen
                 os.unlink(tmp_path)
             except Exception as e:
                 pdf.cell(0, 10, f"Fehler beim Bild: {str(e)}", ln=True)
@@ -190,14 +192,11 @@ def create_pdf(positionen_liste, kunden_dict, fotos):
 # --- 5. MENÜ STRUKTUR ---
 st.sidebar.header("Navigation")
 
-# Optionen laden
 index_df = lade_startseite()
 katalog_items = []
 if not index_df.empty and 'System' in index_df.columns:
     katalog_items = index_df['System'].tolist()
 
-# Hauptmenü Logik
-# Wir trennen: Katalog (Auswahl) und Warenkorb (Abschluss)
 menue_punkt = st.sidebar.radio(
     "Gehe zu:",
     ["📂 Konfigurator / Katalog", "🛒 Warenkorb / Abschluss", "🔐 Admin"]
@@ -209,7 +208,6 @@ st.sidebar.markdown("---")
 if menue_punkt == "📂 Konfigurator / Katalog":
     st.title("Artikel Konfigurator")
     
-    # Sub-Menü für die Systeme NUR hier anzeigen
     if katalog_items:
         auswahl_system = st.selectbox("Wähle System:", katalog_items)
     else:
@@ -217,13 +215,11 @@ if menue_punkt == "📂 Konfigurator / Katalog":
         auswahl_system = None
 
     if auswahl_system:
-        # Lade Blatt für System
         row = index_df[index_df['System'] == auswahl_system]
         if not row.empty:
             blatt = row.iloc[0]['Blattname']
             df_config = lade_blatt(blatt)
             
-            # Layout: Links Konfig, Rechts kleiner Warenkorb-Check
             col_konfig, col_mini_cart = st.columns([2, 1])
             
             with col_konfig:
@@ -231,7 +227,6 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                 if df_config.empty or 'Formel' not in df_config.columns:
                     st.error("Konfigurationsblatt fehlerhaft oder leer.")
                 else:
-                    # --- INPUT GENERATOR ---
                     vars_calc = {}
                     desc_parts = []
                     
@@ -278,7 +273,6 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                             except Exception as e:
                                 st.error("Fehler in Formel.")
             
-            # Rechter Teil: Nur kurze Übersicht "Was hab ich schon?"
             with col_mini_cart:
                 st.info("Aktuelle Positionen:")
                 if st.session_state['positionen']:
@@ -307,6 +301,7 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             
             if st.button("Alles löschen", type="secondary"):
                 st.session_state['positionen'] = []
+                st.session_state['fertiges_pdf'] = None
                 st.rerun()
         else:
             st.info("Ihr Warenkorb ist leer.")
@@ -314,8 +309,8 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
     with col_daten:
         st.subheader("📋 Kundendaten & Fotos")
         
+        # Start des Formulars (OHNE Download-Button darin)
         with st.form("abschluss_form"):
-            # Daten Felder
             c1, c2 = st.columns(2)
             name = c1.text_input("Name / Firma", value=st.session_state['kunden_daten']['Name'])
             strasse = c2.text_input("Straße & Hausnr.", value=st.session_state['kunden_daten']['Strasse'])
@@ -327,37 +322,42 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             email = st.text_input("E-Mail", value=st.session_state['kunden_daten']['Email'])
             notiz = st.text_area("Bemerkung / Notiz", value=st.session_state['kunden_daten']['Notiz'])
             
-            # FOTO UPLOAD
             st.markdown("---")
             st.write("📷 **Fotos hinzufügen (Kamera oder Galerie):**")
             fotos = st.file_uploader("Bilder auswählen", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
             
+            # Dieser Button sendet das Formular ab
             submitted = st.form_submit_button("💾 PDF Generieren")
             
-            if submitted:
-                # Daten sichern
-                st.session_state['kunden_daten'] = {
-                    "Name": name, "Strasse": strasse, "Ort": ort, 
-                    "Tel": tel, "Email": email, "Notiz": notiz
-                }
-                
-                if not st.session_state['positionen']:
-                    st.error("Warenkorb ist leer!")
-                else:
-                    # PDF erstellen
-                    pdf_bytes = create_pdf(
-                        st.session_state['positionen'], 
-                        st.session_state['kunden_daten'],
-                        fotos
-                    )
-                    
-                    st.success("PDF erstellt!")
-                    st.download_button(
-                        "⬇️ PDF Herunterladen", 
-                        data=pdf_bytes, 
-                        file_name="angebot_meingassner.pdf", 
-                        mime="application/pdf"
-                    )
+        # --- LOGIK AUSSERHALB DES FORMULARS ---
+        # Wenn geklickt wurde:
+        if submitted:
+            # Daten sichern
+            st.session_state['kunden_daten'] = {
+                "Name": name, "Strasse": strasse, "Ort": ort, 
+                "Tel": tel, "Email": email, "Notiz": notiz
+            }
+            
+            if not st.session_state['positionen']:
+                st.error("Warenkorb ist leer!")
+            else:
+                # PDF erstellen und im Session State speichern
+                pdf_bytes = create_pdf(
+                    st.session_state['positionen'], 
+                    st.session_state['kunden_daten'],
+                    fotos
+                )
+                st.session_state['fertiges_pdf'] = pdf_bytes
+                st.success("PDF erfolgreich erstellt! Download unten möglich.")
+
+        # Download Button anzeigen, wenn ein PDF da ist
+        if st.session_state['fertiges_pdf']:
+            st.download_button(
+                "⬇️ PDF Herunterladen", 
+                data=st.session_state['fertiges_pdf'], 
+                file_name="angebot_meingassner.pdf", 
+                mime="application/pdf"
+            )
 
 # --- TEIL C: ADMIN ---
 elif menue_punkt == "🔐 Admin":
