@@ -26,7 +26,15 @@ setup_app_icon("logo.png")
 DATEI_NAME = "katalog.xlsx"
 
 def clean_df_columns(df):
-    if not df.empty: df.columns = df.columns.str.strip()
+    if not df.empty: 
+        df.columns = df.columns.str.strip()
+        # --- FIX: Automatische Umbenennung, falls die Spalte "Formel / Info" heißt ---
+        rename_map = {
+            'Formel / Info': 'Formel',
+            'Formel/Info': 'Formel',
+            'Info': 'Formel'
+        }
+        df.rename(columns=rename_map, inplace=True)
     return df
 
 def lade_startseite():
@@ -56,11 +64,10 @@ def speichere_excel(df, blatt_name):
 if 'positionen' not in st.session_state: st.session_state['positionen'] = []
 if 'kunden_daten' not in st.session_state: 
     st.session_state['kunden_daten'] = {"Name": "", "Strasse": "", "Ort": "", "Tel": "", "Email": "", "Notiz": ""}
-# Neu: Speicher für das fertige PDF, damit der Download-Button stehen bleibt
 if 'fertiges_pdf' not in st.session_state:
     st.session_state['fertiges_pdf'] = None
 
-# --- 4. PDF ENGINE MIT FOTOS ---
+# --- 4. PDF ENGINE ---
 class PDF(FPDF):
     def header(self):
         if os.path.exists("logo.png"):
@@ -76,7 +83,7 @@ class PDF(FPDF):
 
 def clean_text(text):
     if not isinstance(text, str): text = str(text)
-    # Euro und Bindestriche ersetzen, um Abstürze zu verhindern
+    # WICHTIG: Ersetzt Euro und Bindestriche, damit PDF nicht abstürzt
     text = text.replace("€", "EUR").replace("–", "-")
     return text.encode('latin-1', 'replace').decode('latin-1')
 
@@ -92,7 +99,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos):
     pdf.cell(0, 5, clean_text("Meingassner Metalltechnik"), ln=True)
     pdf.cell(0, 5, clean_text("Ihr Spezialist für Metallbau"), ln=True)
     
-    # --- KUNDENDATEN BLOCK ---
+    # --- KUNDENDATEN ---
     pdf.ln(10)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 6, "Kundeninformation:", ln=True)
@@ -165,24 +172,19 @@ def create_pdf(positionen_liste, kunden_dict, fotos):
     pdf.cell(w_desc + w_menge + w_ep, 10, "Gesamtsumme:", 0, 0, 'R')
     pdf.cell(w_gesamt, 10, f"{gesamt_summe:.2f} EUR", 1, 1, 'R')
 
-    # --- FOTOS ANHÄNGEN ---
+    # --- FOTOS ---
     if fotos:
         pdf.add_page()
         pdf.cell(0, 10, "Baustellen-Dokumentation / Fotos", 0, 1, 'L')
-        
         for foto_upload in fotos:
             try:
-                # Temporäre Datei erstellen
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
                     tmp_file.write(foto_upload.getvalue())
                     tmp_path = tmp_file.name
                 
-                # Platzprüfung
                 if pdf.get_y() > 200: pdf.add_page()
-                
                 pdf.image(tmp_path, w=150)
                 pdf.ln(10)
-                
                 os.unlink(tmp_path)
             except Exception as e:
                 pdf.cell(0, 10, f"Fehler beim Bild: {str(e)}", ln=True)
@@ -224,8 +226,12 @@ if menue_punkt == "📂 Konfigurator / Katalog":
             
             with col_konfig:
                 st.subheader(f"Konfiguration: {auswahl_system}")
-                if df_config.empty or 'Formel' not in df_config.columns:
-                    st.error("Konfigurationsblatt fehlerhaft oder leer.")
+                
+                # Prüfen auf Pflichtfelder (Formel Spalte wird durch clean_df_columns repariert)
+                if df_config.empty:
+                    st.error("Blatt ist leer.")
+                elif 'Formel' not in df_config.columns:
+                    st.error(f"Spalte 'Formel' fehlt! (Gefunden: {list(df_config.columns)})")
                 else:
                     vars_calc = {}
                     desc_parts = []
@@ -269,104 +275,92 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                         "Beschreibung": full_desc,
                                         "Menge": 1.0, "Einzelpreis": preis, "Preis": preis
                                     })
-                                    st.success("Hinzugefügt! Gehe zum Warenkorb für Abschluss.")
+                                    st.success("Hinzugefügt! Weiter zum Warenkorb.")
                             except Exception as e:
-                                st.error("Fehler in Formel.")
+                                st.error("Fehler in der Formel.")
+                                st.write(f"Details: {e}")
             
             with col_mini_cart:
                 st.info("Aktuelle Positionen:")
                 if st.session_state['positionen']:
                     cnt = len(st.session_state['positionen'])
                     sum_live = sum(p['Preis'] for p in st.session_state['positionen'])
-                    st.write(f"**{cnt} Artikel** im Korb")
-                    st.write(f"Summe: **{sum_live:.2f} €**")
-                    st.dataframe(pd.DataFrame(st.session_state['positionen'])[['Beschreibung', 'Preis']], hide_index=True)
+                    st.write(f"**{cnt} Artikel** | Summe: **{sum_live:.2f} €**")
                 else:
                     st.write("(Leer)")
 
-# --- TEIL B: WARENKORB / ABSCHLUSS ---
+# --- TEIL B: WARENKORB ---
 elif menue_punkt == "🛒 Warenkorb / Abschluss":
     st.title("🛒 Warenkorb & Abschluss")
     
     col_liste, col_daten = st.columns([1, 1])
     
     with col_liste:
-        st.subheader("Ihre Artikel")
+        st.subheader("Artikel")
         if st.session_state['positionen']:
             df_cart = pd.DataFrame(st.session_state['positionen'])
-            st.dataframe(df_cart, hide_index=True)
+            st.dataframe(df_cart[['Beschreibung', 'Preis']], hide_index=True)
             
             total = sum(p['Preis'] for p in st.session_state['positionen'])
-            st.markdown(f"### Gesamtsumme: {total:.2f} €")
+            st.markdown(f"### Gesamt: {total:.2f} €")
             
             if st.button("Alles löschen", type="secondary"):
                 st.session_state['positionen'] = []
                 st.session_state['fertiges_pdf'] = None
                 st.rerun()
         else:
-            st.info("Ihr Warenkorb ist leer.")
+            st.info("Leer.")
 
     with col_daten:
-        st.subheader("📋 Kundendaten & Fotos")
+        st.subheader("Kundendaten & Fotos")
         
-        # Start des Formulars (OHNE Download-Button darin)
         with st.form("abschluss_form"):
             c1, c2 = st.columns(2)
-            name = c1.text_input("Name / Firma", value=st.session_state['kunden_daten']['Name'])
-            strasse = c2.text_input("Straße & Hausnr.", value=st.session_state['kunden_daten']['Strasse'])
-            
+            name = c1.text_input("Name", value=st.session_state['kunden_daten']['Name'])
+            strasse = c2.text_input("Straße", value=st.session_state['kunden_daten']['Strasse'])
             c3, c4 = st.columns(2)
-            ort = c3.text_input("PLZ / Ort", value=st.session_state['kunden_daten']['Ort'])
-            tel = c4.text_input("Telefon", value=st.session_state['kunden_daten']['Tel'])
-            
-            email = st.text_input("E-Mail", value=st.session_state['kunden_daten']['Email'])
-            notiz = st.text_area("Bemerkung / Notiz", value=st.session_state['kunden_daten']['Notiz'])
+            ort = c3.text_input("Ort", value=st.session_state['kunden_daten']['Ort'])
+            tel = c4.text_input("Tel", value=st.session_state['kunden_daten']['Tel'])
+            email = st.text_input("Email", value=st.session_state['kunden_daten']['Email'])
+            notiz = st.text_area("Notiz", value=st.session_state['kunden_daten']['Notiz'])
             
             st.markdown("---")
-            st.write("📷 **Fotos hinzufügen (Kamera oder Galerie):**")
-            fotos = st.file_uploader("Bilder auswählen", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+            fotos = st.file_uploader("Fotos anhängen", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
             
-            # Dieser Button sendet das Formular ab
             submitted = st.form_submit_button("💾 PDF Generieren")
             
-        # --- LOGIK AUSSERHALB DES FORMULARS ---
-        # Wenn geklickt wurde:
         if submitted:
-            # Daten sichern
             st.session_state['kunden_daten'] = {
                 "Name": name, "Strasse": strasse, "Ort": ort, 
                 "Tel": tel, "Email": email, "Notiz": notiz
             }
-            
-            if not st.session_state['positionen']:
-                st.error("Warenkorb ist leer!")
-            else:
-                # PDF erstellen und im Session State speichern
+            if st.session_state['positionen']:
                 pdf_bytes = create_pdf(
                     st.session_state['positionen'], 
                     st.session_state['kunden_daten'],
                     fotos
                 )
                 st.session_state['fertiges_pdf'] = pdf_bytes
-                st.success("PDF erfolgreich erstellt! Download unten möglich.")
+                st.success("PDF erstellt!")
+            else:
+                st.error("Warenkorb leer.")
 
-        # Download Button anzeigen, wenn ein PDF da ist
         if st.session_state['fertiges_pdf']:
             st.download_button(
                 "⬇️ PDF Herunterladen", 
                 data=st.session_state['fertiges_pdf'], 
-                file_name="angebot_meingassner.pdf", 
+                file_name="angebot.pdf", 
                 mime="application/pdf"
             )
 
 # --- TEIL C: ADMIN ---
 elif menue_punkt == "🔐 Admin":
-    st.title("Admin Bereich")
-    pw = st.text_input("Passwort:", type="password")
+    st.title("Admin")
+    pw = st.text_input("PW:", type="password")
     if pw == "1234":
         sheets = lade_alle_blattnamen()
         if sheets:
-            sh = st.selectbox("Blatt bearbeiten:", sheets)
+            sh = st.selectbox("Blatt:", sheets)
             df = lade_blatt(sh)
             df_new = st.data_editor(df, num_rows="dynamic", use_container_width=True)
             if st.button("Speichern"):
