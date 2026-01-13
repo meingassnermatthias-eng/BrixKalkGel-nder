@@ -21,15 +21,14 @@ def setup_app_icon(image_file):
 
 setup_app_icon("logo.png")
 
-# --- 2. EXCEL LOGIK (VERBESSERT) ---
+# --- 2. EXCEL LOGIK ---
 DATEI_NAME = "katalog.xlsx"
 
 def lade_startseite():
     if not os.path.exists(DATEI_NAME): return pd.DataFrame()
     try: 
         df = pd.read_excel(DATEI_NAME, sheet_name="Startseite")
-        # Leerzeichen in Überschriften entfernen (Wichtig!)
-        df.columns = df.columns.str.strip()
+        df.columns = df.columns.str.strip() # Leerzeichen entfernen
         return df
     except: return pd.DataFrame()
 
@@ -37,9 +36,7 @@ def lade_blatt(blatt_name):
     if not os.path.exists(DATEI_NAME): return pd.DataFrame()
     try: 
         df = pd.read_excel(DATEI_NAME, sheet_name=blatt_name)
-        # Leerzeichen in Überschriften entfernen (Fix für "Formel ")
-        if not df.empty:
-            df.columns = df.columns.str.strip()
+        if not df.empty: df.columns = df.columns.str.strip()
         return df
     except: return pd.DataFrame()
 
@@ -59,38 +56,95 @@ def speichere_excel(df, blatt_name):
 # --- 3. WARENKORB ---
 if 'positionen' not in st.session_state: st.session_state['positionen'] = []
 
-# --- 4. PDF ---
+# --- 4. PDF ENGINE (Verschönert) ---
+class PDF(FPDF):
+    def header(self):
+        # Logo einfügen (wenn vorhanden)
+        if os.path.exists("logo.png"):
+            # x=10, y=8, breite=30
+            self.image("logo.png", 10, 8, 30)
+            
+        self.set_font('Arial', 'B', 15)
+        # Titel nach rechts verschieben damit er nicht im Logo steht
+        self.cell(80) 
+        self.cell(30, 10, 'Angebot', 0, 0, 'C')
+        self.ln(20) # Zeilenumbruch nach Header
+
 def create_pdf(positionen_liste):
-    pdf = FPDF()
+    pdf = PDF()
     pdf.add_page()
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(0, 10, "Angebot - Meingassner Metalltechnik", ln=True, align='C')
-    pdf.ln(10)
-    pdf.set_font("Arial", 'B', 10)
-    pdf.cell(90, 8, "Beschreibung", 1)
-    pdf.cell(20, 8, "Menge", 1)
-    pdf.cell(30, 8, "EP", 1)
-    pdf.cell(30, 8, "Gesamt", 1)
-    pdf.ln()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    
+    # Firmeninfo
     pdf.set_font("Arial", size=10)
-    gesamt = 0
+    pdf.cell(0, 5, "Meingassner Metalltechnik", ln=True, align='L')
+    pdf.cell(0, 5, "Spezialist für Zäune, Tore & Überdachungen", ln=True, align='L')
+    pdf.ln(10)
+    
+    # Tabellenkopf
+    pdf.set_font("Arial", 'B', 10)
+    pdf.set_fill_color(200, 200, 200) # Grau hinterlegt
+    
+    # Breiten der Spalten
+    w_desc = 100
+    w_menge = 20
+    w_ep = 30
+    w_gesamt = 30
+    
+    pdf.cell(w_desc, 8, "Beschreibung", 1, 0, 'L', True)
+    pdf.cell(w_menge, 8, "Menge", 1, 0, 'C', True)
+    pdf.cell(w_ep, 8, "EP (€)", 1, 0, 'R', True)
+    pdf.cell(w_gesamt, 8, "Gesamt (€)", 1, 1, 'R', True) # 1 am Ende für Zeilenumbruch
+    
+    pdf.set_font("Arial", size=10)
+    
+    gesamt_summe = 0
+    
     for pos in positionen_liste:
-        txt = pos['Beschreibung'].encode('latin-1', 'replace').decode('latin-1')
-        pdf.cell(90, 8, txt, 1)
-        pdf.cell(20, 8, str(pos['Menge']), 1)
-        pdf.cell(30, 8, f"{pos['Einzelpreis']:.2f}", 1)
-        pdf.cell(30, 8, f"{pos['Preis']:.2f}", 1)
-        pdf.ln()
-        gesamt += pos['Preis']
-    pdf.cell(140, 8, "Gesamtsumme:", 1)
-    pdf.cell(30, 8, f"{gesamt:.2f}", 1)
+        # Text vorbereiten: Ersetze ", " durch Zeilenumbrüche für schöne Liste
+        # Wir formatieren den Text hier um, damit er sauber untereinander steht
+        raw_text = pos['Beschreibung']
+        # Wir machen aus "Carport | Länge: 6, Breite: 5" -> "Carport\n- Länge: 6\n- Breite: 5"
+        formatted_text = raw_text.replace(" | ", "\n").replace(", ", "\n  • ")
+        
+        # Latin-1 Encoding Fix für Umlaute
+        txt = formatted_text.encode('latin-1', 'replace').decode('latin-1')
+        
+        # 1. Höhe der Zeile berechnen (basierend auf Beschreibungstext)
+        # Wir nutzen multi_cell im "Dry Run", um die Zeilen zu zählen? Nein, einfacher Trick:
+        # Wir merken uns x und y Start
+        x_start = pdf.get_x()
+        y_start = pdf.get_y()
+        
+        # 2. Beschreibung drucken (MultiCell erlaubt Zeilenumbrüche)
+        pdf.multi_cell(w_desc, 5, txt, border=1, align='L')
+        
+        # Wo steht der Cursor jetzt? (y_end)
+        y_end = pdf.get_y()
+        row_height = y_end - y_start
+        
+        # 3. Cursor zurücksetzen für die anderen Spalten
+        pdf.set_xy(x_start + w_desc, y_start)
+        
+        # 4. Andere Spalten drucken (mit der gleichen Höhe wie die Beschreibung)
+        pdf.cell(w_menge, row_height, str(pos['Menge']), 1, 0, 'C')
+        pdf.cell(w_ep, row_height, f"{pos['Einzelpreis']:.2f}", 1, 0, 'R')
+        pdf.cell(w_gesamt, row_height, f"{pos['Preis']:.2f}", 1, 1, 'R') # ln=1 für nächste Zeile
+        
+        gesamt_summe += pos['Preis']
+
+    # Summe
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(w_desc + w_menge + w_ep, 10, "Gesamtsumme:", 0, 0, 'R')
+    pdf.cell(w_gesamt, 10, f"{gesamt_summe:.2f} EUR", 1, 1, 'R')
+    
     return pdf.output(dest='S').encode('latin-1')
 
 # --- 5. MENÜ ---
 st.sidebar.header("Menü")
 index_df = lade_startseite()
 
-# Prüfen ob 'System' Spalte existiert
 if not index_df.empty and 'System' in index_df.columns:
     menue_items = index_df['System'].tolist()
 else:
@@ -114,8 +168,8 @@ if auswahl == "🔐 Admin":
             df_new = st.data_editor(df, num_rows="dynamic", use_container_width=True)
             if st.button("Speichern"):
                 if speichere_excel(df_new, sh): 
-                    st.success("Gespeichert! Bitte Seite neu laden (F5 oder Rerun).")
-                    st.cache_data.clear() # Cache leeren
+                    st.success("Gespeichert! Bitte Seite neu laden.")
+                    st.cache_data.clear()
         else:
             st.warning("Keine Excel-Datei gefunden.")
 
@@ -127,22 +181,19 @@ else:
             blatt = row.iloc[0]['Blattname']
             df_config = lade_blatt(blatt)
             
-            # Sicherheitscheck: Sind alle Spalten da?
-            benoetigte_spalten = ['Typ', 'Bezeichnung', 'Variable', 'Optionen', 'Formel']
             if df_config.empty:
                 st.warning("Blatt ist leer.")
-            elif not all(col in df_config.columns for col in benoetigte_spalten):
-                st.error(f"Fehler in Excel-Blatt '{blatt}'!")
-                st.error(f"Es fehlen Spalten. Gefunden: {list(df_config.columns)}")
-                st.info(f"Benötigt werden exakt: {benoetigte_spalten}")
+            # Fehlerbehandlung: Prüfen ob Formel-Spalte da ist
+            elif 'Formel' not in df_config.columns:
+                 st.error(f"Fehler: Spalte 'Formel' fehlt im Blatt {blatt}!")
             else:
                 st.subheader(f"Konfiguration: {auswahl}")
                 
                 col_l, col_r = st.columns([2, 1])
                 
                 with col_l:
-                    berechnungs_variablen = {}
-                    beschreibung_parts = []
+                    vars_calc = {}
+                    desc_parts = [] # Liste für Beschreibungstext
                     
                     for index, zeile in df_config.iterrows():
                         typ = str(zeile['Typ']).strip().lower()
@@ -151,8 +202,8 @@ else:
                         
                         if typ == 'zahl':
                             val = st.number_input(label, value=0.0, step=0.1, key=f"{blatt}_{index}")
-                            berechnungs_variablen[var_name] = val
-                            if val > 0: beschreibung_parts.append(f"{label}: {val}")
+                            vars_calc[var_name] = val
+                            if val > 0: desc_parts.append(f"{label}: {val}")
                         
                         elif typ == 'auswahl':
                             raw_opts = str(zeile['Optionen']).split(',')
@@ -160,38 +211,44 @@ else:
                             opts_names = []
                             for opt in raw_opts:
                                 if ':' in opt:
-                                    name, wert = opt.split(':')
-                                    opts_dict[name.strip()] = float(wert)
-                                    opts_names.append(name.strip())
+                                    n, v = opt.split(':')
+                                    opts_dict[n.strip()] = float(v)
+                                    opts_names.append(n.strip())
                                 else:
                                     opts_dict[opt.strip()] = 0
                                     opts_names.append(opt.strip())
                             
                             wahl = st.selectbox(label, opts_names, key=f"{blatt}_{index}")
-                            berechnungs_variablen[var_name] = opts_dict[wahl]
-                            beschreibung_parts.append(f"{label}: {wahl}")
+                            vars_calc[var_name] = opts_dict[wahl]
+                            # Auch die Auswahl in den Text übernehmen
+                            desc_parts.append(f"{label}: {wahl}")
 
                         elif typ == 'preis':
-                            # Hier stürzte es vorher ab, jetzt sicher
                             formel = str(zeile['Formel'])
                             st.markdown("---")
                             try:
-                                preis_ergebnis = eval(formel, {"__builtins__": None}, berechnungs_variablen)
-                                st.subheader(f"Preis: {preis_ergebnis:.2f} €")
+                                # Berechnung
+                                preis = eval(formel, {"__builtins__": None}, vars_calc)
+                                st.subheader(f"Preis: {preis:.2f} €")
                                 
                                 if st.button("In den Warenkorb", type="primary"):
+                                    # HIER wird der Text für das PDF gebaut
+                                    # Wir nutzen " | " als Trenner für den Haupttitel und ", " für Details
+                                    # Das PDF-Skript oben ersetzt ", " dann durch Zeilenumbrüche
+                                    full_desc = f"{auswahl} | " + ", ".join(desc_parts)
+                                    
                                     st.session_state['positionen'].append({
-                                        "Beschreibung": f"{auswahl} | " + ", ".join(beschreibung_parts),
+                                        "Beschreibung": full_desc,
                                         "Menge": 1.0,
-                                        "Einzelpreis": preis_ergebnis,
-                                        "Preis": preis_ergebnis
+                                        "Einzelpreis": preis,
+                                        "Preis": preis
                                     })
                                     st.success("Hinzugefügt!")
                                     st.rerun()
                             except Exception as e:
                                 st.error("Fehler in der Berechnung!")
-                                st.text(f"Formel: {formel}")
-                                st.text(f"Fehler: {e}")
+                                st.write(f"Formel: {formel}")
+                                st.write(f"Fehler: {e}")
                                 
                 with col_r:
                     st.write("### 🛒 Angebot")
@@ -202,7 +259,7 @@ else:
                         st.markdown(f"**Total: {summe:.2f} €**")
                         
                         pdf_data = create_pdf(st.session_state['positionen'])
-                        st.download_button("📄 PDF", pdf_data, "angebot.pdf", "application/pdf")
+                        st.download_button("📄 PDF Angebot laden", pdf_data, "angebot.pdf", "application/pdf")
                         
                         if st.button("Löschen"):
                             st.session_state['positionen'] = []
