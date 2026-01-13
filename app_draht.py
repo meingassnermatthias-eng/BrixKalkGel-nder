@@ -4,224 +4,191 @@ from fpdf import FPDF
 import base64
 import os
 
-# --- 1. SEITEN KONFIGURATION (Muss als allererstes stehen) ---
-st.set_page_config(
-    page_title="Meingassner App", 
-    layout="wide", 
-    page_icon="logo.png" # Standard Favicon für PC
-)
+# --- 1. KONFIGURATION & HANDY ICON ---
+st.set_page_config(page_title="Meingassner App", layout="wide", page_icon="logo.png")
 
-# --- 2. FUNKTION: MOBILE APP ICON (Der "Trick" für Handys) ---
 def setup_app_icon(image_file):
-    """
-    Versucht, das Bild als Apple-Touch-Icon und Android-Icon 
-    in den HTML-Header zu schmuggeln.
-    """
     if os.path.exists(image_file):
-        try:
-            with open(image_file, "rb") as f:
-                data = f.read()
-            encoded = base64.b64encode(data).decode()
-            
-            # HTML Injection für iOS und Android Homescreen
-            icon_html = f"""
-            <style>
-            </style>
-            <link rel="apple-touch-icon" href="data:image/png;base64,{encoded}">
-            <link rel="icon" type="image/png" href="data:image/png;base64,{encoded}">
-            """
-            st.markdown(icon_html, unsafe_allow_html=True)
-            # Optional: Logo auch in der Sidebar anzeigen
-            st.sidebar.image(image_file, width=150)
-        except Exception as e:
-            st.warning(f"Fehler beim Laden des Logos: {e}")
-    else:
-        # Falls kein Logo da ist, kein Fehler, nur Hinweis
-        st.sidebar.warning("⚠️ 'logo.png' nicht gefunden. Bitte in den Ordner legen.")
+        with open(image_file, "rb") as f:
+            data = f.read()
+        encoded = base64.b64encode(data).decode()
+        icon_html = f"""
+        <link rel="apple-touch-icon" href="data:image/png;base64,{encoded}">
+        <link rel="icon" type="image/png" href="data:image/png;base64,{encoded}">
+        """
+        st.markdown(icon_html, unsafe_allow_html=True)
+        st.sidebar.image(image_file, width=150)
 
-# Logo-Funktion aufrufen
 setup_app_icon("logo.png")
 
-# --- 3. SESSION STATE (Warenkorb Speicher) ---
+# --- 2. DATEN LADE-FUNKTION (EXCEL) ---
+@st.cache_data # Damit Excel nicht bei jedem Klick neu geladen wird -> schneller
+def lade_katalog():
+    dateiname = "katalog.xlsx"
+    if not os.path.exists(dateiname):
+        return None
+    try:
+        # Lese das Inhaltsverzeichnis (Blatt "Startseite")
+        index_df = pd.read_excel(dateiname, sheet_name="Startseite")
+        return index_df
+    except Exception as e:
+        st.error(f"Fehler beim Lesen der 'Startseite': {e}")
+        return None
+
+def lade_produkte(blatt_name):
+    try:
+        df = pd.read_excel("katalog.xlsx", sheet_name=blatt_name)
+        return df
+    except Exception as e:
+        return pd.DataFrame() # Leeres Blatt zurückgeben bei Fehler
+
+# --- 3. SESSION STATE ---
 if 'positionen' not in st.session_state:
     st.session_state['positionen'] = []
 
-# --- 4. FUNKTION: PDF ERSTELLEN ---
+# --- 4. PDF FUNKTION ---
 def create_pdf(positionen_liste):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 16)
-    
-    # Kopfzeile
     pdf.cell(0, 10, "Angebot - Meingassner Metalltechnik", ln=True, align='C')
-    pdf.set_font("Arial", size=10)
-    pdf.cell(0, 10, "Geländer | Treppen | Zäune | Überdachungen", ln=True, align='C')
     pdf.ln(10)
-    
-    # Tabellenkopf
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(90, 10, "Beschreibung", 1)
-    pdf.cell(20, 10, "Menge", 1)
-    pdf.cell(40, 10, "Einzelpreis", 1)
-    pdf.cell(40, 10, "Gesamt", 1)
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(90, 8, "Beschreibung", 1)
+    pdf.cell(20, 8, "Menge", 1)
+    pdf.cell(20, 8, "Einh.", 1)
+    pdf.cell(30, 8, "EP", 1)
+    pdf.cell(30, 8, "Gesamt", 1)
     pdf.ln()
     
-    # Inhalt
-    pdf.set_font("Arial", size=12)
-    gesamt_netto = 0
-    
+    pdf.set_font("Arial", size=10)
+    gesamt = 0
     for pos in positionen_liste:
-        # Text bereinigen (latin-1 encoding fix)
-        beschreibung = pos['Beschreibung'].encode('latin-1', 'replace').decode('latin-1')
-        menge = str(pos['Menge'])
-        preis = f"{pos['Preis']:.2f}"
-        
-        pdf.cell(90, 10, beschreibung, 1)
-        pdf.cell(20, 10, menge, 1)
-        pdf.cell(40, 10, "", 1) 
-        pdf.cell(40, 10, preis + " EUR", 1)
+        txt = pos['Beschreibung'].encode('latin-1', 'replace').decode('latin-1')
+        pdf.cell(90, 8, txt, 1)
+        pdf.cell(20, 8, str(pos['Menge']), 1)
+        pdf.cell(20, 8, pos.get('Einheit', 'Stk'), 1) # Einheit dazu
+        pdf.cell(30, 8, f"{pos['Einzelpreis']:.2f}", 1)
+        pdf.cell(30, 8, f"{pos['Preis']:.2f}", 1)
         pdf.ln()
+        gesamt += pos['Preis']
         
-        gesamt_netto += pos['Preis']
-        
-    pdf.ln(10)
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(110, 10, "", 0)
-    pdf.cell(40, 10, "Gesamtsumme:", 1)
-    pdf.cell(40, 10, f"{gesamt_netto:.2f} EUR", 1)
-    
+    pdf.cell(160, 8, "Gesamtsumme:", 1)
+    pdf.cell(30, 8, f"{gesamt:.2f}", 1)
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 5. SIDEBAR NAVIGATION ---
+# --- 5. HAUPTNAVIGATION ---
 st.sidebar.header("Menü")
 
-# Hauptkategorie
-bereich = st.sidebar.radio(
-    "Bereich wählen:",
-    ["Eigenfertigung", "Handel & Systeme"],
-    index=0
-)
+modus_haupt = st.sidebar.radio("Modus:", ["Katalog / Systeme", "Eigenfertigung (Kalkulator)"])
 
-st.sidebar.markdown("---")
+st.title("Meingassner Kalkulation")
 
-# Untermenü je nach Hauptkategorie
-if bereich == "Eigenfertigung":
-    modus = st.sidebar.radio(
-        "Produkt:",
-        ["Individuell (Treppen/Geländer)", "Gitterstabmattenzäune", "Vordächer"]
-    )
-else: # Handel & Systeme
-    modus = st.sidebar.radio(
-        "System:",
-        ["Brix Zaun", "Terrassendach / Sommergarten", "Alu Fenster & Türen"]
-    )
+col_left, col_right = st.columns([2, 1])
 
-# --- 6. HAUPTBEREICH (KALKULATION) ---
-st.title(f"Kalkulation: {modus}")
-
-# Layout: Links Eingabe, Rechts (oder unten) Warenkorb
-col_input, col_cart = st.columns([2, 1])
-
-# Variablen initialisieren
-preis_pos = 0.0
-text_pos = ""
-menge_pos = 1.0
-
-with col_input:
-    # --- MODUS A: EIGENFERTIGUNG INDIVIDUELL ---
-    if modus == "Individuell (Treppen/Geländer)":
-        with st.expander("Grundeinstellungen", expanded=True):
-            c1, c2 = st.columns(2)
-            stundensatz = c1.number_input("Stundensatz (€)", value=65.0, step=1.0)
-            mat_faktor = c2.number_input("Material Faktor", value=1.20, step=0.05)
-            
-            kategorie = st.selectbox("Kategorie", ["Treppe", "Geländer Edelstahl", "Geländer Verzinkt"])
-            modell = st.text_input("Modellbezeichnung", value="Stahltreppe Gerade")
-
-        st.markdown("### Maße & Menge")
-        m1, m2, m3 = st.columns(3)
-        anzahl = m1.number_input("Anzahl", value=1.0, step=1.0)
-        laenge = m2.number_input("Länge (m)", value=0.0, step=0.1)
-        breite = m3.number_input("Breite (m)", value=0.0, step=0.1)
-
-        st.markdown("### Optionen")
-        opt_wangen = st.checkbox("Wangen Flachstahl (40€ pauschal)")
-        opt_rost = st.checkbox("Stufen Gitterrost (35€ pauschal)")
-        opt_gelaender = st.checkbox("Geländer einseitig (140€/lfm)")
-        opt_pulver = st.checkbox("Pulverbeschichtung (80€/lfm)")
-
-        # Berechnung
-        material_basis = (laenge * breite * 100) * mat_faktor # Beispielformel
-        arbeits_kosten = (anzahl * 3) * stundensatz           # Beispielformel
-        
-        zusatz = 0
-        if opt_wangen: zusatz += 40
-        if opt_rost: zusatz += 35
-        if opt_gelaender: zusatz += (140 * laenge)
-        if opt_pulver: zusatz += (80 * laenge)
-        
-        preis_pos = (material_basis + arbeits_kosten + zusatz) * anzahl
-        text_pos = f"{kategorie}: {modell} ({laenge}x{breite}m)"
-        menge_pos = anzahl
-
-    # --- MODUS B: BRIX ZAUN ---
-    elif modus == "Brix Zaun":
-        st.subheader("Brix Konfigurator")
-        brix_modell = st.selectbox("Modell", ["Brix Alu-Latten", "Brix Palisaden", "Brix Sichtschutz"])
-        lfm = st.number_input("Laufmeter", value=10.0)
-        preis_pro_m = st.number_input("Preis pro lfm (€)", value=180.0)
-        
-        preis_pos = lfm * preis_pro_m
-        text_pos = f"{brix_modell} ({lfm}m)"
-        menge_pos = lfm
-
-    # --- ANDERE MODI (PLATZHALTER) ---
-    else:
-        st.info("Kalkulationsmaske wird noch erstellt.")
-        text_pos = modus
-        preis_pos = st.number_input("Manueller Preis (€)", value=0.0)
-
-    # --- BUTTON: HINZUFÜGEN ---
-    st.markdown("---")
-    st.markdown(f"### Aktueller Preis: **{preis_pos:.2f} €**")
+# === LINKE SPALTE: AUSWAHL & KALKULATION ===
+with col_left:
     
-    if st.button("In den Warenkorb legen", type="primary"):
-        if preis_pos > 0:
-            st.session_state['positionen'].append({
-                "Beschreibung": text_pos,
-                "Menge": menge_pos,
-                "Preis": preis_pos
-            })
-            st.success("Hinzugefügt!")
-            st.rerun()
+    # ----------------------------------------------------
+    # MODUS A: KATALOG (Dynamisch aus Excel)
+    # ----------------------------------------------------
+    if modus_haupt == "Katalog / Systeme":
+        index_data = lade_katalog()
+        
+        if index_data is None:
+            st.error("⚠️ Datei 'katalog.xlsx' nicht gefunden oder fehlerhaft!")
+            st.info("Bitte erstelle eine Excel mit Blatt 'Startseite' (Spalten: System, Blattname).")
         else:
-            st.error("Preis ist 0 €.")
+            # 1. System wählen (aus Excel Startseite)
+            system_list = index_data['System'].tolist()
+            wahl_system = st.selectbox("📂 System / Kategorie wählen:", system_list)
+            
+            # Finde den Blattnamen dazu
+            blatt_name = index_data[index_data['System'] == wahl_system]['Blattname'].values[0]
+            
+            # 2. Lade Produkte dieses Systems
+            produkte_df = lade_produkte(blatt_name)
+            
+            if produkte_df.empty:
+                st.warning(f"Keine Produkte im Blatt '{blatt_name}' gefunden.")
+            else:
+                st.subheader(f"Produkte: {wahl_system}")
+                
+                # Produkt Dropdown (Wir bauen einen String aus Name + Preis für die Anzeige)
+                # Wir gehen davon aus, Excel hat Spalten: Bezeichnung, Einheit, Preis
+                produkte_liste = produkte_df.to_dict('records')
+                
+                formatierte_liste = [f"{p['Bezeichnung']} ({p['Preis']} € / {p['Einheit']})" for p in produkte_liste]
+                
+                wahl_produkt_str = st.selectbox("Produkt wählen:", formatierte_liste)
+                
+                # Das ausgewählte Produkt wieder finden
+                index_gewaehlt = formatierte_liste.index(wahl_produkt_str)
+                produkt_daten = produkte_liste[index_gewaehlt]
+                
+                # Eingabe Menge
+                col_m1, col_m2 = st.columns(2)
+                menge = col_m1.number_input(f"Menge ({produkt_daten['Einheit']})", value=1.0, step=0.5)
+                
+                # Preis berechnen
+                preis_gesamt = menge * produkt_daten['Preis']
+                col_m2.metric("Preis gesamt", f"{preis_gesamt:.2f} €")
+                
+                if st.button("In den Warenkorb"):
+                    st.session_state['positionen'].append({
+                        "Beschreibung": f"{wahl_system}: {produkt_daten['Bezeichnung']}",
+                        "Menge": menge,
+                        "Einheit": produkt_daten['Einheit'],
+                        "Einzelpreis": produkt_daten['Preis'],
+                        "Preis": preis_gesamt
+                    })
+                    st.success("Hinzugefügt!")
+                    st.rerun()
 
-# --- 7. RECHTE SPALTE: WARENKORB & PDF ---
-with col_cart:
-    st.markdown("### 🛒 Warenkorb")
-    
+    # ----------------------------------------------------
+    # MODUS B: EIGENFERTIGUNG (Der alte Kalkulator)
+    # ----------------------------------------------------
+    elif modus_haupt == "Eigenfertigung (Kalkulator)":
+        st.subheader("🛠️ Individuelle Kalkulation")
+        
+        art = st.selectbox("Was wird gefertigt?", ["Treppe", "Geländer", "Vordach"])
+        
+        # Einfaches Beispiel für Treppe (wie vorher)
+        if art == "Treppe":
+            stundensatz = st.number_input("Stundensatz", value=65.0)
+            material = st.number_input("Materialkosten", value=500.0)
+            stunden = st.number_input("Stunden", value=10.0)
+            
+            preis = (stunden * stundensatz) + (material * 1.2)
+            st.markdown(f"### Preis: {preis:.2f} €")
+            
+            if st.button("Treppe in Warenkorb"):
+                st.session_state['positionen'].append({
+                    "Beschreibung": "Indiv. Treppe",
+                    "Menge": 1,
+                    "Einheit": "Psch",
+                    "Einzelpreis": preis,
+                    "Preis": preis
+                })
+                st.rerun()
+
+# === RECHTE SPALTE: WARENKORB ===
+with col_right:
+    st.write("### 🛒 Aktuelles Angebot")
     if st.session_state['positionen']:
-        # Tabelle anzeigen
-        df = pd.DataFrame(st.session_state['positionen'])
-        st.dataframe(df, hide_index=True, use_container_width=True)
+        df_cart = pd.DataFrame(st.session_state['positionen'])
+        # Zeige nur wichtige Spalten
+        st.dataframe(df_cart[['Beschreibung', 'Menge', 'Preis']], hide_index=True)
         
-        # Summe
-        total = sum(p['Preis'] for p in st.session_state['positionen'])
-        st.markdown(f"### Gesamt: {total:.2f} €")
+        summe = sum(p['Preis'] for p in st.session_state['positionen'])
+        st.markdown(f"**Summe: {summe:.2f} €**")
         
-        # PDF Download
+        # PDF
         pdf_data = create_pdf(st.session_state['positionen'])
-        st.download_button(
-            label="📄 PDF Angebot laden",
-            data=pdf_data,
-            file_name="angebot_meingassner.pdf",
-            mime="application/pdf"
-        )
+        st.download_button("📄 PDF Angebot", pdf_data, "angebot.pdf", "application/pdf")
         
-        # Leeren
-        if st.button("Warenkorb leeren"):
+        if st.button("Alles löschen"):
             st.session_state['positionen'] = []
             st.rerun()
     else:
-        st.info("Noch keine Positionen.")
+        st.info("Warenkorb leer")
