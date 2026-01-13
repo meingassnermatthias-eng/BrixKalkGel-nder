@@ -5,7 +5,7 @@ import base64
 import os
 import tempfile
 import math
-from datetime import datetime # <--- NEU: Für das Datum
+from datetime import datetime
 
 # --- 1. SETUP & KONFIGURATION ---
 LOGO_DATEI = "Meingassner Metalltechnik 2023.png"
@@ -76,9 +76,7 @@ if 'fertiges_pdf' not in st.session_state:
 # --- 4. PDF ENGINE ---
 def clean_text(text):
     if not isinstance(text, str): text = str(text)
-    # Euro, Bindestriche und Anführungszeichen ersetzen
     text = text.replace("€", "EUR").replace("–", "-").replace("„", '"').replace("“", '"')
-    # latin-1 encoding stellt sicher, dass ä, ö, ü funktionieren
     return text.encode('latin-1', 'replace').decode('latin-1')
 
 class PDF(FPDF):
@@ -86,13 +84,9 @@ class PDF(FPDF):
         if os.path.exists(LOGO_DATEI):
             self.image(LOGO_DATEI, 10, 8, 60)
         
-        self.set_font('Arial', 'B', 16) # Schrift etwas kleiner damit Datum Platz hat
-        
-        # --- HIER IST DIE ÄNDERUNG: Datum einfügen ---
+        self.set_font('Arial', 'B', 16)
         heute = datetime.now().strftime("%d.%m.%Y")
         titel = f"Kostenschätzung vom {heute}"
-        
-        # Titel rechtsbündig
         self.cell(0, 18, clean_text(titel), 0, 1, 'R')
         self.ln(10)
 
@@ -163,7 +157,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos):
 
         final_desc_text = clean_text(f"{main_title}{details}")
         
-        # Zeilenhöhe berechnen
         x_start, y_start = pdf.get_x(), pdf.get_y()
         pdf.multi_cell(w_desc, 5, final_desc_text, border=1, align='L')
         y_end = pdf.get_y()
@@ -304,16 +297,69 @@ if menue_punkt == "📂 Konfigurator / Katalog":
 
 # --- TEIL B: WARENKORB ---
 elif menue_punkt == "🛒 Warenkorb / Abschluss":
-    st.title("🛒 Warenkorb & Abschluss")
-    col_liste, col_daten = st.columns([1, 1])
+    st.title("🛒 Warenkorb bearbeiten & Abschluss")
+    col_liste, col_daten = st.columns([1.2, 0.8]) # Liste etwas breiter
     
     with col_liste:
-        st.subheader("Artikel Liste")
+        st.subheader("Artikel Liste bearbeiten")
+        
         if st.session_state['positionen']:
-            df_cart = pd.DataFrame(st.session_state['positionen'])
-            st.dataframe(df_cart[['Beschreibung', 'Preis']], hide_index=True)
+            # --- NEUE INTERAKTIVE LISTE ---
+            # Wir iterieren durch die Liste und zeigen Widgets an
+            
+            # Header Zeile
+            h1, h2, h3, h4 = st.columns([3, 1, 1, 0.5])
+            h1.markdown("**Beschreibung**")
+            h2.markdown("**Menge**")
+            h3.markdown("**Preis**")
+            h4.markdown("**Del**")
+            
+            st.markdown("---")
+
+            # Temporäre Liste für zu löschende Indizes
+            indices_to_delete = []
+
+            for i, pos in enumerate(st.session_state['positionen']):
+                c1, c2, c3, c4 = st.columns([3, 1, 1, 0.5])
+                
+                # 1. Beschreibung
+                c1.write(pos['Beschreibung'].split("|")[0] + "...") # Zeige Kurztext
+                with c1.expander("Details"):
+                    st.write(pos['Beschreibung'])
+
+                # 2. Menge Ändern (mit Unique Key pro Zeile)
+                neue_menge = c2.number_input(
+                    "Menge", 
+                    value=float(pos['Menge']), 
+                    step=0.1, 
+                    key=f"qty_{i}", 
+                    label_visibility="collapsed"
+                )
+
+                # Logik: Wenn sich die Menge geändert hat -> Preis anpassen
+                if neue_menge != pos['Menge']:
+                    st.session_state['positionen'][i]['Menge'] = neue_menge
+                    st.session_state['positionen'][i]['Preis'] = neue_menge * pos['Einzelpreis']
+                    st.rerun() # Seite neu laden um Summen zu aktualisieren
+
+                # 3. Preis anzeigen
+                c3.write(f"{pos['Preis']:.2f} €")
+
+                # 4. Löschen Button
+                if c4.button("🗑️", key=f"del_{i}"):
+                    indices_to_delete.append(i)
+
+            # Löschvorgang ausführen
+            if indices_to_delete:
+                for index in sorted(indices_to_delete, reverse=True):
+                    del st.session_state['positionen'][index]
+                st.session_state['fertiges_pdf'] = None # PDF ungültig machen
+                st.rerun()
+
+            st.markdown("---")
             total = sum(p['Preis'] for p in st.session_state['positionen'])
             st.markdown(f"### Gesamt: {total:.2f} €")
+            
             if st.button("Alles löschen", type="secondary"):
                 st.session_state['positionen'] = []
                 st.session_state['fertiges_pdf'] = None
