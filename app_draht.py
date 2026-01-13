@@ -5,8 +5,13 @@ import base64
 import os
 import tempfile
 
+# --- KONFIGURATION: DATEINAMEN ---
+# Hier tragen wir den genauen Namen deines neuen Logos ein
+LOGO_DATEI = "Meingassner Metalltechnik 2023.png"
+EXCEL_DATEI = "katalog.xlsx"
+
 # --- 1. SETUP & HANDY ICON ---
-st.set_page_config(page_title="Meingassner App", layout="wide", page_icon="logo.png")
+st.set_page_config(page_title="Meingassner App", layout="wide", page_icon=LOGO_DATEI)
 
 def setup_app_icon(image_file):
     if os.path.exists(image_file):
@@ -18,17 +23,18 @@ def setup_app_icon(image_file):
         <link rel="icon" type="image/png" href="data:image/png;base64,{encoded}">
         """
         st.markdown(icon_html, unsafe_allow_html=True)
-        st.sidebar.image(image_file, width=150)
+        # Logo in der Sidebar anzeigen
+        st.sidebar.image(image_file, width=200) # Etwas breiter für das neue Logo
+    else:
+        st.sidebar.warning(f"Logo '{image_file}' nicht gefunden.")
 
-setup_app_icon("logo.png")
+setup_app_icon(LOGO_DATEI)
 
 # --- 2. EXCEL LOGIK ---
-DATEI_NAME = "katalog.xlsx"
-
 def clean_df_columns(df):
     if not df.empty: 
         df.columns = df.columns.str.strip()
-        # --- FIX: Automatische Umbenennung, falls die Spalte "Formel / Info" heißt ---
+        # Automatische Korrektur für Spaltennamen
         rename_map = {
             'Formel / Info': 'Formel',
             'Formel/Info': 'Formel',
@@ -38,22 +44,22 @@ def clean_df_columns(df):
     return df
 
 def lade_startseite():
-    if not os.path.exists(DATEI_NAME): return pd.DataFrame()
-    try: return clean_df_columns(pd.read_excel(DATEI_NAME, sheet_name="Startseite"))
+    if not os.path.exists(EXCEL_DATEI): return pd.DataFrame()
+    try: return clean_df_columns(pd.read_excel(EXCEL_DATEI, sheet_name="Startseite"))
     except: return pd.DataFrame()
 
 def lade_blatt(blatt_name):
-    if not os.path.exists(DATEI_NAME): return pd.DataFrame()
-    try: return clean_df_columns(pd.read_excel(DATEI_NAME, sheet_name=blatt_name))
+    if not os.path.exists(EXCEL_DATEI): return pd.DataFrame()
+    try: return clean_df_columns(pd.read_excel(EXCEL_DATEI, sheet_name=blatt_name))
     except: return pd.DataFrame()
 
 def lade_alle_blattnamen():
-    if not os.path.exists(DATEI_NAME): return []
-    return pd.ExcelFile(DATEI_NAME).sheet_names
+    if not os.path.exists(EXCEL_DATEI): return []
+    return pd.ExcelFile(EXCEL_DATEI).sheet_names
 
 def speichere_excel(df, blatt_name):
     try:
-        with pd.ExcelWriter(DATEI_NAME, engine="openpyxl", mode="a" if os.path.exists(DATEI_NAME) else "w", if_sheet_exists="replace") as writer:
+        with pd.ExcelWriter(EXCEL_DATEI, engine="openpyxl", mode="a" if os.path.exists(EXCEL_DATEI) else "w", if_sheet_exists="replace") as writer:
             df.to_excel(writer, sheet_name=blatt_name, index=False)
         return True
     except Exception as e:
@@ -70,11 +76,15 @@ if 'fertiges_pdf' not in st.session_state:
 # --- 4. PDF ENGINE ---
 class PDF(FPDF):
     def header(self):
-        if os.path.exists("logo.png"):
-            self.image("logo.png", 10, 8, 40)
+        # Logo einfügen
+        if os.path.exists(LOGO_DATEI):
+            # x=10, y=8, breite=60 (Breiter, da dein Logo querformat ist)
+            self.image(LOGO_DATEI, 10, 8, 60)
+        
         self.set_font('Arial', 'B', 20)
-        self.cell(0, 10, 'Angebot', 0, 1, 'C')
-        self.ln(20)
+        # Titel etwas weiter nach unten oder rechts, damit er nicht im Logo steht
+        self.cell(0, 15, 'Angebot', 0, 1, 'R') # R = Rechtsbündig
+        self.ln(15) # Abstand nach unten
 
     def footer(self):
         self.set_y(-15)
@@ -83,7 +93,7 @@ class PDF(FPDF):
 
 def clean_text(text):
     if not isinstance(text, str): text = str(text)
-    # WICHTIG: Ersetzt Euro und Bindestriche, damit PDF nicht abstürzt
+    # Euro und Sonderzeichen ersetzen
     text = text.replace("€", "EUR").replace("–", "-")
     return text.encode('latin-1', 'replace').decode('latin-1')
 
@@ -93,11 +103,12 @@ def create_pdf(positionen_liste, kunden_dict, fotos):
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     
-    # Firmenkopf
+    # Firmenkopf (Text unter Logo falls gewünscht, oder weglassen da Logo Text enthält)
     pdf.set_font("Arial", size=10)
     pdf.ln(5)
-    pdf.cell(0, 5, clean_text("Meingassner Metalltechnik"), ln=True)
-    pdf.cell(0, 5, clean_text("Ihr Spezialist für Metallbau"), ln=True)
+    # Da dein Logo schon die Adresse enthält, brauchen wir hier vielleicht weniger Text?
+    # Ich lasse es mal drin, damit man es kopieren kann
+    # pdf.cell(0, 5, clean_text("Meingassner Metalltechnik GmbH & Co KG"), ln=True)
     
     # --- KUNDENDATEN ---
     pdf.ln(10)
@@ -183,7 +194,8 @@ def create_pdf(positionen_liste, kunden_dict, fotos):
                     tmp_path = tmp_file.name
                 
                 if pdf.get_y() > 200: pdf.add_page()
-                pdf.image(tmp_path, w=150)
+                # Bild etwas größer
+                pdf.image(tmp_path, w=160)
                 pdf.ln(10)
                 os.unlink(tmp_path)
             except Exception as e:
@@ -227,7 +239,6 @@ if menue_punkt == "📂 Konfigurator / Katalog":
             with col_konfig:
                 st.subheader(f"Konfiguration: {auswahl_system}")
                 
-                # Prüfen auf Pflichtfelder (Formel Spalte wird durch clean_df_columns repariert)
                 if df_config.empty:
                     st.error("Blatt ist leer.")
                 elif 'Formel' not in df_config.columns:
