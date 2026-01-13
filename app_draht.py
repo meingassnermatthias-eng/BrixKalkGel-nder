@@ -21,17 +21,26 @@ def setup_app_icon(image_file):
 
 setup_app_icon("logo.png")
 
-# --- 2. EXCEL LOGIK ---
+# --- 2. EXCEL LOGIK (VERBESSERT) ---
 DATEI_NAME = "katalog.xlsx"
 
 def lade_startseite():
     if not os.path.exists(DATEI_NAME): return pd.DataFrame()
-    try: return pd.read_excel(DATEI_NAME, sheet_name="Startseite")
+    try: 
+        df = pd.read_excel(DATEI_NAME, sheet_name="Startseite")
+        # Leerzeichen in Überschriften entfernen (Wichtig!)
+        df.columns = df.columns.str.strip()
+        return df
     except: return pd.DataFrame()
 
 def lade_blatt(blatt_name):
     if not os.path.exists(DATEI_NAME): return pd.DataFrame()
-    try: return pd.read_excel(DATEI_NAME, sheet_name=blatt_name)
+    try: 
+        df = pd.read_excel(DATEI_NAME, sheet_name=blatt_name)
+        # Leerzeichen in Überschriften entfernen (Fix für "Formel ")
+        if not df.empty:
+            df.columns = df.columns.str.strip()
+        return df
     except: return pd.DataFrame()
 
 def lade_alle_blattnamen():
@@ -80,7 +89,13 @@ def create_pdf(positionen_liste):
 # --- 5. MENÜ ---
 st.sidebar.header("Menü")
 index_df = lade_startseite()
-menue_items = index_df['System'].tolist() if not index_df.empty else []
+
+# Prüfen ob 'System' Spalte existiert
+if not index_df.empty and 'System' in index_df.columns:
+    menue_items = index_df['System'].tolist()
+else:
+    menue_items = []
+    
 menue_items.append("🔐 Admin")
 auswahl = st.sidebar.radio("Wähle Bereich:", menue_items)
 
@@ -88,114 +103,107 @@ auswahl = st.sidebar.radio("Wähle Bereich:", menue_items)
 st.title("Meingassner Konfigurator")
 
 if auswahl == "🔐 Admin":
-    # --- ADMIN BEREICH (Gleich wie vorher) ---
+    # --- ADMIN BEREICH ---
     pw = st.text_input("Passwort:", type="password")
     if pw == "1234":
         sheets = lade_alle_blattnamen()
         if sheets:
             sh = st.selectbox("Blatt:", sheets)
             df = lade_blatt(sh)
-            st.info("Spalten müssen sein: Typ, Bezeichnung, Variable, Optionen, Formel")
+            st.info("Benötigte Spalten: Typ, Bezeichnung, Variable, Optionen, Formel")
             df_new = st.data_editor(df, num_rows="dynamic", use_container_width=True)
             if st.button("Speichern"):
-                if speichere_excel(df_new, sh): st.success("Gespeichert!")
+                if speichere_excel(df_new, sh): 
+                    st.success("Gespeichert! Bitte Seite neu laden (F5 oder Rerun).")
+                    st.cache_data.clear() # Cache leeren
+        else:
+            st.warning("Keine Excel-Datei gefunden.")
 
 else:
-    # --- DER INTELLIGENTE KONFIGURATOR ---
-    col_l, col_r = st.columns([2, 1])
-    
-    with col_l:
+    # --- KONFIGURATOR ---
+    if not index_df.empty and 'System' in index_df.columns:
         row = index_df[index_df['System'] == auswahl]
         if not row.empty:
             blatt = row.iloc[0]['Blattname']
             df_config = lade_blatt(blatt)
             
+            # Sicherheitscheck: Sind alle Spalten da?
+            benoetigte_spalten = ['Typ', 'Bezeichnung', 'Variable', 'Optionen', 'Formel']
             if df_config.empty:
                 st.warning("Blatt ist leer.")
+            elif not all(col in df_config.columns for col in benoetigte_spalten):
+                st.error(f"Fehler in Excel-Blatt '{blatt}'!")
+                st.error(f"Es fehlen Spalten. Gefunden: {list(df_config.columns)}")
+                st.info(f"Benötigt werden exakt: {benoetigte_spalten}")
             else:
                 st.subheader(f"Konfiguration: {auswahl}")
                 
-                # Hier speichern wir die Werte deiner Inputs (L, B, H...)
-                berechnungs_variablen = {}
-                beschreibung_parts = [] # Für den Angebotstext
+                col_l, col_r = st.columns([2, 1])
                 
-                # Wir gehen Zeile für Zeile durch dein Excel
-                for index, zeile in df_config.iterrows():
+                with col_l:
+                    berechnungs_variablen = {}
+                    beschreibung_parts = []
                     
-                    typ = str(zeile['Typ']).strip().lower()
-                    label = str(zeile['Bezeichnung'])
-                    var_name = str(zeile['Variable'])
-                    
-                    # 1. ZAHLEINGABE (z.B. Länge)
-                    if typ == 'zahl':
-                        val = st.number_input(label, value=0.0, step=0.1, key=f"{blatt}_{index}")
-                        berechnungs_variablen[var_name] = val
-                        if val > 0: beschreibung_parts.append(f"{label}: {val}")
-                    
-                    # 2. AUSWAHL (z.B. Oberfläche)
-                    elif typ == 'auswahl':
-                        # Optionen parsen: "Rund:0, Quadrat:25"
-                        raw_opts = str(zeile['Optionen']).split(',')
-                        opts_dict = {} # Name -> Wert
-                        opts_names = []
+                    for index, zeile in df_config.iterrows():
+                        typ = str(zeile['Typ']).strip().lower()
+                        label = str(zeile['Bezeichnung'])
+                        var_name = str(zeile['Variable'])
                         
-                        for opt in raw_opts:
-                            if ':' in opt:
-                                name, wert = opt.split(':')
-                                opts_dict[name.strip()] = float(wert)
-                                opts_names.append(name.strip())
-                            else:
-                                # Fallback falls kein Wert dabei steht
-                                opts_dict[opt.strip()] = 0
-                                opts_names.append(opt.strip())
+                        if typ == 'zahl':
+                            val = st.number_input(label, value=0.0, step=0.1, key=f"{blatt}_{index}")
+                            berechnungs_variablen[var_name] = val
+                            if val > 0: beschreibung_parts.append(f"{label}: {val}")
                         
-                        wahl = st.selectbox(label, opts_names, key=f"{blatt}_{index}")
-                        wert_der_wahl = opts_dict[wahl]
-                        
-                        # Wir speichern den WERT in die Variable für die Rechnung
-                        berechnungs_variablen[var_name] = wert_der_wahl
-                        beschreibung_parts.append(f"{label}: {wahl}")
+                        elif typ == 'auswahl':
+                            raw_opts = str(zeile['Optionen']).split(',')
+                            opts_dict = {}
+                            opts_names = []
+                            for opt in raw_opts:
+                                if ':' in opt:
+                                    name, wert = opt.split(':')
+                                    opts_dict[name.strip()] = float(wert)
+                                    opts_names.append(name.strip())
+                                else:
+                                    opts_dict[opt.strip()] = 0
+                                    opts_names.append(opt.strip())
+                            
+                            wahl = st.selectbox(label, opts_names, key=f"{blatt}_{index}")
+                            berechnungs_variablen[var_name] = opts_dict[wahl]
+                            beschreibung_parts.append(f"{label}: {wahl}")
 
-                    # 3. PREIS BERECHNUNG
-                    elif typ == 'preis':
-                        formel = str(zeile['Formel'])
-                        st.markdown("---")
-                        
-                        try:
-                            # Sicherheit: eval ist mächtig, wir nutzen es für Mathe
-                            # Wir übergeben unser Wörterbuch mit Variablen (L=3, B=4...)
-                            preis_ergebnis = eval(formel, {"__builtins__": None}, berechnungs_variablen)
-                            
-                            st.subheader(f"Preis: {preis_ergebnis:.2f} €")
-                            
-                            if st.button("In den Warenkorb", type="primary"):
-                                beschreibung_text = f"{auswahl} | " + ", ".join(beschreibung_parts)
-                                st.session_state['positionen'].append({
-                                    "Beschreibung": beschreibung_text,
-                                    "Menge": 1.0, # Ist bei Konfigurator meist 1 Stk
-                                    "Einzelpreis": preis_ergebnis,
-                                    "Preis": preis_ergebnis
-                                })
-                                st.success("Hinzugefügt!")
-                                st.rerun()
+                        elif typ == 'preis':
+                            # Hier stürzte es vorher ab, jetzt sicher
+                            formel = str(zeile['Formel'])
+                            st.markdown("---")
+                            try:
+                                preis_ergebnis = eval(formel, {"__builtins__": None}, berechnungs_variablen)
+                                st.subheader(f"Preis: {preis_ergebnis:.2f} €")
                                 
-                        except Exception as e:
-                            st.error(f"Fehler in der Formel: {formel}")
-                            st.caption(f"Details: {e}")
-                            st.caption(f"Aktuelle Werte: {berechnungs_variablen}")
-
-    # --- WARENKORB RECHTS ---
-    with col_r:
-        st.write("### 🛒 Angebot")
-        if st.session_state['positionen']:
-            df_cart = pd.DataFrame(st.session_state['positionen'])
-            st.dataframe(df_cart[['Beschreibung', 'Preis']], hide_index=True, use_container_width=True)
-            summe = sum(p['Preis'] for p in st.session_state['positionen'])
-            st.markdown(f"**Total: {summe:.2f} €**")
-            
-            pdf_data = create_pdf(st.session_state['positionen'])
-            st.download_button("📄 PDF", pdf_data, "angebot.pdf", "application/pdf")
-            
-            if st.button("Löschen"):
-                st.session_state['positionen'] = []
-                st.rerun()
+                                if st.button("In den Warenkorb", type="primary"):
+                                    st.session_state['positionen'].append({
+                                        "Beschreibung": f"{auswahl} | " + ", ".join(beschreibung_parts),
+                                        "Menge": 1.0,
+                                        "Einzelpreis": preis_ergebnis,
+                                        "Preis": preis_ergebnis
+                                    })
+                                    st.success("Hinzugefügt!")
+                                    st.rerun()
+                            except Exception as e:
+                                st.error("Fehler in der Berechnung!")
+                                st.text(f"Formel: {formel}")
+                                st.text(f"Fehler: {e}")
+                                
+                with col_r:
+                    st.write("### 🛒 Angebot")
+                    if st.session_state['positionen']:
+                        df_cart = pd.DataFrame(st.session_state['positionen'])
+                        st.dataframe(df_cart[['Beschreibung', 'Preis']], hide_index=True)
+                        summe = sum(p['Preis'] for p in st.session_state['positionen'])
+                        st.markdown(f"**Total: {summe:.2f} €**")
+                        
+                        pdf_data = create_pdf(st.session_state['positionen'])
+                        st.download_button("📄 PDF", pdf_data, "angebot.pdf", "application/pdf")
+                        
+                        if st.button("Löschen"):
+                            st.session_state['positionen'] = []
+                            st.rerun()
