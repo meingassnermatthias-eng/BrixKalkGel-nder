@@ -4,13 +4,12 @@ from fpdf import FPDF
 import base64
 import os
 import tempfile
+import math  # Neu: Für Mathe-Funktionen in Formeln
 
-# --- KONFIGURATION: DATEINAMEN ---
-# Hier tragen wir den genauen Namen deines neuen Logos ein
-LOGO_DATEI = "Meingassner Metalltechnik 2023.png"
+# --- 1. SETUP & KONFIGURATION ---
+LOGO_DATEI = "Meingassner Metalltechnik 2023.png" # Dein Logo-Name
 EXCEL_DATEI = "katalog.xlsx"
 
-# --- 1. SETUP & HANDY ICON ---
 st.set_page_config(page_title="Meingassner App", layout="wide", page_icon=LOGO_DATEI)
 
 def setup_app_icon(image_file):
@@ -23,22 +22,23 @@ def setup_app_icon(image_file):
         <link rel="icon" type="image/png" href="data:image/png;base64,{encoded}">
         """
         st.markdown(icon_html, unsafe_allow_html=True)
-        # Logo in der Sidebar anzeigen
-        st.sidebar.image(image_file, width=200) # Etwas breiter für das neue Logo
+        st.sidebar.image(image_file, width=200)
     else:
-        st.sidebar.warning(f"Logo '{image_file}' nicht gefunden.")
+        st.sidebar.warning("Logo Datei nicht gefunden.")
 
 setup_app_icon(LOGO_DATEI)
 
-# --- 2. EXCEL LOGIK ---
+# --- 2. EXCEL LOGIK (ROBUST) ---
 def clean_df_columns(df):
+    """Reinigt Spaltennamen und korrigiert 'Formel' automatisch"""
     if not df.empty: 
         df.columns = df.columns.str.strip()
-        # Automatische Korrektur für Spaltennamen
+        # Mapping für verschiedene Schreibweisen
         rename_map = {
             'Formel / Info': 'Formel',
             'Formel/Info': 'Formel',
-            'Info': 'Formel'
+            'Info': 'Formel',
+            'Preisfindung': 'Formel'
         }
         df.rename(columns=rename_map, inplace=True)
     return df
@@ -59,11 +59,13 @@ def lade_alle_blattnamen():
 
 def speichere_excel(df, blatt_name):
     try:
-        with pd.ExcelWriter(EXCEL_DATEI, engine="openpyxl", mode="a" if os.path.exists(EXCEL_DATEI) else "w", if_sheet_exists="replace") as writer:
+        # Prüfen ob Datei existiert für den Modus (append vs write)
+        mode = "a" if os.path.exists(EXCEL_DATEI) else "w"
+        with pd.ExcelWriter(EXCEL_DATEI, engine="openpyxl", mode=mode, if_sheet_exists="replace") as writer:
             df.to_excel(writer, sheet_name=blatt_name, index=False)
         return True
     except Exception as e:
-        st.error(f"Fehler: {e}")
+        st.error(f"Fehler beim Speichern: {e}")
         return False
 
 # --- 3. SESSION STATE ---
@@ -76,15 +78,11 @@ if 'fertiges_pdf' not in st.session_state:
 # --- 4. PDF ENGINE ---
 class PDF(FPDF):
     def header(self):
-        # Logo einfügen
         if os.path.exists(LOGO_DATEI):
-            # x=10, y=8, breite=60 (Breiter, da dein Logo querformat ist)
             self.image(LOGO_DATEI, 10, 8, 60)
-        
         self.set_font('Arial', 'B', 20)
-        # Titel etwas weiter nach unten oder rechts, damit er nicht im Logo steht
-        self.cell(0, 15, 'Angebot', 0, 1, 'R') # R = Rechtsbündig
-        self.ln(15) # Abstand nach unten
+        self.cell(0, 18, 'Angebot', 0, 1, 'R')
+        self.ln(10)
 
     def footer(self):
         self.set_y(-15)
@@ -93,8 +91,8 @@ class PDF(FPDF):
 
 def clean_text(text):
     if not isinstance(text, str): text = str(text)
-    # Euro und Sonderzeichen ersetzen
-    text = text.replace("€", "EUR").replace("–", "-")
+    # Ersetzungen um Abstürze zu verhindern
+    text = text.replace("€", "EUR").replace("–", "-").replace("„", '"').replace("“", '"')
     return text.encode('latin-1', 'replace').decode('latin-1')
 
 def create_pdf(positionen_liste, kunden_dict, fotos):
@@ -103,12 +101,9 @@ def create_pdf(positionen_liste, kunden_dict, fotos):
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     
-    # Firmenkopf (Text unter Logo falls gewünscht, oder weglassen da Logo Text enthält)
+    # Firmenkopf
     pdf.set_font("Arial", size=10)
     pdf.ln(5)
-    # Da dein Logo schon die Adresse enthält, brauchen wir hier vielleicht weniger Text?
-    # Ich lasse es mal drin, damit man es kopieren kann
-    # pdf.cell(0, 5, clean_text("Meingassner Metalltechnik GmbH & Co KG"), ln=True)
     
     # --- KUNDENDATEN ---
     pdf.ln(10)
@@ -150,7 +145,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos):
     gesamt_summe = 0
     
     for pos in positionen_liste:
-        # Layout Text
         raw_desc = str(pos['Beschreibung'])
         parts = raw_desc.split("|")
         main_title = parts[0].strip()
@@ -169,9 +163,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos):
         y_end = pdf.get_y()
         row_height = y_end - y_start
         
-        # Cursor zurücksetzen
         pdf.set_xy(x_start + w_desc, y_start)
-        
         pdf.cell(w_menge, row_height, clean_text(str(pos['Menge'])), 1, 0, 'C')
         pdf.cell(w_ep, row_height, f"{pos['Einzelpreis']:.2f}", 1, 0, 'R')
         pdf.cell(w_gesamt, row_height, f"{pos['Preis']:.2f}", 1, 1, 'R')
@@ -193,8 +185,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos):
                     tmp_file.write(foto_upload.getvalue())
                     tmp_path = tmp_file.name
                 
-                if pdf.get_y() > 200: pdf.add_page()
-                # Bild etwas größer
+                if pdf.get_y() > 180: pdf.add_page()
                 pdf.image(tmp_path, w=160)
                 pdf.ln(10)
                 os.unlink(tmp_path)
@@ -203,7 +194,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos):
 
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 5. MENÜ STRUKTUR ---
+# --- 5. HAUPT-NAVIGATION ---
 st.sidebar.header("Navigation")
 
 index_df = lade_startseite()
@@ -223,12 +214,13 @@ if menue_punkt == "📂 Konfigurator / Katalog":
     st.title("Artikel Konfigurator")
     
     if katalog_items:
-        auswahl_system = st.selectbox("Wähle System:", katalog_items)
+        auswahl_system = st.selectbox("System wählen:", katalog_items)
     else:
-        st.warning("Keine Systeme gefunden (Excel leer?).")
+        st.warning("Keine Systeme gefunden. Bitte im Admin oder Excel 'Startseite' anlegen.")
         auswahl_system = None
 
     if auswahl_system:
+        # Finde das Blatt zur Auswahl
         row = index_df[index_df['System'] == auswahl_system]
         if not row.empty:
             blatt = row.iloc[0]['Blattname']
@@ -239,26 +231,31 @@ if menue_punkt == "📂 Konfigurator / Katalog":
             with col_konfig:
                 st.subheader(f"Konfiguration: {auswahl_system}")
                 
+                # Sicherheitschecks
                 if df_config.empty:
-                    st.error("Blatt ist leer.")
+                    st.warning("Dieses Blatt ist noch leer.")
                 elif 'Formel' not in df_config.columns:
-                    st.error(f"Spalte 'Formel' fehlt! (Gefunden: {list(df_config.columns)})")
+                    st.error(f"Fehler: Die Spalte 'Formel' fehlt im Blatt '{blatt}'!")
+                    st.write(f"Gefundene Spalten: {list(df_config.columns)}")
                 else:
                     vars_calc = {}
                     desc_parts = []
                     
+                    # --- INPUT FELDER GENERIEREN ---
                     for index, zeile in df_config.iterrows():
-                        typ = str(zeile['Typ']).strip().lower()
-                        label = str(zeile['Bezeichnung'])
-                        var_name = str(zeile['Variable'])
+                        typ = str(zeile.get('Typ', '')).strip().lower()
+                        label = str(zeile.get('Bezeichnung', 'Unbenannt'))
+                        var_name = str(zeile.get('Variable', '')).strip()
                         
+                        # 1. Zahl
                         if typ == 'zahl':
                             val = st.number_input(label, value=0.0, step=0.1, key=f"{blatt}_{index}")
                             vars_calc[var_name] = val
                             if val > 0: desc_parts.append(f"{label}: {val}")
                         
+                        # 2. Auswahl
                         elif typ == 'auswahl':
-                            raw_opts = str(zeile['Optionen']).split(',')
+                            raw_opts = str(zeile.get('Optionen', '')).split(',')
                             opts_dict = {}
                             opts_names = []
                             for opt in raw_opts:
@@ -271,43 +268,61 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                     opts_names.append(opt.strip())
                             
                             wahl = st.selectbox(label, opts_names, key=f"{blatt}_{index}")
-                            vars_calc[var_name] = opts_dict[wahl]
+                            vars_calc[var_name] = opts_dict.get(wahl, 0)
                             desc_parts.append(f"{label}: {wahl}")
 
+                        # 3. Preisberechnung (mit Fehlerschutz)
                         elif typ == 'preis':
-                            formel = str(zeile['Formel'])
+                            formel = str(zeile.get('Formel', ''))
                             st.markdown("---")
+                            
                             try:
-                                preis = eval(formel, {"__builtins__": None}, vars_calc)
+                                # Sicherheits-Umgebung für eval (erlaubt math, round, int, float)
+                                safe_env = {"__builtins__": None, "math": math, "round": round, "int": int, "float": float}
+                                safe_env.update(vars_calc) # Deine Variablen hinzufügen
+                                
+                                preis = eval(formel, safe_env)
+                                
                                 st.subheader(f"Preis: {preis:.2f} €")
+                                
                                 if st.button("In den Warenkorb", type="primary"):
                                     full_desc = f"{auswahl_system} | " + ", ".join(desc_parts)
                                     st.session_state['positionen'].append({
                                         "Beschreibung": full_desc,
-                                        "Menge": 1.0, "Einzelpreis": preis, "Preis": preis
+                                        "Menge": 1.0, 
+                                        "Einzelpreis": preis, 
+                                        "Preis": preis
                                     })
                                     st.success("Hinzugefügt! Weiter zum Warenkorb.")
+                                    
+                            except NameError as e:
+                                st.error(f"⚠️ Berechnungsfehler: Unbekannte Variable!")
+                                st.info(f"Die Formel nutzt eine Variable, die oben nicht definiert wurde: {e}")
+                                st.write(f"Deine verfügbaren Variablen sind: {list(vars_calc.keys())}")
+                            except SyntaxError:
+                                st.error("⚠️ Berechnungsfehler: Formel ist falsch geschrieben.")
+                                st.code(formel)
                             except Exception as e:
-                                st.error("Fehler in der Formel.")
+                                st.error("⚠️ Ein Fehler ist aufgetreten.")
                                 st.write(f"Details: {e}")
             
             with col_mini_cart:
-                st.info("Aktuelle Positionen:")
+                st.info("🛒 Schnell-Übersicht")
                 if st.session_state['positionen']:
                     cnt = len(st.session_state['positionen'])
                     sum_live = sum(p['Preis'] for p in st.session_state['positionen'])
-                    st.write(f"**{cnt} Artikel** | Summe: **{sum_live:.2f} €**")
+                    st.write(f"**{cnt} Pos.** | **{sum_live:.2f} €**")
                 else:
-                    st.write("(Leer)")
+                    st.write("Warenkorb leer")
 
-# --- TEIL B: WARENKORB ---
+# --- TEIL B: WARENKORB & ABSCHLUSS ---
 elif menue_punkt == "🛒 Warenkorb / Abschluss":
     st.title("🛒 Warenkorb & Abschluss")
     
     col_liste, col_daten = st.columns([1, 1])
     
     with col_liste:
-        st.subheader("Artikel")
+        st.subheader("Artikel Liste")
         if st.session_state['positionen']:
             df_cart = pd.DataFrame(st.session_state['positionen'])
             st.dataframe(df_cart[['Beschreibung', 'Preis']], hide_index=True)
@@ -320,31 +335,36 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
                 st.session_state['fertiges_pdf'] = None
                 st.rerun()
         else:
-            st.info("Leer.")
+            st.info("Ihr Warenkorb ist leer.")
 
     with col_daten:
-        st.subheader("Kundendaten & Fotos")
+        st.subheader("Kundendaten")
         
+        # Dateneingabe Formular
         with st.form("abschluss_form"):
             c1, c2 = st.columns(2)
-            name = c1.text_input("Name", value=st.session_state['kunden_daten']['Name'])
+            name = c1.text_input("Name / Firma", value=st.session_state['kunden_daten']['Name'])
             strasse = c2.text_input("Straße", value=st.session_state['kunden_daten']['Strasse'])
             c3, c4 = st.columns(2)
-            ort = c3.text_input("Ort", value=st.session_state['kunden_daten']['Ort'])
-            tel = c4.text_input("Tel", value=st.session_state['kunden_daten']['Tel'])
+            ort = c3.text_input("Ort / PLZ", value=st.session_state['kunden_daten']['Ort'])
+            tel = c4.text_input("Telefon", value=st.session_state['kunden_daten']['Tel'])
             email = st.text_input("Email", value=st.session_state['kunden_daten']['Email'])
-            notiz = st.text_area("Notiz", value=st.session_state['kunden_daten']['Notiz'])
+            notiz = st.text_area("Notiz / Interne Info", value=st.session_state['kunden_daten']['Notiz'])
             
             st.markdown("---")
-            fotos = st.file_uploader("Fotos anhängen", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+            st.write("📷 Fotos anhängen:")
+            fotos = st.file_uploader("Bilder wählen", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
             
+            # Button sendet Formular, aber lädt noch nicht runter
             submitted = st.form_submit_button("💾 PDF Generieren")
             
         if submitted:
+            # Daten speichern
             st.session_state['kunden_daten'] = {
                 "Name": name, "Strasse": strasse, "Ort": ort, 
                 "Tel": tel, "Email": email, "Notiz": notiz
             }
+            
             if st.session_state['positionen']:
                 pdf_bytes = create_pdf(
                     st.session_state['positionen'], 
@@ -352,29 +372,41 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
                     fotos
                 )
                 st.session_state['fertiges_pdf'] = pdf_bytes
-                st.success("PDF erstellt!")
+                st.success("PDF wurde erstellt! Siehe Button unten.")
             else:
-                st.error("Warenkorb leer.")
+                st.error("Warenkorb ist leer.")
 
+        # Download Button außerhalb des Formulars (Wichtig!)
         if st.session_state['fertiges_pdf']:
             st.download_button(
-                "⬇️ PDF Herunterladen", 
+                label="⬇️ PDF Herunterladen", 
                 data=st.session_state['fertiges_pdf'], 
                 file_name="angebot.pdf", 
-                mime="application/pdf"
+                mime="application/pdf",
+                type="primary"
             )
 
 # --- TEIL C: ADMIN ---
 elif menue_punkt == "🔐 Admin":
-    st.title("Admin")
-    pw = st.text_input("PW:", type="password")
+    st.title("Admin Bereich")
+    pw = st.text_input("Passwort:", type="password")
+    
     if pw == "1234":
         sheets = lade_alle_blattnamen()
         if sheets:
-            sh = st.selectbox("Blatt:", sheets)
+            sh = st.selectbox("Welches Blatt bearbeiten?", sheets)
+            
+            # Daten laden
             df = lade_blatt(sh)
+            
+            st.info("Hinweis: Um die Reihenfolge der Felder zu ändern, bitte die Excel-Datei am PC bearbeiten (Zeilen verschieben).")
+            
+            # Editor
             df_new = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+            
             if st.button("Speichern"):
                 if speichere_excel(df_new, sh): 
-                    st.success("Gespeichert!")
+                    st.success("Gespeichert! Bitte App neu laden (Rerun) oder F5 drücken.")
                     st.cache_data.clear()
+        else:
+            st.warning("Keine Excel-Datei gefunden.")
