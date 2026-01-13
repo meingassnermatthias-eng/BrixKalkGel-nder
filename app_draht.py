@@ -3,6 +3,7 @@ import pandas as pd
 from fpdf import FPDF
 import base64
 import os
+import tempfile
 
 # --- 1. SETUP & HANDY ICON ---
 st.set_page_config(page_title="Meingassner App", layout="wide", page_icon="logo.png")
@@ -25,22 +26,17 @@ setup_app_icon("logo.png")
 DATEI_NAME = "katalog.xlsx"
 
 def clean_df_columns(df):
-    if not df.empty:
-        df.columns = df.columns.str.strip()
+    if not df.empty: df.columns = df.columns.str.strip()
     return df
 
 def lade_startseite():
     if not os.path.exists(DATEI_NAME): return pd.DataFrame()
-    try: 
-        df = pd.read_excel(DATEI_NAME, sheet_name="Startseite")
-        return clean_df_columns(df)
+    try: return clean_df_columns(pd.read_excel(DATEI_NAME, sheet_name="Startseite"))
     except: return pd.DataFrame()
 
 def lade_blatt(blatt_name):
     if not os.path.exists(DATEI_NAME): return pd.DataFrame()
-    try: 
-        df = pd.read_excel(DATEI_NAME, sheet_name=blatt_name)
-        return clean_df_columns(df)
+    try: return clean_df_columns(pd.read_excel(DATEI_NAME, sheet_name=blatt_name))
     except: return pd.DataFrame()
 
 def lade_alle_blattnamen():
@@ -56,15 +52,17 @@ def speichere_excel(df, blatt_name):
         st.error(f"Fehler: {e}")
         return False
 
-# --- 3. WARENKORB & SESSION STATE ---
+# --- 3. SESSION STATE ---
 if 'positionen' not in st.session_state: st.session_state['positionen'] = []
+# Hier speichern wir Kundendaten zwischen, damit sie beim Wechseln nicht weg sind
+if 'kunden_daten' not in st.session_state: 
+    st.session_state['kunden_daten'] = {"Name": "", "Strasse": "", "Ort": "", "Tel": "", "Email": "", "Notiz": ""}
 
-# --- 4. PDF ENGINE ---
+# --- 4. PDF ENGINE MIT FOTOS ---
 class PDF(FPDF):
     def header(self):
         if os.path.exists("logo.png"):
             self.image("logo.png", 10, 8, 40)
-        
         self.set_font('Arial', 'B', 20)
         self.cell(0, 10, 'Angebot', 0, 1, 'C')
         self.ln(20)
@@ -75,45 +73,53 @@ class PDF(FPDF):
         self.cell(0, 10, f'Seite {self.page_no()}', 0, 0, 'C')
 
 def clean_text(text):
-    """Reinigt Text für PDF"""
-    if not isinstance(text, str):
-        text = str(text)
+    if not isinstance(text, str): text = str(text)
     text = text.replace("€", "EUR").replace("–", "-")
     return text.encode('latin-1', 'replace').decode('latin-1')
 
-def create_pdf(positionen_liste, kundendaten_text):
+def create_pdf(positionen_liste, kunden_dict, fotos):
     pdf = PDF()
     pdf.alias_nb_pages()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     
-    # Firmeninfo
+    # Firmenkopf
     pdf.set_font("Arial", size=10)
     pdf.ln(5)
     pdf.cell(0, 5, clean_text("Meingassner Metalltechnik"), ln=True)
     pdf.cell(0, 5, clean_text("Ihr Spezialist für Metallbau"), ln=True)
-    pdf.ln(5)
-
-    # --- KUNDENDATEN / BEMERKUNG (NEU) ---
-    if kundendaten_text:
+    
+    # --- KUNDENDATEN BLOCK ---
+    pdf.ln(10)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 6, "Kundeninformation:", ln=True)
+    pdf.set_font("Arial", size=10)
+    
+    # Wir bauen einen sauberen Adressblock
+    k_text = ""
+    if kunden_dict["Name"]: k_text += f"{kunden_dict['Name']}\n"
+    if kunden_dict["Strasse"]: k_text += f"{kunden_dict['Strasse']}\n"
+    if kunden_dict["Ort"]: k_text += f"{kunden_dict['Ort']}\n"
+    k_text += "\n"
+    if kunden_dict["Tel"]: k_text += f"Tel: {kunden_dict['Tel']}\n"
+    if kunden_dict["Email"]: k_text += f"Email: {kunden_dict['Email']}\n"
+    
+    pdf.multi_cell(0, 5, clean_text(k_text))
+    
+    if kunden_dict["Notiz"]:
         pdf.ln(5)
         pdf.set_font("Arial", 'B', 10)
-        pdf.cell(0, 5, "Kunde / Bemerkung:", ln=True)
+        pdf.cell(0, 5, "Bemerkung / Notizen:", ln=True)
         pdf.set_font("Arial", size=10)
-        # MultiCell für mehrzeiligen Text (Adresse, Notizen)
-        pdf.multi_cell(0, 5, clean_text(kundendaten_text))
-        pdf.ln(5)
+        pdf.multi_cell(0, 5, clean_text(kunden_dict["Notiz"]))
+
+    pdf.ln(10)
     
-    pdf.ln(5)
-    
-    # Tabellen-Kopf
+    # --- TABELLE ---
     pdf.set_font("Arial", 'B', 10)
     pdf.set_fill_color(240, 240, 240)
     
-    w_desc = 100
-    w_menge = 25
-    w_ep = 30
-    w_gesamt = 35
+    w_desc, w_menge, w_ep, w_gesamt = 100, 25, 30, 35
     
     pdf.cell(w_desc, 8, "Beschreibung", 1, 0, 'L', True)
     pdf.cell(w_menge, 8, "Menge", 1, 0, 'C', True)
@@ -121,11 +127,10 @@ def create_pdf(positionen_liste, kundendaten_text):
     pdf.cell(w_gesamt, 8, "Gesamt", 1, 1, 'R', True)
     
     pdf.set_font("Arial", size=10)
-    
     gesamt_summe = 0
     
     for pos in positionen_liste:
-        # Layout Logik für Beschreibung
+        # Layout Text
         raw_desc = str(pos['Beschreibung'])
         parts = raw_desc.split("|")
         main_title = parts[0].strip()
@@ -138,84 +143,97 @@ def create_pdf(positionen_liste, kundendaten_text):
 
         final_desc_text = clean_text(f"{main_title}{details}")
         
-        menge_str = clean_text(str(pos['Menge']))
-        ep_str = f"{pos['Einzelpreis']:.2f}"
-        gesamt_str = f"{pos['Preis']:.2f}"
-        
-        # Zeilenhöhe berechnen
-        x_start = pdf.get_x()
-        y_start = pdf.get_y()
+        # Zeilenhöhe
+        x_start, y_start = pdf.get_x(), pdf.get_y()
         pdf.multi_cell(w_desc, 5, final_desc_text, border=1, align='L')
         y_end = pdf.get_y()
         row_height = y_end - y_start
         
         pdf.set_xy(x_start + w_desc, y_start)
-        pdf.cell(w_menge, row_height, menge_str, 1, 0, 'C')
-        pdf.cell(w_ep, row_height, ep_str, 1, 0, 'R')
-        pdf.cell(w_gesamt, row_height, gesamt_str, 1, 1, 'R')
+        pdf.cell(w_menge, row_height, clean_text(str(pos['Menge'])), 1, 0, 'C')
+        pdf.cell(w_ep, row_height, f"{pos['Einzelpreis']:.2f}", 1, 0, 'R')
+        pdf.cell(w_gesamt, row_height, f"{pos['Preis']:.2f}", 1, 1, 'R')
         
         gesamt_summe += pos['Preis']
 
-    # Summe
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(w_desc + w_menge + w_ep, 10, "Gesamtsumme:", 0, 0, 'R')
     pdf.cell(w_gesamt, 10, f"{gesamt_summe:.2f} EUR", 1, 1, 'R')
-    
+
+    # --- FOTOS ANHÄNGEN ---
+    if fotos:
+        pdf.add_page()
+        pdf.cell(0, 10, "Baustellen-Dokumentation / Fotos", 0, 1, 'L')
+        
+        for foto_upload in fotos:
+            # Foto temporär speichern, damit FPDF es lesen kann
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
+                    tmp_file.write(foto_upload.getvalue())
+                    tmp_path = tmp_file.name
+                
+                # Bild auf Seite platzieren (Breite 100mm)
+                # Prüfen wie viel Platz noch ist, sonst neue Seite
+                if pdf.get_y() > 200: pdf.add_page()
+                
+                pdf.image(tmp_path, w=150)
+                pdf.ln(10) # Abstand
+                
+                # Aufräumen
+                os.unlink(tmp_path)
+            except Exception as e:
+                pdf.cell(0, 10, f"Fehler beim Bild: {str(e)}", ln=True)
+
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 5. MENÜ ---
-st.sidebar.header("Menü")
+# --- 5. MENÜ STRUKTUR ---
+st.sidebar.header("Navigation")
+
+# Optionen laden
 index_df = lade_startseite()
-
+katalog_items = []
 if not index_df.empty and 'System' in index_df.columns:
-    menue_items = index_df['System'].tolist()
-else:
-    menue_items = []
+    katalog_items = index_df['System'].tolist()
+
+# Hauptmenü Logik
+# Wir trennen: Katalog (Auswahl) und Warenkorb (Abschluss)
+menue_punkt = st.sidebar.radio(
+    "Gehe zu:",
+    ["📂 Konfigurator / Katalog", "🛒 Warenkorb / Abschluss", "🔐 Admin"]
+)
+
+st.sidebar.markdown("---")
+
+# --- TEIL A: KONFIGURATOR ---
+if menue_punkt == "📂 Konfigurator / Katalog":
+    st.title("Artikel Konfigurator")
     
-menue_items.append("🔐 Admin")
-auswahl = st.sidebar.radio("Wähle Bereich:", menue_items)
+    # Sub-Menü für die Systeme NUR hier anzeigen
+    if katalog_items:
+        auswahl_system = st.selectbox("Wähle System:", katalog_items)
+    else:
+        st.warning("Keine Systeme gefunden (Excel leer?).")
+        auswahl_system = None
 
-# --- 6. HAUPTBEREICH ---
-st.title("Meingassner Konfigurator")
-
-if auswahl == "🔐 Admin":
-    # --- ADMIN ---
-    pw = st.text_input("Passwort:", type="password")
-    if pw == "1234":
-        sheets = lade_alle_blattnamen()
-        if sheets:
-            sh = st.selectbox("Blatt:", sheets)
-            df = lade_blatt(sh)
-            st.info("Benötigte Spalten: Typ, Bezeichnung, Variable, Optionen, Formel")
-            df_new = st.data_editor(df, num_rows="dynamic", use_container_width=True)
-            if st.button("Speichern"):
-                if speichere_excel(df_new, sh): 
-                    st.success("Gespeichert!")
-                    st.cache_data.clear()
-        else:
-            st.warning("Keine Excel-Datei gefunden.")
-
-else:
-    # --- KONFIGURATOR ---
-    if not index_df.empty and 'System' in index_df.columns:
-        row = index_df[index_df['System'] == auswahl]
+    if auswahl_system:
+        # Lade Blatt für System
+        row = index_df[index_df['System'] == auswahl_system]
         if not row.empty:
             blatt = row.iloc[0]['Blattname']
             df_config = lade_blatt(blatt)
             
-            if df_config.empty:
-                st.warning("Blatt ist leer.")
-            elif 'Formel' not in df_config.columns:
-                 st.error(f"Fehler: Spalte 'Formel' fehlt im Blatt '{blatt}'!")
-            else:
-                st.subheader(f"Konfiguration: {auswahl}")
-                
-                col_l, col_r = st.columns([2, 1])
-                
-                with col_l:
+            # Layout: Links Konfig, Rechts kleiner Warenkorb-Check
+            col_konfig, col_mini_cart = st.columns([2, 1])
+            
+            with col_konfig:
+                st.subheader(f"Konfiguration: {auswahl_system}")
+                if df_config.empty or 'Formel' not in df_config.columns:
+                    st.error("Konfigurationsblatt fehlerhaft oder leer.")
+                else:
+                    # --- INPUT GENERATOR ---
                     vars_calc = {}
-                    desc_parts = [] 
+                    desc_parts = []
                     
                     for index, zeile in df_config.iterrows():
                         typ = str(zeile['Typ']).strip().lower()
@@ -250,48 +268,108 @@ else:
                             try:
                                 preis = eval(formel, {"__builtins__": None}, vars_calc)
                                 st.subheader(f"Preis: {preis:.2f} €")
-                                
                                 if st.button("In den Warenkorb", type="primary"):
-                                    full_desc = f"{auswahl} | " + ", ".join(desc_parts)
+                                    full_desc = f"{auswahl_system} | " + ", ".join(desc_parts)
                                     st.session_state['positionen'].append({
                                         "Beschreibung": full_desc,
-                                        "Menge": 1.0,
-                                        "Einzelpreis": preis,
-                                        "Preis": preis
+                                        "Menge": 1.0, "Einzelpreis": preis, "Preis": preis
                                     })
-                                    st.success("Hinzugefügt!")
-                                    st.rerun()
+                                    st.success("Hinzugefügt! Gehe zum Warenkorb für Abschluss.")
                             except Exception as e:
-                                st.error("Fehler in der Berechnung!")
-                                st.caption(e)
-                                
-                with col_r:
-                    st.write("### 🛒 Warenkorb")
-                    if st.session_state['positionen']:
-                        df_cart = pd.DataFrame(st.session_state['positionen'])
-                        st.dataframe(df_cart[['Beschreibung', 'Preis']], hide_index=True)
-                        
-                        summe = sum(p['Preis'] for p in st.session_state['positionen'])
-                        st.markdown(f"**Total: {summe:.2f} €**")
-                        
-                        st.markdown("---")
-                        # --- HIER IST DAS NEUE FELD ---
-                        kundendaten = st.text_area(
-                            "Bemerkung / Kunde / Adresse:", 
-                            placeholder="Max Mustermann\nMusterstraße 1\nTel: 01234...",
-                            height=100
-                        )
-                        
-                        # PDF Button übergibt jetzt auch die Kundendaten
-                        pdf_data = create_pdf(st.session_state['positionen'], kundendaten)
-                        
-                        st.download_button(
-                            label="📄 Angebot als PDF", 
-                            data=pdf_data, 
-                            file_name="angebot.pdf", 
-                            mime="application/pdf"
-                        )
-                        
-                        if st.button("🗑️ Warenkorb leeren"):
-                            st.session_state['positionen'] = []
-                            st.rerun()
+                                st.error("Fehler in Formel.")
+            
+            # Rechter Teil: Nur kurze Übersicht "Was hab ich schon?"
+            with col_mini_cart:
+                st.info("Aktuelle Positionen:")
+                if st.session_state['positionen']:
+                    cnt = len(st.session_state['positionen'])
+                    sum_live = sum(p['Preis'] for p in st.session_state['positionen'])
+                    st.write(f"**{cnt} Artikel** im Korb")
+                    st.write(f"Summe: **{sum_live:.2f} €**")
+                    st.dataframe(pd.DataFrame(st.session_state['positionen'])[['Beschreibung', 'Preis']], hide_index=True)
+                else:
+                    st.write("(Leer)")
+
+# --- TEIL B: WARENKORB / ABSCHLUSS ---
+elif menue_punkt == "🛒 Warenkorb / Abschluss":
+    st.title("🛒 Warenkorb & Abschluss")
+    
+    col_liste, col_daten = st.columns([1, 1])
+    
+    with col_liste:
+        st.subheader("Ihre Artikel")
+        if st.session_state['positionen']:
+            df_cart = pd.DataFrame(st.session_state['positionen'])
+            st.dataframe(df_cart, hide_index=True)
+            
+            total = sum(p['Preis'] for p in st.session_state['positionen'])
+            st.markdown(f"### Gesamtsumme: {total:.2f} €")
+            
+            if st.button("Alles löschen", type="secondary"):
+                st.session_state['positionen'] = []
+                st.rerun()
+        else:
+            st.info("Ihr Warenkorb ist leer.")
+
+    with col_daten:
+        st.subheader("📋 Kundendaten & Fotos")
+        
+        with st.form("abschluss_form"):
+            # Daten Felder
+            c1, c2 = st.columns(2)
+            name = c1.text_input("Name / Firma", value=st.session_state['kunden_daten']['Name'])
+            strasse = c2.text_input("Straße & Hausnr.", value=st.session_state['kunden_daten']['Strasse'])
+            
+            c3, c4 = st.columns(2)
+            ort = c3.text_input("PLZ / Ort", value=st.session_state['kunden_daten']['Ort'])
+            tel = c4.text_input("Telefon", value=st.session_state['kunden_daten']['Tel'])
+            
+            email = st.text_input("E-Mail", value=st.session_state['kunden_daten']['Email'])
+            notiz = st.text_area("Bemerkung / Notiz", value=st.session_state['kunden_daten']['Notiz'])
+            
+            # FOTO UPLOAD
+            st.markdown("---")
+            st.write("📷 **Fotos hinzufügen (Kamera oder Galerie):**")
+            fotos = st.file_uploader("Bilder auswählen", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
+            
+            submitted = st.form_submit_button("💾 PDF Generieren")
+            
+            if submitted:
+                # Daten sichern
+                st.session_state['kunden_daten'] = {
+                    "Name": name, "Strasse": strasse, "Ort": ort, 
+                    "Tel": tel, "Email": email, "Notiz": notiz
+                }
+                
+                if not st.session_state['positionen']:
+                    st.error("Warenkorb ist leer!")
+                else:
+                    # PDF erstellen
+                    pdf_bytes = create_pdf(
+                        st.session_state['positionen'], 
+                        st.session_state['kunden_daten'],
+                        fotos
+                    )
+                    
+                    st.success("PDF erstellt!")
+                    st.download_button(
+                        "⬇️ PDF Herunterladen", 
+                        data=pdf_bytes, 
+                        file_name="angebot_meingassner.pdf", 
+                        mime="application/pdf"
+                    )
+
+# --- TEIL C: ADMIN ---
+elif menue_punkt == "🔐 Admin":
+    st.title("Admin Bereich")
+    pw = st.text_input("Passwort:", type="password")
+    if pw == "1234":
+        sheets = lade_alle_blattnamen()
+        if sheets:
+            sh = st.selectbox("Blatt bearbeiten:", sheets)
+            df = lade_blatt(sh)
+            df_new = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+            if st.button("Speichern"):
+                if speichere_excel(df_new, sh): 
+                    st.success("Gespeichert!")
+                    st.cache_data.clear()
