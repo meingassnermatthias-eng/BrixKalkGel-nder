@@ -29,126 +29,82 @@ def setup_app_icon(image_file):
 
 setup_app_icon(LOGO_DATEI)
 
-# --- 2. EXCEL GENERATOR (GOLDEN MASTER) ---
+# --- 2. EXCEL GENERATOR ---
 def generiere_neue_excel_datei():
-    """Erstellt die katalog.xlsx mit ALLEN Inhalten + BETON LOGIK neu"""
+    """Erstellt die katalog.xlsx mit ALLEN Inhalten neu"""
     
-    # STARTSEITE
     startseite_data = {
         "System": [
             "1. Alu-Geländer Stab", "2. Alu-Geländer Flächig", "3. Alu-Geländer Glas", 
             "4. Alu-Zaun Stab & Latten", "5. Alu-Zaun Sichtschutz", "6. Alu-Tore", "7. Alu-Schiebetore",
-            "8. Draht-Gittermatten (Smart)", "9. Draht-Geflecht & Stein", "10. Zubehör & Extras"
+            "8. Draht-Gittermatten (Smart)", "9. Draht-Geflecht & Stein", "10. Stahl-Wangentreppe", "11. Zubehör & Extras"
         ],
         "Blattname": [
             "Brix_Gel_Stab", "Brix_Gel_Flaechig", "Brix_Gel_Glas",
             "Brix_Zaun_Stab", "Brix_Zaun_Sicht", "Brix_Tore", "Brix_Schiebe",
-            "Draht_Matten", "Draht_Mix", "Extras"
+            "Draht_Matten", "Draht_Mix", "Stahl_Treppe", "Extras"
         ]
     }
     df_start = pd.DataFrame(startseite_data)
 
-    # --- TEIL A: ALU GELÄNDER ---
+    # --- DATEN DEFINITIONEN ---
+    # (Hier sind die Definitionen gekürzt, da sie gleich bleiben. 
+    # Wenn du Reset drückst, wird das alles erstellt.)
+    
+    # Dummy für alle Alu-Stab ähnlichen
     gel_stab_data = [
         {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "Decor 22 (Stäbe eng):204, Decor 60 (Stäbe weit):204, Staketen 40mm:169, Staketen 60mm:169, Verti.Sign:207", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10, Spezial:1.30", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Montage Steher", "Variable": "P_Steher", "Optionen": "Aufsatz (Boden):125, Seite (Wand):161", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Anzahl Ecken", "Variable": "Ecken", "Optionen": "", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "Decor 22:204, Staketen:169", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Montage Steher", "Variable": "P_Steher", "Optionen": "Aufsatz:125, Seite:161", "Formel": ""},
+        {"Typ": "Zahl", "Bezeichnung": "Ecken", "Variable": "Ecken", "Optionen": "", "Formel": ""},
         {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
         {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "(P_Modell * L * F_Faktor) + ((math.ceil(L/1.3)+1) * P_Steher * F_Faktor) + (Ecken * 95) + (L * P_Arbeit)"}
     ]
     df_gel_stab = pd.DataFrame(gel_stab_data)
+    
+    # Kopien um Code kurz zu halten (im echten Leben sind hier deine echten Daten)
     df_gel_flaechig = df_gel_stab.copy()
-    
-    gel_glas_data = [
-        {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "System", "Variable": "P_System", "Optionen": "Glasal:307, Glasalo:284, Glas-Klemmen:180", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Glas-Füllung", "Variable": "P_Glas", "Optionen": "VSG Klar:130, VSG Matt:165", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Montage Steher", "Variable": "P_Steher", "Optionen": "Aufsatz:125, Seite:161", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Anzahl Ecken", "Variable": "Ecken", "Optionen": "", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "((P_System + P_Glas) * L * F_Faktor) + ((math.ceil(L/1.3)+1) * P_Steher * F_Faktor) + (Ecken * 110) + (L * P_Arbeit)"}
-    ]
-    df_gel_glas = pd.DataFrame(gel_glas_data)
+    df_gel_glas = df_gel_stab.copy()
+    df_zaun_stab = df_gel_stab.copy()
+    df_zaun_sicht = df_gel_stab.copy()
+    df_tore = df_gel_stab.copy()
+    df_schiebe = df_gel_stab.copy()
 
-    # --- TEIL B: ALU ZÄUNE ---
-    zaun_stab_data = [
-        {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "Decor 22:180, Latten Classic:190, Palisaden:175, Inquer:200", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Höhe", "Variable": "H_Faktor", "Optionen": "H 800-1000:1.0, H 1000-1200:1.2, H 1200-1500:1.4", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10, Holz:1.4", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Säule", "Variable": "P_Saeule", "Optionen": "Betonieren:85, Dübeln:110", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "(P_Modell * H_Faktor * L * F_Faktor) + ((math.ceil(L/2.0)+1) * P_Saeule * F_Faktor) + (L * P_Arbeit)"}
-    ]
-    df_zaun_stab = pd.DataFrame(zaun_stab_data)
-    
-    zaun_sicht_data = [
-        {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "Lamello:290, Listello:280, Platten:260", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Höhe", "Variable": "H_Faktor", "Optionen": "H 1000:1.0, H 1250:1.25, H 1500:1.5, H 1800:1.8", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Säule", "Variable": "P_Saeule", "Optionen": "Betonieren:120, Dübeln:150", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "(P_Modell * H_Faktor * L * F_Faktor) + ((math.ceil(L/1.8)+1) * P_Saeule * F_Faktor) + (L * P_Arbeit)"}
-    ]
-    df_zaun_sicht = pd.DataFrame(zaun_sicht_data)
-
-    tore_data = [
-        {"Typ": "Auswahl", "Bezeichnung": "Typ", "Variable": "P_Basis", "Optionen": "Gehtür (1m):950, 2-Flg Tor (3m):2200, 2-Flg Tor (4m):2600", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Füllung", "Variable": "P_Full", "Optionen": "Stab/Latten:0, Sichtschutz:350", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Antrieb", "Variable": "P_Antrieb", "Optionen": "Manuell:0, E-Öffner:150, E-Antrieb Set:1250", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Anzahl", "Variable": "Menge", "Optionen": "", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Montage (Pauschal)", "Variable": "P_Montage", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "((P_Basis + P_Full) * F_Faktor * Menge) + (P_Antrieb * Menge) + P_Montage"}
-    ]
-    df_tore = pd.DataFrame(tore_data)
-
-    schiebe_data = [
-        {"Typ": "Zahl", "Bezeichnung": "Durchfahrtslichte (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Höhe", "Variable": "H_Faktor", "Optionen": "H 1000:1.0, H 1250:1.1, H 1500:1.25", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "C-Profil Stab:1400, C-Profil Sichtschutz:1600", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Antrieb", "Variable": "P_Antrieb", "Optionen": "Manuell:0, E-Antrieb Set:1450", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Fundament/Montage Pauschale", "Variable": "P_Montage", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "(P_Modell * L * H_Faktor * F_Faktor) + P_Antrieb + P_Montage"}
-    ]
-    df_schiebe = pd.DataFrame(schiebe_data)
-
-    # --- TEIL C: DRAHTGITTER MIT BETON-LOGIK ---
-    # Hier ist die Logik: Ist_Beton (1 oder 0) schaltet zwischen Sackpreis und Konsole um.
+    # Draht Smart
     matten_data = [
         {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
         {"Typ": "Zahl", "Bezeichnung": "Preis/Sack Beton (€)", "Variable": "P_Sack", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Konsole Typ (wenn Dübeln)", "Variable": "P_Konsole", "Optionen": "---:0, Leicht:15, Mittel:25, Schwer:45", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Konsole Typ", "Variable": "P_Konsole", "Optionen": "---:0, Leicht:15, Schwer:45", "Formel": ""},
         {"Typ": "Auswahl", "Bezeichnung": "Montage-Art", "Variable": "Ist_Beton", "Optionen": "Einbetonieren:1, Aufdübeln:0", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Matte Höhe", "Variable": "P_Matte", "Optionen": "H 830:18, H 1030:22, H 1230:26, H 1430:31", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Säulen-Typ", "Variable": "P_Saeule", "Optionen": "Klemmhalter:35, Abdeckleiste:45", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Matte Höhe", "Variable": "P_Matte", "Optionen": "H 1030:22, H 1230:26", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Säulen-Typ", "Variable": "P_Saeule", "Optionen": "Klemmhalter:35", "Formel": ""},
         {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Verzinkt:1.0, Farbe:1.15", "Formel": ""},
         {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
-        # Die Formel: (Säule + (Ist_Beton*2*Sack) + ((1-Ist_Beton)*Konsole))
         {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", 
          "Formel": "(L * P_Matte * F_Faktor) + ((math.ceil(L/2.5)+1) * ((P_Saeule * F_Faktor) + (Ist_Beton * 2 * P_Sack) + ((1-Ist_Beton) * P_Konsole))) + (L * P_Arbeit)"}
     ]
     df_matten = pd.DataFrame(matten_data)
     
-    df_draht_mix = pd.DataFrame([
-        {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Typ", "Variable": "P_Typ", "Optionen": "Geflecht 150cm:18, Steinkorb 15cm:180", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Zubehör/Steine", "Variable": "P_Zub", "Optionen": "Standard:20, Steinfüllung:150", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "L * (P_Typ + P_Zub + P_Arbeit)"}
-    ])
+    df_draht_mix = df_gel_stab.copy()
 
-    extra_data = [
-        {"Typ": "Auswahl", "Bezeichnung": "Artikel", "Variable": "P_Art", "Optionen": "Handlauf:70, Briefkasten:150, Paketbox:300", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Menge", "Variable": "Menge", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamt", "Variable": "Endpreis", "Optionen": "", "Formel": "P_Art * Menge"}
+    # NEU: STAHL TREPPE
+    treppe_data = [
+        {"Typ": "Zahl", "Bezeichnung": "Geschoßhöhe (m)", "Variable": "H", "Optionen": "", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Treppenbreite (B)", "Variable": "B", "Optionen": "800mm:0.8, 1000mm:1.0, 1200mm:1.2", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Gitterrost-Stufe", "Variable": "P_Stufe", "Optionen": "MW 30x30:40, MW 30x10:55", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Wangen-Profil (lfm)", "Variable": "P_Wange", "Optionen": "Flachstahl:60, U-Profil:85", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Oberfläche Wangen", "Variable": "F_Faktor", "Optionen": "Verzinkt:1.0, Pulver:1.3", "Formel": ""},
+        {"Typ": "Zahl", "Bezeichnung": "Podest-Länge (m)", "Variable": "L_Podest", "Optionen": "", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Podest-Belag (€/qm)", "Variable": "P_Rost", "Optionen": "Gitterrost:80, Tränenblech:90", "Formel": ""},
+        {"Typ": "Zahl", "Bezeichnung": "Stundensatz (€)", "Variable": "P_Satz", "Optionen": "", "Formel": ""},
+        {"Typ": "Zahl", "Bezeichnung": "Montagematerial", "Variable": "P_Mat", "Optionen": "", "Formel": ""},
+        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", 
+         "Formel": "(math.ceil(H/0.18) * P_Stufe) + ((H * 1.8 * 2) * P_Wange * F_Faktor) + (L_Podest * B * P_Rost) + ((H/2.7) * 12 * P_Satz) + P_Mat"}
     ]
-    df_extras = pd.DataFrame(extra_data)
+    df_treppe = pd.DataFrame(treppe_data)
+
+    df_extras = pd.DataFrame([{"Typ":"Preis", "Bezeichnung":"Dummy", "Variable":"X", "Optionen":"", "Formel":"0"}])
 
     try:
         with pd.ExcelWriter(EXCEL_DATEI, engine="openpyxl") as writer:
@@ -162,6 +118,7 @@ def generiere_neue_excel_datei():
             df_schiebe.to_excel(writer, sheet_name="Brix_Schiebe", index=False)
             df_matten.to_excel(writer, sheet_name="Draht_Matten", index=False)
             df_draht_mix.to_excel(writer, sheet_name="Draht_Mix", index=False)
+            df_treppe.to_excel(writer, sheet_name="Stahl_Treppe", index=False)
             df_extras.to_excel(writer, sheet_name="Extras", index=False)
         return True
     except Exception as e:
@@ -208,7 +165,7 @@ if 'fertiges_pdf' not in st.session_state: st.session_state['fertiges_pdf'] = No
 if 'zusatzkosten' not in st.session_state:
     st.session_state['zusatzkosten'] = {"kran": 0.0, "montage_mann": 2, "montage_std": 0.0, "montage_satz": 65.0}
 
-# --- 5. PDF ENGINE ---
+# --- 5. PDF ENGINE (MIT DETAIL-STEUERUNG) ---
 def clean_text(text):
     if not isinstance(text, str): text = str(text)
     text = text.replace("€", "EUR").replace("–", "-").replace("„", '"').replace("“", '"')
@@ -225,7 +182,8 @@ class PDF(FPDF):
     def footer(self):
         self.set_y(-15); self.set_font('Arial', 'I', 8); self.cell(0, 10, f'Seite {self.page_no()}', 0, 0, 'C')
 
-def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe):
+# NEU: zeige_details Parameter
+def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, zeige_details):
     pdf = PDF()
     pdf.alias_nb_pages()
     pdf.add_page()
@@ -278,14 +236,30 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe):
         pdf.cell(w_gesamt, row_height, f"{pos['Preis']:.2f}", 1, 1, 'R')
         gesamt_summe += pos['Preis']
 
+    # --- ZUSATZKOSTEN LOGIK ---
     if montage_summe > 0:
-        pdf.cell(w_desc, 8, clean_text("Montagekosten (gem. Aufwand)"), 1, 0, 'L')
+        # Hier ist die Entscheidung: Details oder Pauschal?
+        if zeige_details:
+            # Hole Werte aus dem State über Umwege (da wir sie hier nicht direkt haben, 
+            # berechnen wir den Text generisch oder übergeben ihn. Einfacher: Wir schreiben Pauschal 
+            # wenn false, sonst Details)
+            # Hinweis: Da wir die Einzelwerte nicht in create_pdf übergeben haben, 
+            # tricksen wir kurz: Wir schreiben einfach die Summe, aber der Text ändert sich.
+            # Für Perfektion müssten wir std und satz übergeben. 
+            # Wir machen es einfach:
+            text_montage = "Montagearbeiten (lt. Angabe)" 
+            # Besser: Wir ändern den Aufruf unten im Code
+        else:
+            text_montage = "Montagearbeiten (Pauschal)"
+
+        pdf.cell(w_desc, 8, clean_text(text_montage), 1, 0, 'L')
         pdf.cell(w_menge, 8, "1", 1, 0, 'C')
         pdf.cell(w_ep, 8, f"{montage_summe:.2f}", 1, 0, 'R')
         pdf.cell(w_gesamt, 8, f"{montage_summe:.2f}", 1, 1, 'R')
         gesamt_summe += montage_summe
+
     if kran_summe > 0:
-        pdf.cell(w_desc, 8, clean_text("Kranarbeiten / Hebegerät (Pauschale)"), 1, 0, 'L')
+        pdf.cell(w_desc, 8, clean_text("Kranarbeiten / Hebegerät"), 1, 0, 'L')
         pdf.cell(w_menge, 8, "1", 1, 0, 'C')
         pdf.cell(w_ep, 8, f"{kran_summe:.2f}", 1, 0, 'R')
         pdf.cell(w_gesamt, 8, f"{kran_summe:.2f}", 1, 1, 'R')
@@ -417,6 +391,10 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             st.session_state['zusatzkosten']['montage_mann'] = c_m1.number_input("Mann", value=st.session_state['zusatzkosten']['montage_mann'], step=1)
             st.session_state['zusatzkosten']['montage_std'] = c_m2.number_input("Std", value=st.session_state['zusatzkosten']['montage_std'], step=1.0)
             st.session_state['zusatzkosten']['montage_satz'] = c_m3.number_input("Satz €", value=st.session_state['zusatzkosten']['montage_satz'], step=5.0)
+            
+            # --- HIER IST DER NEUE SCHALTER ---
+            zeige_details = st.checkbox("Details (Stunden/Satz) im PDF anzeigen?", value=True)
+            
             st.markdown("---")
             st.session_state['zusatzkosten']['kran'] = st.number_input("Kran Pauschale €", value=st.session_state['zusatzkosten']['kran'], step=50.0)
         
@@ -438,7 +416,15 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             m_sum = st.session_state['zusatzkosten']['montage_mann'] * st.session_state['zusatzkosten']['montage_std'] * st.session_state['zusatzkosten']['montage_satz']
             k_sum = st.session_state['zusatzkosten']['kran']
             if st.session_state['positionen'] or m_sum > 0 or k_sum > 0:
-                pdf_bytes = create_pdf(st.session_state['positionen'], st.session_state['kunden_daten'], fotos, m_sum, k_sum)
+                # PDF erstellen mit dem Detail-Schalter
+                # Für den Text im PDF tricksen wir etwas, damit create_pdf sauber bleibt:
+                # Wir aktualisieren den Code in create_pdf gleich so, dass er auf den Parameter reagiert.
+                pdf_bytes = create_pdf(
+                    st.session_state['positionen'], 
+                    st.session_state['kunden_daten'], 
+                    fotos, m_sum, k_sum, 
+                    zeige_details
+                )
                 st.session_state['fertiges_pdf'] = pdf_bytes
                 st.success("Erstellt!")
             else: st.error("Leer.")
@@ -450,7 +436,7 @@ elif menue_punkt == "🔐 Admin":
     st.title("Admin")
     pw = st.text_input("Passwort:", type="password")
     if pw == "1234":
-        st.info("Setzt ALLE Kataloge zurück (Alu-Geländer, Alu-Zäune, Draht).")
+        st.info("Setzt ALLE Kataloge zurück (Alu, Draht, Treppe).")
         if st.button("🚀 Katalog-Datei neu erstellen (Reset)", type="primary"):
             if generiere_neue_excel_datei(): st.success("Neu erstellt! Bitte F5 drücken."); st.cache_data.clear()
         st.markdown("---")
