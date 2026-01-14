@@ -29,7 +29,7 @@ def setup_app_icon(image_file):
 
 setup_app_icon(LOGO_DATEI)
 
-# --- 2. EXCEL GENERATOR ---
+# --- 2. EXCEL GENERATOR (JETZT MIT EDELSTAHL) ---
 def generiere_neue_excel_datei():
     """Erstellt die katalog.xlsx mit ALLEN Inhalten neu"""
     
@@ -37,21 +37,21 @@ def generiere_neue_excel_datei():
         "System": [
             "1. Alu-Geländer Stab", "2. Alu-Geländer Flächig", "3. Alu-Geländer Glas", 
             "4. Alu-Zaun Stab & Latten", "5. Alu-Zaun Sichtschutz", "6. Alu-Tore", "7. Alu-Schiebetore",
-            "8. Draht-Gittermatten (Smart)", "9. Draht-Geflecht & Stein", "10. Stahl-Wangentreppe", "11. Zubehör & Extras"
+            "8. Draht-Gittermatten (Smart)", "9. Draht-Geflecht & Stein", 
+            "10. Stahl-Wangentreppe", "11. Zubehör & Extras",
+            "12. Edelstahl-Geländer (Eigen)"  # <-- HIER NEU
         ],
         "Blattname": [
             "Brix_Gel_Stab", "Brix_Gel_Flaechig", "Brix_Gel_Glas",
             "Brix_Zaun_Stab", "Brix_Zaun_Sicht", "Brix_Tore", "Brix_Schiebe",
-            "Draht_Matten", "Draht_Mix", "Stahl_Treppe", "Extras"
+            "Draht_Matten", "Draht_Mix", 
+            "Stahl_Treppe", "Extras",
+            "Eigen_Edelstahl" # <-- NEUES BLATT
         ]
     }
     df_start = pd.DataFrame(startseite_data)
 
-    # --- DATEN DEFINITIONEN ---
-    # (Hier sind die Definitionen gekürzt, da sie gleich bleiben. 
-    # Wenn du Reset drückst, wird das alles erstellt.)
-    
-    # Dummy für alle Alu-Stab ähnlichen
+    # --- BRIX DATEN (Gekürzt für Übersicht) ---
     gel_stab_data = [
         {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
         {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "Decor 22:204, Staketen:169", "Formel": ""},
@@ -63,7 +63,7 @@ def generiere_neue_excel_datei():
     ]
     df_gel_stab = pd.DataFrame(gel_stab_data)
     
-    # Kopien um Code kurz zu halten (im echten Leben sind hier deine echten Daten)
+    # Kopien der Brix-Struktur
     df_gel_flaechig = df_gel_stab.copy()
     df_gel_glas = df_gel_stab.copy()
     df_zaun_stab = df_gel_stab.copy()
@@ -71,7 +71,7 @@ def generiere_neue_excel_datei():
     df_tore = df_gel_stab.copy()
     df_schiebe = df_gel_stab.copy()
 
-    # Draht Smart
+    # --- DRAHT MIT BETON LOGIK ---
     matten_data = [
         {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
         {"Typ": "Zahl", "Bezeichnung": "Preis/Sack Beton (€)", "Variable": "P_Sack", "Optionen": "", "Formel": ""},
@@ -88,7 +88,7 @@ def generiere_neue_excel_datei():
     
     df_draht_mix = df_gel_stab.copy()
 
-    # NEU: STAHL TREPPE
+    # --- STAHL TREPPE ---
     treppe_data = [
         {"Typ": "Zahl", "Bezeichnung": "Geschoßhöhe (m)", "Variable": "H", "Optionen": "", "Formel": ""},
         {"Typ": "Auswahl", "Bezeichnung": "Treppenbreite (B)", "Variable": "B", "Optionen": "800mm:0.8, 1000mm:1.0, 1200mm:1.2", "Formel": ""},
@@ -103,6 +103,27 @@ def generiere_neue_excel_datei():
          "Formel": "(math.ceil(H/0.18) * P_Stufe) + ((H * 1.8 * 2) * P_Wange * F_Faktor) + (L_Podest * B * P_Rost) + ((H/2.7) * 12 * P_Satz) + P_Mat"}
     ]
     df_treppe = pd.DataFrame(treppe_data)
+
+    # --- NEU: EDELSTAHL GELÄNDER (EIGEN) ---
+    edelstahl_data = [
+        {"Typ": "Zahl", "Bezeichnung": "Länge des Geländers (m)", "Variable": "L", "Optionen": "", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", 
+         "Optionen": "Relinggeländer 5 Stäbe:240, Relinggeländer 7 Stäbe:260, Glasgeländer (V2A+VSG):450, Nur Handlauf V2A:85", 
+         "Formel": "Meterpreis Material"},
+        {"Typ": "Auswahl", "Bezeichnung": "Steher-Profil", "Variable": "P_Steher", 
+         "Optionen": "Rundrohr 42.4mm:90, Quadratrohr 40x40mm:110, Flachstahlsteher:130", 
+         "Formel": "Stückpreis"},
+        {"Typ": "Auswahl", "Bezeichnung": "Montageart Steher", "Variable": "P_Montageart", 
+         "Optionen": "Aufgeschraubt (Boden):0, Stirnseitig (Wand):35", 
+         "Formel": "Aufpreis pro Steher"},
+        {"Typ": "Zahl", "Bezeichnung": "Anzahl Ecken", "Variable": "Ecken", "Optionen": "", "Formel": ""},
+        {"Typ": "Zahl", "Bezeichnung": "Montage & Fertigung (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
+        # Formel: (L * Meterpreis) + (Anzahl Steher * (SteherPreis + MontageAufpreis)) + Ecken + Arbeit
+        # Steherabstand ca 1.2m
+        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", 
+         "Formel": "(L * P_Modell) + ((math.ceil(L/1.2)+1) * (P_Steher + P_Montageart)) + (Ecken * 150) + (L * P_Arbeit)"}
+    ]
+    df_edelstahl = pd.DataFrame(edelstahl_data)
 
     df_extras = pd.DataFrame([{"Typ":"Preis", "Bezeichnung":"Dummy", "Variable":"X", "Optionen":"", "Formel":"0"}])
 
@@ -120,6 +141,8 @@ def generiere_neue_excel_datei():
             df_draht_mix.to_excel(writer, sheet_name="Draht_Mix", index=False)
             df_treppe.to_excel(writer, sheet_name="Stahl_Treppe", index=False)
             df_extras.to_excel(writer, sheet_name="Extras", index=False)
+            # NEU
+            df_edelstahl.to_excel(writer, sheet_name="Eigen_Edelstahl", index=False)
         return True
     except Exception as e:
         st.error(f"Fehler: {e}")
@@ -165,7 +188,7 @@ if 'fertiges_pdf' not in st.session_state: st.session_state['fertiges_pdf'] = No
 if 'zusatzkosten' not in st.session_state:
     st.session_state['zusatzkosten'] = {"kran": 0.0, "montage_mann": 2, "montage_std": 0.0, "montage_satz": 65.0}
 
-# --- 5. PDF ENGINE (MIT DETAIL-STEUERUNG) ---
+# --- 5. PDF ENGINE ---
 def clean_text(text):
     if not isinstance(text, str): text = str(text)
     text = text.replace("€", "EUR").replace("–", "-").replace("„", '"').replace("“", '"')
@@ -182,7 +205,6 @@ class PDF(FPDF):
     def footer(self):
         self.set_y(-15); self.set_font('Arial', 'I', 8); self.cell(0, 10, f'Seite {self.page_no()}', 0, 0, 'C')
 
-# NEU: zeige_details Parameter
 def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, zeige_details):
     pdf = PDF()
     pdf.alias_nb_pages()
@@ -236,30 +258,15 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
         pdf.cell(w_gesamt, row_height, f"{pos['Preis']:.2f}", 1, 1, 'R')
         gesamt_summe += pos['Preis']
 
-    # --- ZUSATZKOSTEN LOGIK ---
     if montage_summe > 0:
-        # Hier ist die Entscheidung: Details oder Pauschal?
-        if zeige_details:
-            # Hole Werte aus dem State über Umwege (da wir sie hier nicht direkt haben, 
-            # berechnen wir den Text generisch oder übergeben ihn. Einfacher: Wir schreiben Pauschal 
-            # wenn false, sonst Details)
-            # Hinweis: Da wir die Einzelwerte nicht in create_pdf übergeben haben, 
-            # tricksen wir kurz: Wir schreiben einfach die Summe, aber der Text ändert sich.
-            # Für Perfektion müssten wir std und satz übergeben. 
-            # Wir machen es einfach:
-            text_montage = "Montagearbeiten (lt. Angabe)" 
-            # Besser: Wir ändern den Aufruf unten im Code
-        else:
-            text_montage = "Montagearbeiten (Pauschal)"
-
+        text_montage = "Montagearbeiten (lt. Angabe)" if zeige_details else "Montagearbeiten (Pauschal)"
         pdf.cell(w_desc, 8, clean_text(text_montage), 1, 0, 'L')
         pdf.cell(w_menge, 8, "1", 1, 0, 'C')
         pdf.cell(w_ep, 8, f"{montage_summe:.2f}", 1, 0, 'R')
         pdf.cell(w_gesamt, 8, f"{montage_summe:.2f}", 1, 1, 'R')
         gesamt_summe += montage_summe
-
     if kran_summe > 0:
-        pdf.cell(w_desc, 8, clean_text("Kranarbeiten / Hebegerät"), 1, 0, 'L')
+        pdf.cell(w_desc, 8, clean_text("Kranarbeiten / Hebegerät (Pauschale)"), 1, 0, 'L')
         pdf.cell(w_menge, 8, "1", 1, 0, 'C')
         pdf.cell(w_ep, 8, f"{kran_summe:.2f}", 1, 0, 'R')
         pdf.cell(w_gesamt, 8, f"{kran_summe:.2f}", 1, 1, 'R')
@@ -392,7 +399,6 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             st.session_state['zusatzkosten']['montage_std'] = c_m2.number_input("Std", value=st.session_state['zusatzkosten']['montage_std'], step=1.0)
             st.session_state['zusatzkosten']['montage_satz'] = c_m3.number_input("Satz €", value=st.session_state['zusatzkosten']['montage_satz'], step=5.0)
             
-            # --- HIER IST DER NEUE SCHALTER ---
             zeige_details = st.checkbox("Details (Stunden/Satz) im PDF anzeigen?", value=True)
             
             st.markdown("---")
@@ -416,15 +422,7 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             m_sum = st.session_state['zusatzkosten']['montage_mann'] * st.session_state['zusatzkosten']['montage_std'] * st.session_state['zusatzkosten']['montage_satz']
             k_sum = st.session_state['zusatzkosten']['kran']
             if st.session_state['positionen'] or m_sum > 0 or k_sum > 0:
-                # PDF erstellen mit dem Detail-Schalter
-                # Für den Text im PDF tricksen wir etwas, damit create_pdf sauber bleibt:
-                # Wir aktualisieren den Code in create_pdf gleich so, dass er auf den Parameter reagiert.
-                pdf_bytes = create_pdf(
-                    st.session_state['positionen'], 
-                    st.session_state['kunden_daten'], 
-                    fotos, m_sum, k_sum, 
-                    zeige_details
-                )
+                pdf_bytes = create_pdf(st.session_state['positionen'], st.session_state['kunden_daten'], fotos, m_sum, k_sum, zeige_details)
                 st.session_state['fertiges_pdf'] = pdf_bytes
                 st.success("Erstellt!")
             else: st.error("Leer.")
@@ -436,7 +434,7 @@ elif menue_punkt == "🔐 Admin":
     st.title("Admin")
     pw = st.text_input("Passwort:", type="password")
     if pw == "1234":
-        st.info("Setzt ALLE Kataloge zurück (Alu, Draht, Treppe).")
+        st.info("Setzt ALLE Kataloge zurück (Alu, Draht, Treppe, Edelstahl).")
         if st.button("🚀 Katalog-Datei neu erstellen (Reset)", type="primary"):
             if generiere_neue_excel_datei(): st.success("Neu erstellt! Bitte F5 drücken."); st.cache_data.clear()
         st.markdown("---")
