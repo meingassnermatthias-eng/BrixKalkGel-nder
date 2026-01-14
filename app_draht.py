@@ -14,6 +14,13 @@ MWST_SATZ = 0.20  # 20% MwSt
 
 st.set_page_config(page_title="Meingassner App", layout="wide", page_icon=LOGO_DATEI)
 
+# --- NOTFALL RESET (Löscht kaputten Speicher) ---
+st.sidebar.header("Hilfe & Reset")
+if st.sidebar.button("⚠️ APP NEUSTARTEN (Speicher löschen)", help="Klicken, wenn Fehlermeldungen auftauchen"):
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun()
+
 def setup_app_icon(image_file):
     if os.path.exists(image_file):
         try:
@@ -31,14 +38,13 @@ def setup_app_icon(image_file):
 
 setup_app_icon(LOGO_DATEI)
 
-# --- 2. HELPER (Mit Robustheits-Garantie) ---
+# --- 2. HELPER (Robust) ---
 def clean_df_columns(df):
     if df is None: return pd.DataFrame()
     if not df.empty: 
         df.columns = df.columns.str.strip()
         rename_map = {'Formel / Info': 'Formel', 'Formel/Info': 'Formel', 'Info': 'Formel'}
         df.rename(columns=rename_map, inplace=True)
-        # Leere Zeilen rauswerfen (wo Variable leer ist)
         if 'Variable' in df.columns:
             df = df.dropna(subset=['Variable'])
     return df
@@ -68,34 +74,40 @@ def speichere_excel(df, blatt_name):
         return True
     except: return False
 
-# --- 3. SESSION STATE (Aggressive Initialisierung) ---
-# Wir prüfen, ob die Schlüssel existieren UND ob sie None sind.
-if 'positionen' not in st.session_state or st.session_state['positionen'] is None: 
-    st.session_state['positionen'] = []
-
-if 'kunden_daten' not in st.session_state or st.session_state['kunden_daten'] is None: 
-    st.session_state['kunden_daten'] = {"Name": "", "Strasse": "", "Ort": "", "Tel": "", "Email": "", "Notiz": ""}
-
-if 'fertiges_pdf' not in st.session_state: st.session_state['fertiges_pdf'] = None
-if 'fertiges_intern_pdf' not in st.session_state: st.session_state['fertiges_intern_pdf'] = None
-
-# Zusatzkosten reparieren falls kaputt
-default_zk = {
-    "kran": 0.0, "montage_mann": 2, "montage_std": 0.0, "montage_satz": 65.0,
-    "zuschlag_prozent": 0.0, "zuschlag_label": "Normal"
-}
-if 'zusatzkosten' not in st.session_state or st.session_state['zusatzkosten'] is None:
-    st.session_state['zusatzkosten'] = default_zk.copy()
-else:
-    # Prüfen ob alle Keys da sind
-    for k, v in default_zk.items():
-        if k not in st.session_state['zusatzkosten']:
-            st.session_state['zusatzkosten'][k] = v
-
-# --- 4. EXCEL GENERATOR (Nur für Reset) ---
+# --- 3. EXCEL GENERATOR (Dummy für Sicherheit) ---
 def generiere_neue_excel_datei():
-    """Dummy Generator"""
-    return False 
+    return False
+
+# --- 4. SESSION STATE (Sicherheits-Initialisierung) ---
+def init_state():
+    if 'positionen' not in st.session_state or st.session_state['positionen'] is None: 
+        st.session_state['positionen'] = []
+
+    if 'kunden_daten' not in st.session_state or st.session_state['kunden_daten'] is None: 
+        st.session_state['kunden_daten'] = {"Name": "", "Strasse": "", "Ort": "", "Tel": "", "Email": "", "Notiz": ""}
+
+    if 'fertiges_pdf' not in st.session_state: st.session_state['fertiges_pdf'] = None
+    if 'fertiges_intern_pdf' not in st.session_state: st.session_state['fertiges_intern_pdf'] = None
+
+    # ZUSATZKOSTEN SICHER MACHEN
+    default_zk = {
+        "kran": 0.0, "montage_mann": 2, "montage_std": 0.0, "montage_satz": 65.0,
+        "zuschlag_prozent": 0.0, "zuschlag_label": "Normal"
+    }
+    
+    # Wenn Key fehlt oder Wert None ist -> Neu setzen
+    if 'zusatzkosten' not in st.session_state or st.session_state['zusatzkosten'] is None:
+        st.session_state['zusatzkosten'] = default_zk.copy()
+    else:
+        # Wenn Key da ist, aber Schlüssel fehlen -> Ergänzen
+        if not isinstance(st.session_state['zusatzkosten'], dict):
+             st.session_state['zusatzkosten'] = default_zk.copy()
+        else:
+            for k, v in default_zk.items():
+                if k not in st.session_state['zusatzkosten']:
+                    st.session_state['zusatzkosten'][k] = v
+
+init_state()
 
 # --- 5. PDF ENGINES ---
 def clean_text(text):
@@ -122,6 +134,9 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
     pdf = PDF()
     pdf.alias_nb_pages()
     pdf.add_page()
+    
+    # Safe Dict Access
+    if not kunden_dict: kunden_dict = {}
     
     pdf.ln(10); pdf.set_font("Arial", 'B', 12); pdf.cell(0, 6, "Kundeninformation:", ln=True); pdf.set_font("Arial", size=10)
     k_text = ""
@@ -257,6 +272,9 @@ def create_internal_pdf(positionen_liste, kunden_dict, zusatzkosten):
     pdf.alias_nb_pages()
     pdf.add_page()
     
+    if not kunden_dict: kunden_dict = {}
+    if not zusatzkosten: zusatzkosten = {}
+
     pdf.set_font("Arial", 'B', 11)
     pdf.cell(0, 8, f"Kunde: {clean_text(kunden_dict.get('Name', ''))} ({clean_text(kunden_dict.get('Ort', ''))})", 0, 1, 'L')
     pdf.set_font("Arial", '', 10)
@@ -342,7 +360,7 @@ if menue_punkt == "📂 Konfigurator / Katalog":
             with col_konfig:
                 st.subheader(f"Konfiguration: {auswahl_system}")
                 
-                # --- FEHLER-FÄNGER BLOCK START ---
+                # --- FEHLER-FÄNGER ---
                 if df_config is None or df_config.empty: 
                     st.warning("Katalog-Blatt ist leer oder nicht gefunden.")
                 elif 'Formel' not in df_config.columns: 
@@ -351,7 +369,6 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                     try:
                         vars_calc = {}; desc_parts = []
                         for index, zeile in df_config.iterrows():
-                            # Sicherheits-Check für Zeilen
                             if pd.isna(zeile.get('Typ')): continue 
                             
                             typ = str(zeile.get('Typ', '')).strip().lower()
@@ -450,7 +467,6 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                     except Exception as e:
                         st.error(f"⚠️ Fehler im Blatt '{blatt}': {str(e)}")
                         st.info("Tipp: Überprüfe die Excel-Datei auf leere Zeilen oder Schreibfehler bei Variablen.")
-                # --- FEHLER-FÄNGER BLOCK ENDE ---
 
             with col_mini_cart:
                 st.info("🛒 Schnell-Check")
@@ -491,6 +507,8 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             total_artikel = sum(p.get('Preis',0) for p in st.session_state['positionen'])
             # Safe Access
             zk = st.session_state.get('zusatzkosten', {})
+            if zk is None: zk = {}
+            
             m_sum = zk.get('montage_mann',0) * zk.get('montage_std',0) * zk.get('montage_satz',0)
             k_sum = zk.get('kran',0)
             z_proz = zk.get('zuschlag_prozent',0)
@@ -517,8 +535,7 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
         with st.expander("🏗️ Montage & Zusatzkosten", expanded=True):
             st.write("**Montage-Rechner**")
             c_m1, c_m2, c_m3 = st.columns(3)
-            # Safe init / get
-            if 'zusatzkosten' not in st.session_state: st.session_state['zusatzkosten'] = {}
+            if 'zusatzkosten' not in st.session_state or st.session_state['zusatzkosten'] is None: st.session_state['zusatzkosten'] = {}
             zk = st.session_state['zusatzkosten']
             
             st.session_state['zusatzkosten']['montage_mann'] = c_m1.number_input("Mann", value=int(zk.get('montage_mann', 2)), step=1)
@@ -550,7 +567,7 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
         
         st.subheader("Kundendaten")
         with st.form("abschluss"):
-            kd = st.session_state['kunden_daten']
+            kd = st.session_state.get('kunden_daten', {})
             c1, c2 = st.columns(2)
             name = c1.text_input("Name", value=kd.get('Name', ''))
             strasse = c2.text_input("Straße", value=kd.get('Strasse', ''))
