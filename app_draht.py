@@ -30,21 +30,90 @@ def setup_app_icon(image_file):
 
 setup_app_icon(LOGO_DATEI)
 
-# --- 2. EXCEL GENERATOR (UNVERÄNDERT) ---
+# --- 2. EXCEL GENERATOR (NUR FÜR RESET) ---
 def generiere_neue_excel_datei():
-    """Erstellt die katalog.xlsx neu - WIRD NICHT AUTOMATISCH AUSGEFÜHRT"""
+    """Erstellt die katalog.xlsx neu - WIRD NUR BEI RESET AUSGEFÜHRT"""
     startseite_data = {
-        "Kategorie": ["Brix Geländer (Alu)", "Brix Zäune & Tore", "Drahtgitter & Stein", "Eigenfertigung"],
-        "System": ["Stab-Optik", "Zaun Stab", "Gittermatten", "Stahl-Wangentreppe"],
-        "Blattname": ["Brix_Gel_Stab", "Brix_Zaun_Stab", "Draht_Matten", "Stahl_Treppe"]
+        "Kategorie": [
+            "Brix Geländer (Alu)", "Brix Geländer (Alu)", "Brix Geländer (Alu)", "Brix Geländer (Alu)",
+            "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore",
+            "Drahtgitter & Stein", "Drahtgitter & Stein", "Drahtgitter & Stein",
+            "Eigenfertigung", "Eigenfertigung", "Eigenfertigung"
+        ],
+        "System": [
+            "Stab-Optik", "Flächige Optik", "Glas-Geländer", ">> Zubehör Geländer",
+            "Zaun Stab & Latten", "Zaun Sichtschutz", "Tore (Drehflügel)", "Schiebetore", ">> Zubehör Zaun",
+            "Gittermatten (Smart)", "Geflecht & Steinkorb", ">> Zubehör Draht",
+            "Stahl-Wangentreppe", "Edelstahl-Geländer", ">> Montagematerial"
+        ],
+        "Blattname": [
+            "Brix_Gel_Stab", "Brix_Gel_Flaechig", "Brix_Gel_Glas", "Zub_Gel",
+            "Brix_Zaun_Stab", "Brix_Zaun_Sicht", "Brix_Tore", "Brix_Schiebe", "Zub_Zaun",
+            "Draht_Matten", "Draht_Mix", "Zub_Draht",
+            "Stahl_Treppe", "Eigen_Edelstahl", "Zub_Montage"
+        ]
     }
     df_start = pd.DataFrame(startseite_data)
+
+    # --- DEFINITIONEN FÜR RESET ---
+    # Dummy-Daten, damit die Struktur stimmt
+    gel_stab_data = [{"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""}, {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "0"}]
+    df_gel_stab = pd.DataFrame(gel_stab_data)
+    
+    # Draht mit neuer Dist-Variable
+    matten_data = [
+        {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
+        {"Typ": "Zahl", "Bezeichnung": "Preis/Sack Beton (€)", "Variable": "P_Sack", "Optionen": "", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Steher-Abstand", "Variable": "Dist", "Optionen": "Standard (2.5m):2.5, Verkürzt (2.0m):2.0", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Konsole Typ", "Variable": "P_Konsole", "Optionen": "---:0, Leicht:15, Schwer:45", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Montage-Art", "Variable": "Ist_Beton", "Optionen": "Einbetonieren:1, Aufdübeln:0", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Matte Höhe", "Variable": "P_Matte", "Optionen": "H 1030:22", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Säulen-Typ", "Variable": "P_Saeule", "Optionen": "Klemmhalter:35", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Verzinkt:1.0", "Formel": ""},
+        {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
+        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "(L * P_Matte * F_Faktor) + ((math.ceil(L/Dist)+1) * ((P_Saeule * F_Faktor) + (Ist_Beton * 2 * P_Sack) + ((1-Ist_Beton) * P_Konsole))) + (L * P_Arbeit)"}
+    ]
+    df_matten = pd.DataFrame(matten_data)
+
+    # Zubehör mit Mehrfach-Auswahl Beispiel
+    zub_zaun_data = [
+        {"Typ": "Mehrfach", "Bezeichnung": "Zubehör wählen", "Variable": "P_Art", "Optionen": "Handsender:65, Lichtschranke:145, Blinklicht:95", "Formel": ""},
+        {"Typ": "Preis", "Bezeichnung": "Gesamt", "Variable": "Endpreis", "Optionen": "", "Formel": "P_Art"}
+    ]
+    df_zub_zaun = pd.DataFrame(zub_zaun_data)
+
+    # Andere Blätter als Kopie/Dummy
+    df_gel_flaechig = df_gel_stab.copy()
+    df_gel_glas = df_gel_stab.copy()
+    df_zaun_stab = df_gel_stab.copy()
+    df_zaun_sicht = df_gel_stab.copy()
+    df_tore = df_gel_stab.copy()
+    df_schiebe = df_gel_stab.copy() # Hier könnte man auch Mehrfach einbauen
+    df_draht_mix = df_gel_stab.copy()
+    df_zub_gel = df_zub_zaun.copy()
+    df_zub_draht = df_zub_zaun.copy()
+    df_zub_montage = df_zub_zaun.copy()
+    df_treppe = df_gel_stab.copy()
+    df_edelstahl = df_gel_stab.copy()
+
     try:
         with pd.ExcelWriter(EXCEL_DATEI, engine="openpyxl") as writer:
             df_start.to_excel(writer, sheet_name="Startseite", index=False)
-            dummy = pd.DataFrame([{"Typ":"Preis", "Bezeichnung":"Dummy", "Variable":"X", "Optionen":"", "Formel":"0"}])
-            for blatt in df_start['Blattname']:
-                dummy.to_excel(writer, sheet_name=blatt, index=False)
+            df_gel_stab.to_excel(writer, sheet_name="Brix_Gel_Stab", index=False)
+            df_gel_flaechig.to_excel(writer, sheet_name="Brix_Gel_Flaechig", index=False)
+            df_gel_glas.to_excel(writer, sheet_name="Brix_Gel_Glas", index=False)
+            df_zub_gel.to_excel(writer, sheet_name="Zub_Gel", index=False)
+            df_zaun_stab.to_excel(writer, sheet_name="Brix_Zaun_Stab", index=False)
+            df_zaun_sicht.to_excel(writer, sheet_name="Brix_Zaun_Sicht", index=False)
+            df_tore.to_excel(writer, sheet_name="Brix_Tore", index=False)
+            df_schiebe.to_excel(writer, sheet_name="Brix_Schiebe", index=False)
+            df_zub_zaun.to_excel(writer, sheet_name="Zub_Zaun", index=False)
+            df_matten.to_excel(writer, sheet_name="Draht_Matten", index=False)
+            df_draht_mix.to_excel(writer, sheet_name="Draht_Mix", index=False)
+            df_zub_draht.to_excel(writer, sheet_name="Zub_Draht", index=False)
+            df_treppe.to_excel(writer, sheet_name="Stahl_Treppe", index=False)
+            df_edelstahl.to_excel(writer, sheet_name="Eigen_Edelstahl", index=False)
+            df_zub_montage.to_excel(writer, sheet_name="Zub_Montage", index=False)
         return True
     except Exception as e: return False
 
@@ -97,7 +166,7 @@ if 'zusatzkosten' not in st.session_state:
         "zuschlag_label": "Normal"
     }
 
-# --- 5. PDF ENGINE 1: KUNDE ---
+# --- 5. PDF ENGINE 1: KUNDE (Kostenschätzung) ---
 def clean_text(text):
     if not isinstance(text, str): text = str(text)
     text = text.replace("€", "EUR").replace("–", "-").replace("„", '"').replace("“", '"')
@@ -154,6 +223,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
             details = "\n" + details_raw.replace(",", "\n -").strip()
             if not details.strip().startswith("-"): details = details.replace("\n", "\n - ", 1)
         
+        # Einheitspreis-Logik
         if 'RefMenge' in pos and 'RefEinheit' in pos and pos['RefMenge'] > 0:
             einheit_preis = pos['Einzelpreis'] / float(pos['RefMenge'])
             details += f"\n   (entspricht {einheit_preis:.2f} EUR / {pos['RefEinheit']})"
@@ -169,7 +239,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
         pdf.cell(w_gesamt, row_height, f"{pos['Preis']:.2f}", 1, 1, 'R')
         subtotal += pos['Preis']
 
-    # Montage
+    # Montage & Zuschlag
     zuschlag_wert = 0
     if zuschlag_prozent > 0:
         basis = subtotal + montage_summe + kran_summe
@@ -208,7 +278,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
         pdf.cell(w_gesamt, 8, f"{zuschlag_wert:.2f}", 1, 1, 'R')
         subtotal += zuschlag_wert
 
-    # MWST
+    # MWST & BRUTTO
     netto = subtotal
     mwst_betrag = netto * MWST_SATZ
     brutto = netto + mwst_betrag
@@ -222,6 +292,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
     pdf.set_font("Arial", '', 11)
     pdf.cell(w_desc + w_menge + w_ep, 6, "Summe Netto:", 0, 0, 'R')
     pdf.cell(w_gesamt, 6, f"{netto:.2f} EUR", 0, 1, 'R')
+    
     pdf.cell(w_desc + w_menge + w_ep, 6, f"zzgl. {int(MWST_SATZ*100)}% MwSt:", 0, 0, 'R')
     pdf.cell(w_gesamt, 6, f"{mwst_betrag:.2f} EUR", 0, 1, 'R')
     
@@ -241,7 +312,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
             except Exception as e: pdf.cell(0, 10, f"Fehler: {str(e)}", ln=True)
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 6. PDF ENGINE 2: INTERN ---
+# --- 6. PDF ENGINE 2: INTERN (Fertigungsliste) ---
 class InternalPDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 14)
@@ -281,6 +352,7 @@ def create_internal_pdf(positionen_liste, kunden_dict, zusatzkosten):
             if not params.startswith("-"): params = "  - " + params
             
         full_text = f"{titel} (Parameter):\n{params}"
+        
         if 'MaterialDetails' in pos and pos['MaterialDetails']:
             full_text += "\n\n  >> MATERIAL-BEDARF (Kalkuliert):"
             for mat_item in pos['MaterialDetails']:
@@ -315,7 +387,6 @@ def create_internal_pdf(positionen_liste, kunden_dict, zusatzkosten):
     text_zusatz += f"- Erschwernis: {z_label} ({zuschlag}%)"
     
     pdf.multi_cell(0, 5, clean_text(text_zusatz), 1)
-    
     return pdf.output(dest='S').encode('latin-1')
 
 # --- NAVIGATION ---
@@ -375,7 +446,6 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                             vars_calc[var_name] = opts_dict.get(wahl, 0)
                             desc_parts.append(f"{label}: {wahl}")
                         
-                        # --- NEUES MEHRFACH-FEATURE ---
                         elif typ == 'mehrfach':
                             raw_opts = str(zeile.get('Optionen', '')).split(',')
                             opts_dict = {}; opts_names = []
@@ -415,6 +485,8 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                     if 'L' in vars_calc and vars_calc['L'] > 0:
                                         l = vars_calc['L']
                                         abstand = 1.3 
+                                        
+                                        # FALLBACK LOGIK (Falls Excel nicht up-to-date ist)
                                         if 'Dist' in vars_calc and vars_calc['Dist'] > 0: abstand = vars_calc['Dist']
                                         elif 'Edelstahl' in auswahl_system: abstand = 1.2
                                         elif 'Draht' in auswahl_system: abstand = 2.5
@@ -553,11 +625,9 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             z_label = st.session_state['zusatzkosten']['zuschlag_label']
             
             if st.session_state['positionen'] or m_sum > 0 or k_sum > 0:
-                # 1. KUNDEN PDF
                 pdf_bytes = create_pdf(st.session_state['positionen'], st.session_state['kunden_daten'], fotos, m_sum, k_sum, zeige_details, z_proz, z_label, zuschlag_transparent)
                 st.session_state['fertiges_pdf'] = pdf_bytes
                 
-                # 2. INTERNE PDF
                 pdf_intern = create_internal_pdf(st.session_state['positionen'], st.session_state['kunden_daten'], st.session_state['zusatzkosten'])
                 st.session_state['fertiges_intern_pdf'] = pdf_intern
                 
