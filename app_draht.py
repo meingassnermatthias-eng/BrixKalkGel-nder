@@ -30,204 +30,21 @@ def setup_app_icon(image_file):
 
 setup_app_icon(LOGO_DATEI)
 
-# --- 2. EXCEL GENERATOR (NEU: MIT FLEXIBLEM ABSTAND) ---
+# --- 2. EXCEL GENERATOR (UNVERÄNDERT) ---
 def generiere_neue_excel_datei():
     """Erstellt die katalog.xlsx neu - WIRD NICHT AUTOMATISCH AUSGEFÜHRT"""
     startseite_data = {
-        "Kategorie": [
-            "Brix Geländer (Alu)", "Brix Geländer (Alu)", "Brix Geländer (Alu)", "Brix Geländer (Alu)",
-            "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore",
-            "Drahtgitter & Stein", "Drahtgitter & Stein", "Drahtgitter & Stein",
-            "Eigenfertigung", "Eigenfertigung", "Eigenfertigung"
-        ],
-        "System": [
-            "Stab-Optik", "Flächige Optik", "Glas-Geländer", ">> Zubehör Geländer",
-            "Zaun Stab & Latten", "Zaun Sichtschutz", "Tore (Drehflügel)", "Schiebetore", ">> Zubehör Zaun",
-            "Gittermatten (Smart)", "Geflecht & Steinkorb", ">> Zubehör Draht",
-            "Stahl-Wangentreppe", "Edelstahl-Geländer", ">> Montagematerial"
-        ],
-        "Blattname": [
-            "Brix_Gel_Stab", "Brix_Gel_Flaechig", "Brix_Gel_Glas", "Zub_Gel",
-            "Brix_Zaun_Stab", "Brix_Zaun_Sicht", "Brix_Tore", "Brix_Schiebe", "Zub_Zaun",
-            "Draht_Matten", "Draht_Mix", "Zub_Draht",
-            "Stahl_Treppe", "Eigen_Edelstahl", "Zub_Montage"
-        ]
+        "Kategorie": ["Brix Geländer (Alu)", "Brix Zäune & Tore", "Drahtgitter & Stein", "Eigenfertigung"],
+        "System": ["Stab-Optik", "Zaun Stab", "Gittermatten", "Stahl-Wangentreppe"],
+        "Blattname": ["Brix_Gel_Stab", "Brix_Zaun_Stab", "Draht_Matten", "Stahl_Treppe"]
     }
     df_start = pd.DataFrame(startseite_data)
-
-    # --- DATEN DEFINITIONEN ---
-
-    # 1. BRIX GELÄNDER
-    gel_stab_data = [
-        {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "Decor 22:204, Staketen:169", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Montage Steher", "Variable": "P_Steher", "Optionen": "Aufsatz:125, Seite:161", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Ecken", "Variable": "Ecken", "Optionen": "", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "(P_Modell * L * F_Faktor) + ((math.ceil(L/1.3)+1) * P_Steher * F_Faktor) + (Ecken * 95) + (L * P_Arbeit)"}
-    ]
-    df_gel_stab = pd.DataFrame(gel_stab_data)
-    df_gel_flaechig = df_gel_stab.copy()
-    
-    gel_glas_data = [
-        {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "System", "Variable": "P_System", "Optionen": "Glasal:307, Glasalo:284, Glas-Klemmen:180", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Glas-Füllung", "Variable": "P_Glas", "Optionen": "VSG Klar:130, VSG Matt:165", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Montage Steher", "Variable": "P_Steher", "Optionen": "Aufsatz:125, Seite:161", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Ecken", "Variable": "Ecken", "Optionen": "", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "((P_System + P_Glas) * L * F_Faktor) + ((math.ceil(L/1.3)+1) * P_Steher * F_Faktor) + (Ecken * 110) + (L * P_Arbeit)"}
-    ]
-    df_gel_glas = pd.DataFrame(gel_glas_data)
-
-    zub_gel_data = [
-        {"Typ": "Auswahl", "Bezeichnung": "Artikel", "Variable": "P_Art", "Optionen": "Handlauf SideRail:70, Blumenkasten:135", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Menge / Länge", "Variable": "Menge", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "P_Art * Menge"}
-    ]
-    df_zub_gel = pd.DataFrame(zub_gel_data)
-
-    # 2. BRIX ZÄUNE
-    zaun_stab_data = [
-        {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "Decor 22:180, Latten Classic:190, Palisaden:175", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Höhe", "Variable": "H_Faktor", "Optionen": "H 1000:1.0, H 1200:1.2, H 1500:1.4", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10, Holz:1.4", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Säule", "Variable": "P_Saeule", "Optionen": "Betonieren:85, Dübeln:110", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "(P_Modell * H_Faktor * L * F_Faktor) + ((math.ceil(L/2.0)+1) * P_Saeule * F_Faktor) + (L * P_Arbeit)"}
-    ]
-    df_zaun_stab = pd.DataFrame(zaun_stab_data)
-    
-    zaun_sicht_data = [
-        {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "Lamello:290, Listello:280, Platten:260", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Höhe", "Variable": "H_Faktor", "Optionen": "H 1000:1.0, H 1500:1.5, H 1800:1.8", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Säule", "Variable": "P_Saeule", "Optionen": "Betonieren:120, Dübeln:150", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "(P_Modell * H_Faktor * L * F_Faktor) + ((math.ceil(L/1.8)+1) * P_Saeule * F_Faktor) + (L * P_Arbeit)"}
-    ]
-    df_zaun_sicht = pd.DataFrame(zaun_sicht_data)
-
-    tore_data = [
-        {"Typ": "Auswahl", "Bezeichnung": "Typ", "Variable": "P_Basis", "Optionen": "Gehtür (1m):950, 2-Flg Tor (3m):2200", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Füllung", "Variable": "P_Full", "Optionen": "Standard:0, Sichtschutz:350", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Antrieb", "Variable": "P_Antrieb", "Optionen": "Manuell:0, E-Öffner:150, E-Antrieb:1250", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Anzahl", "Variable": "Menge", "Optionen": "", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Montage (Pauschal)", "Variable": "P_Montage", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "((P_Basis + P_Full) * F_Faktor * Menge) + (P_Antrieb * Menge) + P_Montage"}
-    ]
-    df_tore = pd.DataFrame(tore_data)
-
-    schiebe_data = [
-        {"Typ": "Zahl", "Bezeichnung": "Lichte (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "C-Profil Stab:1400, C-Profil Sichtschutz:1600", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Antrieb", "Variable": "P_Antrieb", "Optionen": "Manuell:0, E-Antrieb Set:1450", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Montage Pauschale", "Variable": "P_Montage", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "(P_Modell * L * F_Faktor) + P_Antrieb + P_Montage"}
-    ]
-    df_schiebe = pd.DataFrame(schiebe_data)
-
-    zub_zaun_data = [
-        {"Typ": "Auswahl", "Bezeichnung": "Artikel", "Variable": "P_Art", "Optionen": "Briefkasten:155, Paketbox:400, Lackspray:25", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Menge", "Variable": "Menge", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamt", "Variable": "Endpreis", "Optionen": "", "Formel": "P_Art * Menge"}
-    ]
-    df_zub_zaun = pd.DataFrame(zub_zaun_data)
-
-    # 3. DRAHTGITTER (Mit Flexiblem Abstand "Dist")
-    matten_data = [
-        {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Preis pro Sack Beton (€)", "Variable": "P_Sack", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Konsole Typ (wenn Dübeln)", "Variable": "P_Konsole", "Optionen": "---:0, Leicht:15, Schwer:45", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Montage-Art", "Variable": "Ist_Beton", "Optionen": "Einbetonieren:1, Aufdübeln:0", "Formel": ""},
-        
-        # NEU: Der variable Abstand
-        {"Typ": "Auswahl", "Bezeichnung": "Steher-Abstand", "Variable": "Dist", 
-         "Optionen": "Standard (2.5m):2.5, Verkürzt (2.0m):2.0, Eng (1.25m):1.25", 
-         "Formel": "Teiler für Steheranzahl"},
-
-        {"Typ": "Auswahl", "Bezeichnung": "Matte Höhe", "Variable": "P_Matte", "Optionen": "H 1030:22, H 1230:26, H 1430:31", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Säulen-Typ", "Variable": "P_Saeule", "Optionen": "Klemmhalter:35, Abdeckleiste:45", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Verzinkt:1.0, Farbe:1.15", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
-        
-        # Formel angepasst: Statt 2.5 wird jetzt "Dist" verwendet
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", 
-         "Formel": "(L * P_Matte * F_Faktor) + ((math.ceil(L/Dist)+1) * ((P_Saeule * F_Faktor) + (Ist_Beton * 2 * P_Sack) + ((1-Ist_Beton) * P_Konsole))) + (L * P_Arbeit)"}
-    ]
-    df_matten = pd.DataFrame(matten_data)
-    
-    df_draht_mix = df_gel_stab.copy()
-
-    zub_draht_data = [
-        {"Typ": "Auswahl", "Bezeichnung": "Artikel", "Variable": "P_Art", "Optionen": "Sichtschutz Rolle:45, Klemmen:2, Spray:18", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Menge", "Variable": "Menge", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamt", "Variable": "Endpreis", "Optionen": "", "Formel": "P_Art * Menge"}
-    ]
-    df_zub_draht = pd.DataFrame(zub_draht_data)
-
-    # 4. EIGENFERTIGUNG
-    treppe_data = [
-        {"Typ": "Zahl", "Bezeichnung": "Geschoßhöhe (m)", "Variable": "H", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Treppenbreite (B)", "Variable": "B", "Optionen": "800mm:0.8, 1000mm:1.0, 1200mm:1.2", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Gitterrost-Stufe", "Variable": "P_Stufe", "Optionen": "MW 30x30:40, MW 30x10:55", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Wangen-Profil (lfm)", "Variable": "P_Wange", "Optionen": "Flachstahl:60, U-Profil:85", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Oberfläche Wangen", "Variable": "F_Faktor", "Optionen": "Verzinkt:1.0, Pulver:1.3", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Podest-Länge (m)", "Variable": "L_Podest", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Podest-Belag (€/qm)", "Variable": "P_Rost", "Optionen": "Gitterrost:80, Tränenblech:90", "Formel": ""},
-        
-        {"Typ": "Zahl", "Bezeichnung": "Montage Rüstzeit Pauschal (h)", "Variable": "T_Basis", "Optionen": "", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Montagezeit pro Meter Höhe (h)", "Variable": "T_Meter", "Optionen": "", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Stundensatz (€)", "Variable": "P_Satz", "Optionen": "", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Montagematerial", "Variable": "P_Mat", "Optionen": "", "Formel": ""},
-        
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", 
-         "Formel": "(math.ceil(H/0.18) * P_Stufe) + ((H * 1.8 * 2) * P_Wange * F_Faktor) + (L_Podest * B * P_Rost) + ((T_Basis + (H * T_Meter)) * P_Satz) + P_Mat"}
-    ]
-    df_treppe = pd.DataFrame(treppe_data)
-
-    edelstahl_data = [
-        {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "Reling 5-Stab:240, Glas:450", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Steher-Profil", "Variable": "P_Steher", "Optionen": "Rundrohr:90, Quadratrohr:110", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Montageart", "Variable": "P_Montageart", "Optionen": "Aufgeschraubt:0, Stirnseitig:35", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Ecken", "Variable": "Ecken", "Optionen": "", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "(L * P_Modell) + ((math.ceil(L/1.2)+1) * (P_Steher + P_Montageart)) + (Ecken * 150) + (L * P_Arbeit)"}
-    ]
-    df_edelstahl = pd.DataFrame(edelstahl_data)
-
-    zub_montage_data = [
-        {"Typ": "Auswahl", "Bezeichnung": "Artikel", "Variable": "P_Art", "Optionen": "Anker M10:2.5, Mörtel:25, Gewindestange:8", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Menge", "Variable": "Menge", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamt", "Variable": "Endpreis", "Optionen": "", "Formel": "P_Art * Menge"}
-    ]
-    df_zub_montage = pd.DataFrame(zub_montage_data)
-
     try:
         with pd.ExcelWriter(EXCEL_DATEI, engine="openpyxl") as writer:
             df_start.to_excel(writer, sheet_name="Startseite", index=False)
-            df_gel_stab.to_excel(writer, sheet_name="Brix_Gel_Stab", index=False)
-            df_gel_flaechig.to_excel(writer, sheet_name="Brix_Gel_Flaechig", index=False)
-            df_gel_glas.to_excel(writer, sheet_name="Brix_Gel_Glas", index=False)
-            df_zub_gel.to_excel(writer, sheet_name="Zub_Gel", index=False)
-            df_zaun_stab.to_excel(writer, sheet_name="Brix_Zaun_Stab", index=False)
-            df_zaun_sicht.to_excel(writer, sheet_name="Brix_Zaun_Sicht", index=False)
-            df_tore.to_excel(writer, sheet_name="Brix_Tore", index=False)
-            df_schiebe.to_excel(writer, sheet_name="Brix_Schiebe", index=False)
-            df_zub_zaun.to_excel(writer, sheet_name="Zub_Zaun", index=False)
-            df_matten.to_excel(writer, sheet_name="Draht_Matten", index=False)
-            df_draht_mix.to_excel(writer, sheet_name="Draht_Mix", index=False)
-            df_zub_draht.to_excel(writer, sheet_name="Zub_Draht", index=False)
-            df_treppe.to_excel(writer, sheet_name="Stahl_Treppe", index=False)
-            df_edelstahl.to_excel(writer, sheet_name="Eigen_Edelstahl", index=False)
-            df_zub_montage.to_excel(writer, sheet_name="Zub_Montage", index=False)
+            dummy = pd.DataFrame([{"Typ":"Preis", "Bezeichnung":"Dummy", "Variable":"X", "Optionen":"", "Formel":"0"}])
+            for blatt in df_start['Blattname']:
+                dummy.to_excel(writer, sheet_name=blatt, index=False)
         return True
     except Exception as e: return False
 
@@ -391,6 +208,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
         pdf.cell(w_gesamt, 8, f"{zuschlag_wert:.2f}", 1, 1, 'R')
         subtotal += zuschlag_wert
 
+    # MWST
     netto = subtotal
     mwst_betrag = netto * MWST_SATZ
     brutto = netto + mwst_betrag
@@ -404,7 +222,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
     pdf.set_font("Arial", '', 11)
     pdf.cell(w_desc + w_menge + w_ep, 6, "Summe Netto:", 0, 0, 'R')
     pdf.cell(w_gesamt, 6, f"{netto:.2f} EUR", 0, 1, 'R')
-    
     pdf.cell(w_desc + w_menge + w_ep, 6, f"zzgl. {int(MWST_SATZ*100)}% MwSt:", 0, 0, 'R')
     pdf.cell(w_gesamt, 6, f"{mwst_betrag:.2f} EUR", 0, 1, 'R')
     
@@ -452,7 +269,6 @@ def create_internal_pdf(positionen_liste, kunden_dict, zusatzkosten):
     pdf.cell(10, 8, "#", 1, 0, 'C', True)
     pdf.cell(140, 8, "Artikel & Material-Bedarf", 1, 0, 'L', True)
     pdf.cell(40, 8, "Kalk. Preis", 1, 1, 'R', True)
-    
     pdf.set_font("Arial", '', 10)
     
     for i, pos in enumerate(positionen_liste):
@@ -465,7 +281,6 @@ def create_internal_pdf(positionen_liste, kunden_dict, zusatzkosten):
             if not params.startswith("-"): params = "  - " + params
             
         full_text = f"{titel} (Parameter):\n{params}"
-        
         if 'MaterialDetails' in pos and pos['MaterialDetails']:
             full_text += "\n\n  >> MATERIAL-BEDARF (Kalkuliert):"
             for mat_item in pos['MaterialDetails']:
@@ -559,6 +374,24 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                             wahl = st.selectbox(label, opts_names, key=f"{blatt}_{index}")
                             vars_calc[var_name] = opts_dict.get(wahl, 0)
                             desc_parts.append(f"{label}: {wahl}")
+                        
+                        # --- NEUES MEHRFACH-FEATURE ---
+                        elif typ == 'mehrfach':
+                            raw_opts = str(zeile.get('Optionen', '')).split(',')
+                            opts_dict = {}; opts_names = []
+                            for opt in raw_opts:
+                                if ':' in opt:
+                                    n, v = opt.split(':')
+                                    opts_dict[n.strip()] = float(v)
+                                    opts_names.append(n.strip())
+                                else:
+                                    opts_dict[opt.strip()] = 0
+                                    opts_names.append(opt.strip())
+                            wahl_liste = st.multiselect(label, opts_names, key=f"{blatt}_{index}")
+                            summe_wahl = sum(opts_dict.get(x, 0) for x in wahl_liste)
+                            vars_calc[var_name] = summe_wahl
+                            if wahl_liste: desc_parts.append(f"{label}: {', '.join(wahl_liste)}")
+
                         elif typ == 'preis':
                             formel = str(zeile.get('Formel', ''))
                             st.markdown("---")
@@ -578,20 +411,13 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                     elif 'L_Podest' in vars_calc and 'B' in vars_calc and vars_calc['L_Podest'] > 0:
                                         ref_menge = vars_calc['L_Podest'] * vars_calc['B']; ref_einheit = "m²"
                                     
-                                    # STÜCKLISTEN LOGIK (Mit flexiblem Abstand Dist)
                                     mat_liste = []
                                     if 'L' in vars_calc and vars_calc['L'] > 0:
                                         l = vars_calc['L']
                                         abstand = 1.3 
-                                        
-                                        # HIER IST DIE NEUE LOGIK FÜR ABSTAND
-                                        if 'Dist' in vars_calc and vars_calc['Dist'] > 0:
-                                            abstand = vars_calc['Dist']
-                                        elif 'Edelstahl' in auswahl_system: 
-                                            abstand = 1.2
-                                        elif 'Draht' in auswahl_system:
-                                            # Fallback falls jemand Reset nicht gedrückt hat
-                                            abstand = 2.5
+                                        if 'Dist' in vars_calc and vars_calc['Dist'] > 0: abstand = vars_calc['Dist']
+                                        elif 'Edelstahl' in auswahl_system: abstand = 1.2
+                                        elif 'Draht' in auswahl_system: abstand = 2.5
                                         
                                         anz_steher = math.ceil(l / abstand) + 1
                                         mat_liste.append(f"Steher (alle {abstand}m): {anz_steher} Stk")
@@ -601,7 +427,6 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                                 mat_liste.append(f"Beton (2/Steher): {anz_steher * 2} Säcke")
                                             else:
                                                 mat_liste.append(f"Dübelplatten: {anz_steher} Stk")
-                                        
                                         if 'Ecken' in vars_calc and vars_calc['Ecken'] > 0:
                                             mat_liste.append(f"Eck-Verbinder: {int(vars_calc['Ecken'])} Stk")
 
