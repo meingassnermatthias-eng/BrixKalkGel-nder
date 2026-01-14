@@ -31,50 +31,16 @@ def setup_app_icon(image_file):
 
 setup_app_icon(LOGO_DATEI)
 
-# --- 2. EXCEL GENERATOR (NUR FÜR RESET) ---
-def generiere_neue_excel_datei():
-    """Erstellt die katalog.xlsx neu - WIRD NUR BEI RESET AUSGEFÜHRT"""
-    startseite_data = {
-        "Kategorie": [
-            "Brix Geländer (Alu)", "Brix Geländer (Alu)", "Brix Geländer (Alu)", "Brix Geländer (Alu)",
-            "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore",
-            "Drahtgitter & Stein", "Drahtgitter & Stein", "Drahtgitter & Stein",
-            "Eigenfertigung", "Eigenfertigung", "Eigenfertigung"
-        ],
-        "System": [
-            "Stab-Optik", "Flächige Optik", "Glas-Geländer", ">> Zubehör Geländer",
-            "Zaun Stab & Latten", "Zaun Sichtschutz", "Tore (Drehflügel)", "Schiebetore", ">> Zubehör Zaun",
-            "Gittermatten (Smart)", "Geflecht & Steinkorb", ">> Zubehör Draht",
-            "Stahl-Wangentreppe", "Edelstahl-Geländer", ">> Montagematerial"
-        ],
-        "Blattname": [
-            "Brix_Gel_Stab", "Brix_Gel_Flaechig", "Brix_Gel_Glas", "Zub_Gel",
-            "Brix_Zaun_Stab", "Brix_Zaun_Sicht", "Brix_Tore", "Brix_Schiebe", "Zub_Zaun",
-            "Draht_Matten", "Draht_Mix", "Zub_Draht",
-            "Stahl_Treppe", "Eigen_Edelstahl", "Zub_Montage"
-        ]
-    }
-    df_start = pd.DataFrame(startseite_data)
-
-    # Dummies für Struktur
-    dummy_data = [{"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""}, {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "0"}]
-    df_dummy = pd.DataFrame(dummy_data)
-
-    try:
-        with pd.ExcelWriter(EXCEL_DATEI, engine="openpyxl") as writer:
-            df_start.to_excel(writer, sheet_name="Startseite", index=False)
-            for blatt in df_start['Blattname']:
-                df_dummy.to_excel(writer, sheet_name=blatt, index=False)
-        return True
-    except Exception as e: return False
-
-# --- 3. HELPER (Mit Sicherheits-Checks) ---
+# --- 2. HELPER (Mit Robustheits-Garantie) ---
 def clean_df_columns(df):
     if df is None: return pd.DataFrame()
     if not df.empty: 
         df.columns = df.columns.str.strip()
         rename_map = {'Formel / Info': 'Formel', 'Formel/Info': 'Formel', 'Info': 'Formel'}
         df.rename(columns=rename_map, inplace=True)
+        # Leere Zeilen rauswerfen (wo Variable leer ist)
+        if 'Variable' in df.columns:
+            df = df.dropna(subset=['Variable'])
     return df
 
 def lade_startseite():
@@ -102,7 +68,8 @@ def speichere_excel(df, blatt_name):
         return True
     except: return False
 
-# --- 4. SESSION STATE (Selbstheilend) ---
+# --- 3. SESSION STATE (Aggressive Initialisierung) ---
+# Wir prüfen, ob die Schlüssel existieren UND ob sie None sind.
 if 'positionen' not in st.session_state or st.session_state['positionen'] is None: 
     st.session_state['positionen'] = []
 
@@ -112,18 +79,20 @@ if 'kunden_daten' not in st.session_state or st.session_state['kunden_daten'] is
 if 'fertiges_pdf' not in st.session_state: st.session_state['fertiges_pdf'] = None
 if 'fertiges_intern_pdf' not in st.session_state: st.session_state['fertiges_intern_pdf'] = None
 
-# WICHTIG: Repariert kaputte Zusatzkosten
+# Zusatzkosten reparieren falls kaputt
+default_zk = {
+    "kran": 0.0, "montage_mann": 2, "montage_std": 0.0, "montage_satz": 65.0,
+    "zuschlag_prozent": 0.0, "zuschlag_label": "Normal"
+}
 if 'zusatzkosten' not in st.session_state or st.session_state['zusatzkosten'] is None:
-    st.session_state['zusatzkosten'] = {
-        "kran": 0.0, 
-        "montage_mann": 2, 
-        "montage_std": 0.0, 
-        "montage_satz": 65.0,
-        "zuschlag_prozent": 0.0,
-        "zuschlag_label": "Normal"
-    }
+    st.session_state['zusatzkosten'] = default_zk
+else:
+    # Prüfen ob alle Keys da sind
+    for k, v in default_zk.items():
+        if k not in st.session_state['zusatzkosten']:
+            st.session_state['zusatzkosten'][k] = v
 
-# --- 5. PDF ENGINE 1: KUNDE ---
+# --- 4. PDF ENGINES ---
 def clean_text(text):
     if text is None: return ""
     if not isinstance(text, str): text = str(text)
@@ -199,7 +168,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
         pdf.cell(w_gesamt, row_height, f"{pos.get('Preis', 0):.2f}", 1, 1, 'R')
         subtotal += pos.get('Preis', 0)
 
-    # Zusatzkosten
     zuschlag_wert = 0
     if zuschlag_prozent > 0:
         basis = subtotal + montage_summe + kran_summe
@@ -269,7 +237,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
             except: pass
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 6. PDF ENGINE 2: INTERN ---
 class InternalPDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 14)
@@ -331,7 +298,6 @@ def create_internal_pdf(positionen_liste, kunden_dict, zusatzkosten):
     pdf.cell(0, 8, "Zusatzkosten-Check:", 0, 1, 'L')
     pdf.set_font("Arial", '', 10)
     
-    # Safe dict access
     m_mann = zusatzkosten.get('montage_mann', 2)
     m_std = zusatzkosten.get('montage_std', 0)
     m_satz = zusatzkosten.get('montage_satz', 65)
@@ -350,13 +316,11 @@ def create_internal_pdf(positionen_liste, kunden_dict, zusatzkosten):
 st.sidebar.header("Navigation")
 index_df = lade_startseite()
 
-# Safe index_df checking
+katalog_items = []
 if index_df is not None and not index_df.empty and 'Kategorie' in index_df.columns:
     kategorien = index_df['Kategorie'].unique()
     wahl_kategorie = st.sidebar.selectbox("Filter Kategorie:", kategorien)
     katalog_items = index_df[index_df['Kategorie'] == wahl_kategorie]['System'].tolist()
-else:
-    katalog_items = []
 
 menue_punkt = st.sidebar.radio("Gehe zu:", ["📂 Konfigurator / Katalog", "🛒 Warenkorb / Abschluss", "🔐 Admin"])
 st.sidebar.markdown("---")
@@ -370,7 +334,6 @@ if menue_punkt == "📂 Konfigurator / Katalog":
         row = pd.DataFrame()
         if index_df is not None and not index_df.empty:
             row = index_df[(index_df['System'] == auswahl_system)]
-            # Falls Kategorie auch filtert, hier verfeinern
             if 'Kategorie' in index_df.columns and 'wahl_kategorie' in locals():
                 row = row[row['Kategorie'] == wahl_kategorie]
             
@@ -380,58 +343,64 @@ if menue_punkt == "📂 Konfigurator / Katalog":
             col_konfig, col_mini_cart = st.columns([2, 1])
             with col_konfig:
                 st.subheader(f"Konfiguration: {auswahl_system}")
+                
+                # --- FEHLER-FÄNGER BLOCK ---
                 if df_config is None or df_config.empty: 
                     st.warning("Katalog-Blatt ist leer oder nicht gefunden.")
                 elif 'Formel' not in df_config.columns: 
                     st.error("Fehler: Spalte 'Formel' fehlt in Excel.")
                 else:
-                    vars_calc = {}; desc_parts = []
-                    for index, zeile in df_config.iterrows():
-                        typ = str(zeile.get('Typ', '')).strip().lower()
-                        label = str(zeile.get('Bezeichnung', 'Unbenannt'))
-                        var_name = str(zeile.get('Variable', '')).strip()
-                        
-                        if typ == 'zahl':
-                            val = st.number_input(label, value=0.0, step=1.0, key=f"{blatt}_{index}")
-                            vars_calc[var_name] = val
-                            if val > 0: desc_parts.append(f"{label}: {val}")
-                        elif typ == 'auswahl':
-                            raw_opts = str(zeile.get('Optionen', '')).split(',')
-                            opts_dict = {}; opts_names = []
-                            for opt in raw_opts:
-                                if ':' in opt:
-                                    n, v = opt.split(':')
-                                    try: opts_dict[n.strip()] = float(v)
-                                    except: opts_dict[n.strip()] = 0
-                                    opts_names.append(n.strip())
-                                else:
-                                    opts_dict[opt.strip()] = 0
-                                    opts_names.append(opt.strip())
-                            wahl = st.selectbox(label, opts_names, key=f"{blatt}_{index}")
-                            vars_calc[var_name] = opts_dict.get(wahl, 0)
-                            desc_parts.append(f"{label}: {wahl}")
-                        
-                        elif typ == 'mehrfach':
-                            raw_opts = str(zeile.get('Optionen', '')).split(',')
-                            opts_dict = {}; opts_names = []
-                            for opt in raw_opts:
-                                if ':' in opt:
-                                    n, v = opt.split(':')
-                                    try: opts_dict[n.strip()] = float(v)
-                                    except: opts_dict[n.strip()] = 0
-                                    opts_names.append(n.strip())
-                                else:
-                                    opts_dict[opt.strip()] = 0
-                                    opts_names.append(opt.strip())
-                            wahl_liste = st.multiselect(label, opts_names, key=f"{blatt}_{index}")
-                            summe_wahl = sum(opts_dict.get(x, 0) for x in wahl_liste)
-                            vars_calc[var_name] = summe_wahl
-                            if wahl_liste: desc_parts.append(f"{label}: {', '.join(wahl_liste)}")
+                    try:
+                        vars_calc = {}; desc_parts = []
+                        for index, zeile in df_config.iterrows():
+                            # Sicherheits-Check für Zeilen
+                            if pd.isna(zeile.get('Typ')): continue 
+                            
+                            typ = str(zeile.get('Typ', '')).strip().lower()
+                            label = str(zeile.get('Bezeichnung', 'Unbenannt'))
+                            var_name = str(zeile.get('Variable', '')).strip()
+                            
+                            if typ == 'zahl':
+                                val = st.number_input(label, value=0.0, step=1.0, key=f"{blatt}_{index}")
+                                vars_calc[var_name] = val
+                                if val > 0: desc_parts.append(f"{label}: {val}")
+                            
+                            elif typ == 'auswahl':
+                                raw_opts = str(zeile.get('Optionen', '')).split(',')
+                                opts_dict = {}; opts_names = []
+                                for opt in raw_opts:
+                                    if ':' in opt:
+                                        n, v = opt.split(':')
+                                        try: opts_dict[n.strip()] = float(v)
+                                        except: opts_dict[n.strip()] = 0
+                                        opts_names.append(n.strip())
+                                    else:
+                                        opts_dict[opt.strip()] = 0
+                                        opts_names.append(opt.strip())
+                                wahl = st.selectbox(label, opts_names, key=f"{blatt}_{index}")
+                                vars_calc[var_name] = opts_dict.get(wahl, 0)
+                                desc_parts.append(f"{label}: {wahl}")
+                            
+                            elif typ == 'mehrfach':
+                                raw_opts = str(zeile.get('Optionen', '')).split(',')
+                                opts_dict = {}; opts_names = []
+                                for opt in raw_opts:
+                                    if ':' in opt:
+                                        n, v = opt.split(':')
+                                        try: opts_dict[n.strip()] = float(v)
+                                        except: opts_dict[n.strip()] = 0
+                                        opts_names.append(n.strip())
+                                    else:
+                                        opts_dict[opt.strip()] = 0
+                                        opts_names.append(opt.strip())
+                                wahl_liste = st.multiselect(label, opts_names, key=f"{blatt}_{index}")
+                                summe_wahl = sum(opts_dict.get(x, 0) for x in wahl_liste)
+                                vars_calc[var_name] = summe_wahl
+                                if wahl_liste: desc_parts.append(f"{label}: {', '.join(wahl_liste)}")
 
-                        elif typ == 'preis':
-                            formel = str(zeile.get('Formel', ''))
-                            st.markdown("---")
-                            try:
+                            elif typ == 'preis':
+                                formel = str(zeile.get('Formel', ''))
+                                st.markdown("---")
                                 safe_env = {"__builtins__": None, "math": math, "round": round, "int": int, "float": float}
                                 safe_env.update(vars_calc)
                                 preis = eval(formel, safe_env)
@@ -480,7 +449,10 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                         "MaterialDetails": mat_liste
                                     })
                                     st.success("Hinzugefügt!")
-                            except Exception as e: st.error(f"Fehler: {e}")
+                    except Exception as e:
+                        st.error(f"⚠️ Fehler im Blatt '{blatt}': {str(e)}")
+                        st.info("Tipp: Überprüfe die Excel-Datei auf leere Zeilen oder Schreibfehler bei Variablen.")
+
             with col_mini_cart:
                 st.info("🛒 Schnell-Check")
                 if st.session_state['positionen']:
@@ -518,10 +490,12 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             st.markdown("---")
             
             total_artikel = sum(p.get('Preis',0) for p in st.session_state['positionen'])
-            m_sum = st.session_state['zusatzkosten'].get('montage_mann', 0) * st.session_state['zusatzkosten'].get('montage_std', 0) * st.session_state['zusatzkosten'].get('montage_satz', 0)
-            k_sum = st.session_state['zusatzkosten'].get('kran', 0)
+            # Safe Access
+            zk = st.session_state.get('zusatzkosten', {})
+            m_sum = zk.get('montage_mann',0) * zk.get('montage_std',0) * zk.get('montage_satz',0)
+            k_sum = zk.get('kran',0)
+            z_proz = zk.get('zuschlag_prozent',0)
             
-            z_proz = st.session_state['zusatzkosten'].get('zuschlag_prozent', 0)
             basis = total_artikel + m_sum + k_sum
             zuschlag_wert = basis * (z_proz / 100.0)
             end_summe = basis + zuschlag_wert
@@ -531,7 +505,7 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             
             if z_proz > 0:
                 st.write(f"---")
-                label = st.session_state['zusatzkosten'].get('zuschlag_label', 'Normal')
+                label = zk.get('zuschlag_label', 'Normal')
                 st.write(f"➕ Erschwernis ({label}): **{zuschlag_wert:.2f} €**")
                 
             st.markdown(f"### Netto: {end_summe:.2f} €")
@@ -544,8 +518,10 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
         with st.expander("🏗️ Montage & Zusatzkosten", expanded=True):
             st.write("**Montage-Rechner**")
             c_m1, c_m2, c_m3 = st.columns(3)
-            # Safe init
+            # Safe init / get
+            if 'zusatzkosten' not in st.session_state: st.session_state['zusatzkosten'] = {}
             zk = st.session_state['zusatzkosten']
+            
             st.session_state['zusatzkosten']['montage_mann'] = c_m1.number_input("Mann", value=int(zk.get('montage_mann', 2)), step=1)
             st.session_state['zusatzkosten']['montage_std'] = c_m2.number_input("Std", value=float(zk.get('montage_std', 0.0)), step=1.0)
             st.session_state['zusatzkosten']['montage_satz'] = c_m3.number_input("Satz €", value=float(zk.get('montage_satz', 65.0)), step=5.0)
