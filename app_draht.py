@@ -10,7 +10,7 @@ from datetime import datetime
 # --- 1. SETUP & KONFIGURATION ---
 LOGO_DATEI = "Meingassner Metalltechnik 2023.png"
 EXCEL_DATEI = "katalog.xlsx"
-MWST_SATZ = 0.20  # 20% Mehrwertsteuer (hier ändern falls nötig)
+MWST_SATZ = 0.20  # 20% MwSt
 
 st.set_page_config(page_title="Meingassner App", layout="wide", page_icon=LOGO_DATEI)
 
@@ -33,7 +33,6 @@ setup_app_icon(LOGO_DATEI)
 # --- 2. EXCEL GENERATOR (UNVERÄNDERT) ---
 def generiere_neue_excel_datei():
     """Erstellt die katalog.xlsx neu - WIRD NICHT AUTOMATISCH AUSGEFÜHRT"""
-    # ... (Struktur wie in V6/V7 - hier nur gekürzt dargestellt, damit der Code läuft)
     startseite_data = {
         "Kategorie": ["Brix Geländer (Alu)", "Brix Zäune & Tore", "Drahtgitter & Stein", "Eigenfertigung"],
         "System": ["Stab-Optik", "Zaun Stab", "Gittermatten", "Stahl-Wangentreppe"],
@@ -44,7 +43,6 @@ def generiere_neue_excel_datei():
         with pd.ExcelWriter(EXCEL_DATEI, engine="openpyxl") as writer:
             df_start.to_excel(writer, sheet_name="Startseite", index=False)
             dummy = pd.DataFrame([{"Typ":"Preis", "Bezeichnung":"Dummy", "Variable":"X", "Optionen":"", "Formel":"0"}])
-            # Erstellt nur Dummies falls Datei weg ist. Deine echte Datei bleibt erhalten!
             for blatt in df_start['Blattname']:
                 dummy.to_excel(writer, sheet_name=blatt, index=False)
         return True
@@ -98,7 +96,7 @@ if 'zusatzkosten' not in st.session_state:
         "zuschlag_label": "Normal"
     }
 
-# --- 5. PDF ENGINE (MIT MWST & EINHEITSPREISEN) ---
+# --- 5. PDF ENGINE (KORRIGIERT: OHNE "ANGEBOT") ---
 def clean_text(text):
     if not isinstance(text, str): text = str(text)
     text = text.replace("€", "EUR").replace("–", "-").replace("„", '"').replace("“", '"')
@@ -109,7 +107,8 @@ class PDF(FPDF):
         if os.path.exists(LOGO_DATEI): self.image(LOGO_DATEI, 10, 8, 60)
         self.set_font('Arial', 'B', 16)
         heute = datetime.now().strftime("%d.%m.%Y")
-        titel = f"Angebot / Kostenschätzung {heute}"
+        # HIER GEÄNDERT: Wieder zurück auf Kostenschätzung
+        titel = f"Kostenschätzung vom {heute}"
         self.cell(0, 18, clean_text(titel), 0, 1, 'R')
         self.ln(10)
     def footer(self):
@@ -159,11 +158,9 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
             details = "\n" + details_raw.replace(",", "\n -").strip()
             if not details.strip().startswith("-"): details = details.replace("\n", "\n - ", 1)
         
-        # --- NEU: EINHEITSPREIS ANZEIGE ---
-        # Wenn wir Referenzdaten haben, berechnen wir den Preis pro Meter/m²
+        # Einheitspreis-Logik
         if 'RefMenge' in pos and 'RefEinheit' in pos and pos['RefMenge'] > 0:
             einheit_preis = pos['Einzelpreis'] / float(pos['RefMenge'])
-            # Zeige dies als Info im Text an
             details += f"\n   (entspricht {einheit_preis:.2f} EUR / {pos['RefEinheit']})"
 
         final_desc_text = clean_text(f"{main_title}{details}")
@@ -177,7 +174,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
         pdf.cell(w_gesamt, row_height, f"{pos['Preis']:.2f}", 1, 1, 'R')
         subtotal += pos['Preis']
 
-    # Montage
+    # Montage & Zuschlag Logik
     zuschlag_wert = 0
     if zuschlag_prozent > 0:
         basis = subtotal + montage_summe + kran_summe
@@ -216,28 +213,24 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
         pdf.cell(w_gesamt, 8, f"{zuschlag_wert:.2f}", 1, 1, 'R')
         subtotal += zuschlag_wert
 
-    # --- MWST BERECHNUNG ---
+    # MWST
     netto = subtotal
     mwst_betrag = netto * MWST_SATZ
     brutto = netto + mwst_betrag
 
     pdf.ln(2)
     pdf.set_font("Arial", 'B', 12)
-    # Strich
     pdf.cell(w_desc + w_menge + w_ep, 0, "", 0, 0, 'R')
     pdf.line(pdf.get_x() + w_desc + w_menge + w_ep, pdf.get_y(), pdf.get_x() + w_desc + w_menge + w_ep + w_gesamt, pdf.get_y())
     pdf.ln(2)
     
-    # Netto
     pdf.set_font("Arial", '', 11)
     pdf.cell(w_desc + w_menge + w_ep, 6, "Summe Netto:", 0, 0, 'R')
     pdf.cell(w_gesamt, 6, f"{netto:.2f} EUR", 0, 1, 'R')
     
-    # MwSt
     pdf.cell(w_desc + w_menge + w_ep, 6, f"zzgl. {int(MWST_SATZ*100)}% MwSt:", 0, 0, 'R')
     pdf.cell(w_gesamt, 6, f"{mwst_betrag:.2f} EUR", 0, 1, 'R')
     
-    # Brutto Fett
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(w_desc + w_menge + w_ep, 10, "GESAMTSUMME BRUTTO:", 0, 0, 'R')
     pdf.cell(w_gesamt, 10, f"{brutto:.2f} EUR", 1, 1, 'R')
@@ -321,29 +314,20 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                 if st.button("In den Warenkorb", type="primary"):
                                     full_desc = f"{auswahl_system} | " + ", ".join(desc_parts)
                                     
-                                    # --- NEU: ERKENNE DIE MENGEN-EINHEIT (lfm / m²) ---
-                                    # Wir versuchen zu raten, was die Bezugsgröße ist
+                                    # Einheitspreis Erkennung
                                     ref_menge = 1.0
                                     ref_einheit = "Stk"
-                                    
                                     if 'L' in vars_calc and vars_calc['L'] > 0:
-                                        ref_menge = vars_calc['L']
-                                        ref_einheit = "lfm"
+                                        ref_menge = vars_calc['L']; ref_einheit = "lfm"
                                     elif 'H' in vars_calc and vars_calc['H'] > 0:
-                                        # Bei Treppen ist oft die Höhe die Bezugsgröße
-                                        ref_menge = vars_calc['H']
-                                        ref_einheit = "lfm Höhe"
+                                        ref_menge = vars_calc['H']; ref_einheit = "lfm Höhe"
                                     elif 'L_Podest' in vars_calc and 'B' in vars_calc and vars_calc['L_Podest'] > 0:
-                                        ref_menge = vars_calc['L_Podest'] * vars_calc['B']
-                                        ref_einheit = "m²"
+                                        ref_menge = vars_calc['L_Podest'] * vars_calc['B']; ref_einheit = "m²"
                                     
                                     st.session_state['positionen'].append({
-                                        "Beschreibung": full_desc, 
-                                        "Menge": 1.0, 
-                                        "Einzelpreis": preis, 
-                                        "Preis": preis,
-                                        "RefMenge": ref_menge,
-                                        "RefEinheit": ref_einheit
+                                        "Beschreibung": full_desc, "Menge": 1.0, 
+                                        "Einzelpreis": preis, "Preis": preis,
+                                        "RefMenge": ref_menge, "RefEinheit": ref_einheit
                                     })
                                     st.success("Hinzugefügt!")
                             except Exception as e: st.error(f"Fehler: {e}")
@@ -429,7 +413,6 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             st.session_state['zusatzkosten']['zuschlag_prozent'] = stufen[wahl_schwierigkeit]
             st.session_state['zusatzkosten']['zuschlag_label'] = wahl_schwierigkeit
             
-            # Transparenz-Knopf
             if st.session_state['zusatzkosten']['zuschlag_prozent'] > 0:
                 zuschlag_transparent = st.checkbox("Auf PDF ausweisen?", value=True, help="Häkchen WEG = Aufschlag wird unsichtbar in Montage eingerechnet")
             else:
@@ -468,7 +451,7 @@ elif menue_punkt == "🔐 Admin":
     st.title("Admin")
     pw = st.text_input("Passwort:", type="password")
     if pw == "1234":
-        st.error("ACHTUNG: Reset löscht alle manuellen Excel-Änderungen!")
+        st.error("ACHTUNG: Reset löscht alles!")
         if st.button("🚀 Katalog-Datei neu erstellen (Reset)", type="primary"):
             if generiere_neue_excel_datei(): st.success("Neu erstellt!"); st.cache_data.clear()
         st.markdown("---")
