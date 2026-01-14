@@ -85,7 +85,7 @@ if 'positionen' not in st.session_state: st.session_state['positionen'] = []
 if 'kunden_daten' not in st.session_state: 
     st.session_state['kunden_daten'] = {"Name": "", "Strasse": "", "Ort": "", "Tel": "", "Email": "", "Notiz": ""}
 if 'fertiges_pdf' not in st.session_state: st.session_state['fertiges_pdf'] = None
-if 'fertiges_intern_pdf' not in st.session_state: st.session_state['fertiges_intern_pdf'] = None # NEU
+if 'fertiges_intern_pdf' not in st.session_state: st.session_state['fertiges_intern_pdf'] = None
 
 if 'zusatzkosten' not in st.session_state:
     st.session_state['zusatzkosten'] = {
@@ -118,9 +118,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
     pdf = PDF()
     pdf.alias_nb_pages()
     pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.set_font("Arial", size=10)
-    pdf.ln(5)
     
     # Kundendaten
     pdf.ln(10); pdf.set_font("Arial", 'B', 12); pdf.cell(0, 6, "Kundeninformation:", ln=True); pdf.set_font("Arial", size=10)
@@ -147,7 +144,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
     pdf.set_font("Arial", size=10)
     
     subtotal = 0
-    # Artikel Loop
     for pos in positionen_liste:
         raw_desc = str(pos['Beschreibung'])
         parts = raw_desc.split("|")
@@ -158,7 +154,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
             details = "\n" + details_raw.replace(",", "\n -").strip()
             if not details.strip().startswith("-"): details = details.replace("\n", "\n - ", 1)
         
-        # Einheitspreis-Logik
+        # Einheitspreis-Logik (Kunde)
         if 'RefMenge' in pos and 'RefEinheit' in pos and pos['RefMenge'] > 0:
             einheit_preis = pos['Einzelpreis'] / float(pos['RefMenge'])
             details += f"\n   (entspricht {einheit_preis:.2f} EUR / {pos['RefEinheit']})"
@@ -247,7 +243,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
             except Exception as e: pdf.cell(0, 10, f"Fehler: {str(e)}", ln=True)
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 6. PDF ENGINE 2: INTERN (Fertigungsliste) ---
+# --- 6. PDF ENGINE 2: INTERN (Fertigungsliste MIT STÜCKLISTE) ---
 class InternalPDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 14)
@@ -275,41 +271,43 @@ def create_internal_pdf(positionen_liste, kunden_dict, zusatzkosten):
     pdf.set_font("Arial", 'B', 10)
     pdf.set_fill_color(220, 220, 220)
     pdf.cell(10, 8, "#", 1, 0, 'C', True)
-    pdf.cell(140, 8, "Artikel & Parameter (für ERP-Eingabe)", 1, 0, 'L', True)
+    pdf.cell(140, 8, "Artikel & Material-Bedarf", 1, 0, 'L', True)
     pdf.cell(40, 8, "Kalk. Preis", 1, 1, 'R', True)
     
     pdf.set_font("Arial", '', 10)
     
-    total_netto = 0
     for i, pos in enumerate(positionen_liste):
-        # Wir zerlegen die Beschreibung für bessere Lesbarkeit
+        # 1. Parameter Beschreibung
         raw_desc = str(pos['Beschreibung'])
         parts = raw_desc.split("|")
         titel = parts[0].strip()
         params = ""
         if len(parts) > 1:
-            # Ersetze Kommas durch Zeilenumbrüche für saubere Liste
             params = parts[1].replace(", ", "\n  - ").strip()
             if not params.startswith("-"): params = "  - " + params
             
-        full_text = f"{titel}\n{params}"
+        full_text = f"{titel} (Parameter):\n{params}"
         
-        # Berechne Höhe der Zeile
+        # 2. Material Liste (Das ist neu!)
+        if 'MaterialDetails' in pos and pos['MaterialDetails']:
+            full_text += "\n\n  >> MATERIAL-BEDARF (Kalkuliert):"
+            for mat_item in pos['MaterialDetails']:
+                full_text += f"\n  -> {mat_item}"
+
+        # Zeilenhöhe
         x_start = pdf.get_x()
         y_start = pdf.get_y()
-        pdf.set_x(20) # Einrücken für Text
+        pdf.set_x(20)
         pdf.multi_cell(140, 5, clean_text(full_text), border=0)
         y_end = pdf.get_y()
         row_height = y_end - y_start
         
-        # Zeichne Rahmen und andere Zellen
+        # Rahmen
         pdf.set_xy(x_start, y_start)
         pdf.cell(10, row_height, str(i+1), 1, 0, 'C')
-        pdf.cell(140, row_height, "", 1, 0) # Rahmen für Text
+        pdf.cell(140, row_height, "", 1, 0)
         pdf.cell(40, row_height, f"{pos['Preis']:.2f}", 1, 1, 'R')
         
-        total_netto += pos['Preis']
-
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 10)
     pdf.cell(0, 8, "Zusatzkosten-Check:", 0, 1, 'L')
@@ -397,9 +395,8 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                 if st.button("In den Warenkorb", type="primary"):
                                     full_desc = f"{auswahl_system} | " + ", ".join(desc_parts)
                                     
-                                    # Einheitspreis Erkennung
-                                    ref_menge = 1.0
-                                    ref_einheit = "Stk"
+                                    # 1. Einheitspreis
+                                    ref_menge = 1.0; ref_einheit = "Stk"
                                     if 'L' in vars_calc and vars_calc['L'] > 0:
                                         ref_menge = vars_calc['L']; ref_einheit = "lfm"
                                     elif 'H' in vars_calc and vars_calc['H'] > 0:
@@ -407,10 +404,43 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                     elif 'L_Podest' in vars_calc and 'B' in vars_calc and vars_calc['L_Podest'] > 0:
                                         ref_menge = vars_calc['L_Podest'] * vars_calc['B']; ref_einheit = "m²"
                                     
+                                    # 2. Material-Ermittlung (Logik für Internes PDF)
+                                    mat_liste = []
+                                    # Generelle Logik basierend auf L (Zäune/Geländer)
+                                    if 'L' in vars_calc and vars_calc['L'] > 0:
+                                        l = vars_calc['L']
+                                        # Steher-Abstand schätzen
+                                        abstand = 1.3 # Standard Brix
+                                        if 'Draht' in auswahl_system or 'Matten' in auswahl_system: abstand = 2.5
+                                        elif 'Edelstahl' in auswahl_system: abstand = 1.2
+                                        
+                                        anz_steher = math.ceil(l / abstand) + 1
+                                        mat_liste.append(f"Steher (ca. alle {abstand}m): {anz_steher} Stk")
+                                        
+                                        # Draht spezifisch
+                                        if 'Ist_Beton' in vars_calc:
+                                            if vars_calc['Ist_Beton'] == 1:
+                                                mat_liste.append(f"Beton (2/Steher): {anz_steher * 2} Säcke")
+                                            else:
+                                                mat_liste.append(f"Dübelplatten: {anz_steher} Stk")
+                                        
+                                        # Ecken
+                                        if 'Ecken' in vars_calc and vars_calc['Ecken'] > 0:
+                                            mat_liste.append(f"Eck-Verbinder/Steher: {int(vars_calc['Ecken'])} Stk")
+
+                                    # Logik für Treppen
+                                    if 'H' in vars_calc and vars_calc['H'] > 0:
+                                        h = vars_calc['H']
+                                        stufen = math.ceil(h / 0.18)
+                                        wangen_lfm = h * 1.8 * 2
+                                        mat_liste.append(f"Stufen (H/18cm): {stufen} Stk")
+                                        mat_liste.append(f"Wangen-Profil: ca. {wangen_lfm:.2f} lfm")
+
                                     st.session_state['positionen'].append({
                                         "Beschreibung": full_desc, "Menge": 1.0, 
                                         "Einzelpreis": preis, "Preis": preis,
-                                        "RefMenge": ref_menge, "RefEinheit": ref_einheit
+                                        "RefMenge": ref_menge, "RefEinheit": ref_einheit,
+                                        "MaterialDetails": mat_liste
                                     })
                                     st.success("Hinzugefügt!")
                             except Exception as e: st.error(f"Fehler: {e}")
