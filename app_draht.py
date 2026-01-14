@@ -29,39 +29,38 @@ def setup_app_icon(image_file):
 
 setup_app_icon(LOGO_DATEI)
 
-# --- 2. EXCEL GENERATOR (MIT KATEGORIEN) ---
+# --- 2. EXCEL GENERATOR (MIT SPEZIAL-ZUBEHÖR) ---
 def generiere_neue_excel_datei():
-    """Erstellt die katalog.xlsx mit KATEGORIEN neu"""
+    """Erstellt die katalog.xlsx mit KATEGORIEN und EIGENEM ZUBEHÖR neu"""
     
-    # NEU: Startseite hat jetzt 3 Spalten!
+    # STARTSEITE MIT NEUER STRUKTUR
     startseite_data = {
         "Kategorie": [
-            "Brix Geländer (Alu)", "Brix Geländer (Alu)", "Brix Geländer (Alu)",
-            "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore",
-            "Drahtgitter & Stein", "Drahtgitter & Stein",
-            "Eigenfertigung", "Eigenfertigung",
-            "Zubehör"
+            # BRIX GELÄNDER
+            "Brix Geländer (Alu)", "Brix Geländer (Alu)", "Brix Geländer (Alu)", "Brix Geländer (Alu)",
+            # BRIX ZÄUNE
+            "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore",
+            # DRAHT
+            "Drahtgitter & Stein", "Drahtgitter & Stein", "Drahtgitter & Stein",
+            # EIGEN
+            "Eigenfertigung", "Eigenfertigung", "Eigenfertigung"
         ],
         "System": [
-            "Stab-Optik", "Flächige Optik", "Glas-Geländer",
-            "Zaun Stab & Latten", "Zaun Sichtschutz", "Tore (Drehflügel)", "Schiebetore",
-            "Gittermatten (Smart)", "Geflecht & Steinkorb",
-            "Stahl-Wangentreppe", "Edelstahl-Geländer",
-            "Allg. Zubehör"
+            "Stab-Optik", "Flächige Optik", "Glas-Geländer", ">> Zubehör Geländer (Blumenkasten...)",
+            "Zaun Stab & Latten", "Zaun Sichtschutz", "Tore (Drehflügel)", "Schiebetore", ">> Zubehör Zaun (Briefkasten...)",
+            "Gittermatten (Smart)", "Geflecht & Steinkorb", ">> Zubehör Draht (Sichtschutz...)",
+            "Stahl-Wangentreppe", "Edelstahl-Geländer", ">> Montagematerial (Dübel...)"
         ],
         "Blattname": [
-            "Brix_Gel_Stab", "Brix_Gel_Flaechig", "Brix_Gel_Glas",
-            "Brix_Zaun_Stab", "Brix_Zaun_Sicht", "Brix_Tore", "Brix_Schiebe",
-            "Draht_Matten", "Draht_Mix",
-            "Stahl_Treppe", "Eigen_Edelstahl",
-            "Extras"
+            "Brix_Gel_Stab", "Brix_Gel_Flaechig", "Brix_Gel_Glas", "Zub_Gel",
+            "Brix_Zaun_Stab", "Brix_Zaun_Sicht", "Brix_Tore", "Brix_Schiebe", "Zub_Zaun",
+            "Draht_Matten", "Draht_Mix", "Zub_Draht",
+            "Stahl_Treppe", "Eigen_Edelstahl", "Zub_Montage"
         ]
     }
     df_start = pd.DataFrame(startseite_data)
 
-    # --- PRODUKT BLÄTTER (Inhalt wie gehabt) ---
-    
-    # Brix Geländer
+    # --- 1. BRIX GELÄNDER + ZUBEHÖR ---
     gel_stab_data = [
         {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
         {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "Decor 22:204, Staketen:169", "Formel": ""},
@@ -86,7 +85,18 @@ def generiere_neue_excel_datei():
     ]
     df_gel_glas = pd.DataFrame(gel_glas_data)
 
-    # Brix Zäune
+    # ZUBEHÖR GELÄNDER (Aus PDF)
+    zub_gel_data = [
+        {"Typ": "Auswahl", "Bezeichnung": "Artikel", "Variable": "P_Art", 
+         "Optionen": "Wand-Handlauf SideRail (lfm):70, Blumenkasten 85cm:135, Blumenkasten 115cm:156, Blumenkasten 165cm:192, Reinigungs-Set:45", 
+         "Formel": ""},
+        {"Typ": "Zahl", "Bezeichnung": "Menge / Länge", "Variable": "Menge", "Optionen": "", "Formel": ""},
+        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "P_Art * Menge"}
+    ]
+    df_zub_gel = pd.DataFrame(zub_gel_data)
+
+
+    # --- 2. BRIX ZÄUNE + ZUBEHÖR ---
     zaun_stab_data = [
         {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
         {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "Decor 22:180, Latten Classic:190, Palisaden:175, Inquer:200", "Formel": ""},
@@ -131,7 +141,18 @@ def generiere_neue_excel_datei():
     ]
     df_schiebe = pd.DataFrame(schiebe_data)
 
-    # Draht
+    # ZUBEHÖR ZÄUNE (Aus PDF)
+    zub_zaun_data = [
+        {"Typ": "Auswahl", "Bezeichnung": "Artikel", "Variable": "P_Art", 
+         "Optionen": "Briefkasten Standard:155, Briefkasten Groß (Paketfach):400, Zeitungsrolle:35, Sprechanlagen-Vorbereitung:150, Lackspray Dose:25", 
+         "Formel": ""},
+        {"Typ": "Zahl", "Bezeichnung": "Menge", "Variable": "Menge", "Optionen": "", "Formel": ""},
+        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "P_Art * Menge"}
+    ]
+    df_zub_zaun = pd.DataFrame(zub_zaun_data)
+
+
+    # --- 3. DRAHT + ZUBEHÖR ---
     matten_data = [
         {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
         {"Typ": "Zahl", "Bezeichnung": "Preis/Sack Beton (€)", "Variable": "P_Sack", "Optionen": "", "Formel": ""},
@@ -148,7 +169,18 @@ def generiere_neue_excel_datei():
     
     df_draht_mix = df_gel_stab.copy()
 
-    # Eigenfertigung
+    # ZUBEHÖR DRAHT (Aus PDF)
+    zub_draht_data = [
+        {"Typ": "Auswahl", "Bezeichnung": "Artikel", "Variable": "P_Art", 
+         "Optionen": "Sichtschutz-Streifen (Rolle 35m):45, Klemmen Ersatz (Stk):2, Farbspray (Dose):18, Zange für Klemmen:35", 
+         "Formel": ""},
+        {"Typ": "Zahl", "Bezeichnung": "Menge", "Variable": "Menge", "Optionen": "", "Formel": ""},
+        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "P_Art * Menge"}
+    ]
+    df_zub_draht = pd.DataFrame(zub_draht_data)
+
+
+    # --- 4. EIGENFERTIGUNG + MONTAGE ---
     treppe_data = [
         {"Typ": "Zahl", "Bezeichnung": "Geschoßhöhe (m)", "Variable": "H", "Optionen": "", "Formel": ""},
         {"Typ": "Auswahl", "Bezeichnung": "Treppenbreite (B)", "Variable": "B", "Optionen": "800mm:0.8, 1000mm:1.0, 1200mm:1.2", "Formel": ""},
@@ -174,23 +206,46 @@ def generiere_neue_excel_datei():
         {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "(L * P_Modell) + ((math.ceil(L/1.2)+1) * (P_Steher + P_Montageart)) + (Ecken * 150) + (L * P_Arbeit)"}
     ]
     df_edelstahl = pd.DataFrame(edelstahl_data)
-    df_extras = pd.DataFrame([{"Typ":"Preis", "Bezeichnung":"Dummy", "Variable":"X", "Optionen":"", "Formel":"0"}])
+    
+    # MONTAGE MATERIAL
+    zub_montage_data = [
+        {"Typ": "Auswahl", "Bezeichnung": "Artikel", "Variable": "P_Art", 
+         "Optionen": "Schwerlastanker M10:2.5, Schwerlastanker M12:3.5, Injektionsmörtel (Kartusche):25, Gewindestange M12 (lfm):8", 
+         "Formel": ""},
+        {"Typ": "Zahl", "Bezeichnung": "Menge", "Variable": "Menge", "Optionen": "", "Formel": ""},
+        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "P_Art * Menge"}
+    ]
+    df_zub_montage = pd.DataFrame(zub_montage_data)
 
+
+    # SPEICHERN
     try:
         with pd.ExcelWriter(EXCEL_DATEI, engine="openpyxl") as writer:
             df_start.to_excel(writer, sheet_name="Startseite", index=False)
+            
+            # Brix Geländer
             df_gel_stab.to_excel(writer, sheet_name="Brix_Gel_Stab", index=False)
             df_gel_flaechig.to_excel(writer, sheet_name="Brix_Gel_Flaechig", index=False)
             df_gel_glas.to_excel(writer, sheet_name="Brix_Gel_Glas", index=False)
+            df_zub_gel.to_excel(writer, sheet_name="Zub_Gel", index=False)
+            
+            # Brix Zäune
             df_zaun_stab.to_excel(writer, sheet_name="Brix_Zaun_Stab", index=False)
             df_zaun_sicht.to_excel(writer, sheet_name="Brix_Zaun_Sicht", index=False)
             df_tore.to_excel(writer, sheet_name="Brix_Tore", index=False)
             df_schiebe.to_excel(writer, sheet_name="Brix_Schiebe", index=False)
+            df_zub_zaun.to_excel(writer, sheet_name="Zub_Zaun", index=False)
+            
+            # Draht
             df_matten.to_excel(writer, sheet_name="Draht_Matten", index=False)
             df_draht_mix.to_excel(writer, sheet_name="Draht_Mix", index=False)
+            df_zub_draht.to_excel(writer, sheet_name="Zub_Draht", index=False)
+            
+            # Eigen
             df_treppe.to_excel(writer, sheet_name="Stahl_Treppe", index=False)
             df_edelstahl.to_excel(writer, sheet_name="Eigen_Edelstahl", index=False)
-            df_extras.to_excel(writer, sheet_name="Extras", index=False)
+            df_zub_montage.to_excel(writer, sheet_name="Zub_Montage", index=False)
+            
         return True
     except Exception as e:
         st.error(f"Fehler: {e}")
@@ -339,7 +394,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
 # --- NAVIGATION ---
 st.sidebar.header("Navigation")
 index_df = lade_startseite()
-# KATGORIE FILTER LOGIK
 if not index_df.empty and 'Kategorie' in index_df.columns:
     kategorien = index_df['Kategorie'].unique()
     wahl_kategorie = st.sidebar.selectbox("Filter Kategorie:", kategorien)
@@ -355,7 +409,6 @@ if menue_punkt == "📂 Konfigurator / Katalog":
     st.title("Artikel Konfigurator")
     if katalog_items:
         auswahl_system = st.selectbox("System wählen:", katalog_items)
-        # Suchen mit System UND Kategorie um Dopplungen zu vermeiden
         if 'Kategorie' in index_df.columns:
             row = index_df[(index_df['System'] == auswahl_system) & (index_df['Kategorie'] == wahl_kategorie)]
         else:
