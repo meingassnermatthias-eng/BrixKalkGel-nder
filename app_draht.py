@@ -25,13 +25,12 @@ def setup_app_icon(image_file):
         st.markdown(icon_html, unsafe_allow_html=True)
         st.sidebar.image(image_file, width=200)
     else:
-        # Falls kein Logo da ist, zeige Warnung aber stürze nicht ab
-        # st.sidebar.warning(f"Logo '{image_file}' nicht gefunden.")
         pass
 
 setup_app_icon(LOGO_DATEI)
 
-# --- 2. EXCEL GENERATOR (Die "Mega-Maschine") ---
+# --- 2. DIE "MEGA-MASCHINE" (EXCEL GENERATOR) ---
+# Diese Funktion muss hier stehen, damit der Knopf funktioniert!
 def generiere_neue_excel_datei():
     """Erstellt die katalog.xlsx mit ALLEN Modellen komplett neu"""
     
@@ -79,7 +78,7 @@ def generiere_neue_excel_datei():
         {"Typ": "Auswahl", "Bezeichnung": "Füllung Material", "Variable": "P_Full", 
          "Optionen": "Standard Lochblech/Vollblech:0, Acrylglas satiniert:0, Noppenblech:0", "Formel": ""},
         {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", 
-         "Optionen": "Standard (STF):1.0, Sonder (SOF):1.10", "Formel": ""},
+         "Optionen": "Standard (STF):1.0, Sonder (SOF):1.10, Spezial (SPF):1.30", "Formel": ""},
         {"Typ": "Auswahl", "Bezeichnung": "Montageart Steher", "Variable": "P_Steher", 
          "Optionen": "Aufsatzmontage:125, Seitenmontage:161", "Formel": ""},
         {"Typ": "Auswahl", "Bezeichnung": "Verlauf", "Variable": "P_Form", 
