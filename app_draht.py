@@ -31,10 +31,46 @@ def setup_app_icon(image_file):
 
 setup_app_icon(LOGO_DATEI)
 
-# --- 2. HELPER (Jetzt mit Sicherheits-Checks) ---
+# --- 2. EXCEL GENERATOR (NUR FÜR RESET) ---
+def generiere_neue_excel_datei():
+    """Erstellt die katalog.xlsx neu - WIRD NUR BEI RESET AUSGEFÜHRT"""
+    startseite_data = {
+        "Kategorie": [
+            "Brix Geländer (Alu)", "Brix Geländer (Alu)", "Brix Geländer (Alu)", "Brix Geländer (Alu)",
+            "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore", "Brix Zäune & Tore",
+            "Drahtgitter & Stein", "Drahtgitter & Stein", "Drahtgitter & Stein",
+            "Eigenfertigung", "Eigenfertigung", "Eigenfertigung"
+        ],
+        "System": [
+            "Stab-Optik", "Flächige Optik", "Glas-Geländer", ">> Zubehör Geländer",
+            "Zaun Stab & Latten", "Zaun Sichtschutz", "Tore (Drehflügel)", "Schiebetore", ">> Zubehör Zaun",
+            "Gittermatten (Smart)", "Geflecht & Steinkorb", ">> Zubehör Draht",
+            "Stahl-Wangentreppe", "Edelstahl-Geländer", ">> Montagematerial"
+        ],
+        "Blattname": [
+            "Brix_Gel_Stab", "Brix_Gel_Flaechig", "Brix_Gel_Glas", "Zub_Gel",
+            "Brix_Zaun_Stab", "Brix_Zaun_Sicht", "Brix_Tore", "Brix_Schiebe", "Zub_Zaun",
+            "Draht_Matten", "Draht_Mix", "Zub_Draht",
+            "Stahl_Treppe", "Eigen_Edelstahl", "Zub_Montage"
+        ]
+    }
+    df_start = pd.DataFrame(startseite_data)
+
+    # Dummies für Struktur
+    dummy_data = [{"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""}, {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "0"}]
+    df_dummy = pd.DataFrame(dummy_data)
+
+    try:
+        with pd.ExcelWriter(EXCEL_DATEI, engine="openpyxl") as writer:
+            df_start.to_excel(writer, sheet_name="Startseite", index=False)
+            for blatt in df_start['Blattname']:
+                df_dummy.to_excel(writer, sheet_name=blatt, index=False)
+        return True
+    except Exception as e: return False
+
+# --- 3. HELPER (Mit Sicherheits-Checks) ---
 def clean_df_columns(df):
-    """Reinigt Spaltennamen und verhindert None-Fehler"""
-    if df is None: return pd.DataFrame() # Schutz vor None
+    if df is None: return pd.DataFrame()
     if not df.empty: 
         df.columns = df.columns.str.strip()
         rename_map = {'Formel / Info': 'Formel', 'Formel/Info': 'Formel', 'Info': 'Formel'}
@@ -42,7 +78,6 @@ def clean_df_columns(df):
     return df
 
 def lade_startseite():
-    """Lädt Startseite sicher"""
     if not os.path.exists(EXCEL_DATEI): return pd.DataFrame()
     try: 
         df = pd.read_excel(EXCEL_DATEI, sheet_name="Startseite")
@@ -50,9 +85,7 @@ def lade_startseite():
     except: return pd.DataFrame()
 
 def lade_blatt(blatt_name):
-    """Lädt ein Blatt sicher, auch wenn der Name fehlerhaft ist"""
     if not os.path.exists(EXCEL_DATEI): return pd.DataFrame()
-    if not blatt_name or str(blatt_name).lower() == 'nan': return pd.DataFrame()
     try: 
         df = pd.read_excel(EXCEL_DATEI, sheet_name=blatt_name)
         return clean_df_columns(df)
@@ -64,22 +97,23 @@ def lade_alle_blattnamen():
 
 def speichere_excel(df, blatt_name):
     try:
-        mode = "a" if os.path.exists(EXCEL_DATEI) else "w"
-        with pd.ExcelWriter(EXCEL_DATEI, engine="openpyxl", mode=mode, if_sheet_exists="replace") as writer:
+        with pd.ExcelWriter(EXCEL_DATEI, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
             df.to_excel(writer, sheet_name=blatt_name, index=False)
         return True
-    except Exception as e:
-        st.error(f"Fehler beim Speichern: {e}")
-        return False
+    except: return False
 
-# --- 3. SESSION STATE ---
-if 'positionen' not in st.session_state: st.session_state['positionen'] = []
-if 'kunden_daten' not in st.session_state: 
+# --- 4. SESSION STATE (Selbstheilend) ---
+if 'positionen' not in st.session_state or st.session_state['positionen'] is None: 
+    st.session_state['positionen'] = []
+
+if 'kunden_daten' not in st.session_state or st.session_state['kunden_daten'] is None: 
     st.session_state['kunden_daten'] = {"Name": "", "Strasse": "", "Ort": "", "Tel": "", "Email": "", "Notiz": ""}
+
 if 'fertiges_pdf' not in st.session_state: st.session_state['fertiges_pdf'] = None
 if 'fertiges_intern_pdf' not in st.session_state: st.session_state['fertiges_intern_pdf'] = None
 
-if 'zusatzkosten' not in st.session_state:
+# WICHTIG: Repariert kaputte Zusatzkosten
+if 'zusatzkosten' not in st.session_state or st.session_state['zusatzkosten'] is None:
     st.session_state['zusatzkosten'] = {
         "kran": 0.0, 
         "montage_mann": 2, 
@@ -89,15 +123,13 @@ if 'zusatzkosten' not in st.session_state:
         "zuschlag_label": "Normal"
     }
 
-# --- 4. PDF ENGINE 1: KUNDE ---
+# --- 5. PDF ENGINE 1: KUNDE ---
 def clean_text(text):
     if text is None: return ""
     if not isinstance(text, str): text = str(text)
     text = text.replace("€", "EUR").replace("–", "-").replace("„", '"').replace("“", '"')
-    try:
-        return text.encode('latin-1', 'replace').decode('latin-1')
-    except:
-        return text
+    try: return text.encode('latin-1', 'replace').decode('latin-1')
+    except: return text
 
 class PDF(FPDF):
     def header(self):
@@ -126,6 +158,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
     if kunden_dict.get("Tel"): k_text += f"Tel: {kunden_dict['Tel']}\n"
     if kunden_dict.get("Email"): k_text += f"Email: {kunden_dict['Email']}\n"
     pdf.multi_cell(0, 5, clean_text(k_text))
+    
     if kunden_dict.get("Notiz"):
         pdf.ln(5); pdf.set_font("Arial", 'B', 10); pdf.cell(0, 5, "Bemerkung / Notizen:", ln=True); pdf.set_font("Arial", size=10)
         pdf.multi_cell(0, 5, clean_text(kunden_dict["Notiz"]))
@@ -141,7 +174,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
     
     subtotal = 0
     for pos in positionen_liste:
-        if not pos: continue # Skip empty
+        if not pos: continue
         raw_desc = str(pos.get('Beschreibung', ''))
         parts = raw_desc.split("|")
         main_title = parts[0].strip()
@@ -166,6 +199,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
         pdf.cell(w_gesamt, row_height, f"{pos.get('Preis', 0):.2f}", 1, 1, 'R')
         subtotal += pos.get('Preis', 0)
 
+    # Zusatzkosten
     zuschlag_wert = 0
     if zuschlag_prozent > 0:
         basis = subtotal + montage_summe + kran_summe
@@ -235,7 +269,7 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
             except: pass
     return pdf.output(dest='S').encode('latin-1')
 
-# --- 5. PDF ENGINE 2: INTERN ---
+# --- 6. PDF ENGINE 2: INTERN ---
 class InternalPDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 14)
@@ -297,9 +331,17 @@ def create_internal_pdf(positionen_liste, kunden_dict, zusatzkosten):
     pdf.cell(0, 8, "Zusatzkosten-Check:", 0, 1, 'L')
     pdf.set_font("Arial", '', 10)
     
-    text_zusatz = f"- Montage: {zusatzkosten.get('montage_mann',0)} Mann x {zusatzkosten.get('montage_std',0)} Std (Satz: {zusatzkosten.get('montage_satz',0)} EUR)\n"
-    text_zusatz += f"- Kran: {zusatzkosten.get('kran',0)} EUR\n"
-    text_zusatz += f"- Erschwernis: {zusatzkosten.get('zuschlag_label','')} ({zusatzkosten.get('zuschlag_prozent',0)}%)"
+    # Safe dict access
+    m_mann = zusatzkosten.get('montage_mann', 2)
+    m_std = zusatzkosten.get('montage_std', 0)
+    m_satz = zusatzkosten.get('montage_satz', 65)
+    kran = zusatzkosten.get('kran', 0)
+    z_label = zusatzkosten.get('zuschlag_label', 'Normal')
+    z_proz = zusatzkosten.get('zuschlag_prozent', 0)
+    
+    text_zusatz = f"- Montage: {m_mann} Mann x {m_std} Std (Satz: {m_satz} EUR)\n"
+    text_zusatz += f"- Kran: {kran} EUR\n"
+    text_zusatz += f"- Erschwernis: {z_label} ({z_proz}%)"
     
     pdf.multi_cell(0, 5, clean_text(text_zusatz), 1)
     return pdf.output(dest='S').encode('latin-1')
@@ -307,12 +349,14 @@ def create_internal_pdf(positionen_liste, kunden_dict, zusatzkosten):
 # --- NAVIGATION ---
 st.sidebar.header("Navigation")
 index_df = lade_startseite()
-if not index_df.empty and 'Kategorie' in index_df.columns:
+
+# Safe index_df checking
+if index_df is not None and not index_df.empty and 'Kategorie' in index_df.columns:
     kategorien = index_df['Kategorie'].unique()
     wahl_kategorie = st.sidebar.selectbox("Filter Kategorie:", kategorien)
     katalog_items = index_df[index_df['Kategorie'] == wahl_kategorie]['System'].tolist()
 else:
-    katalog_items = index_df['System'].tolist() if not index_df.empty and 'System' in index_df.columns else []
+    katalog_items = []
 
 menue_punkt = st.sidebar.radio("Gehe zu:", ["📂 Konfigurator / Katalog", "🛒 Warenkorb / Abschluss", "🔐 Admin"])
 st.sidebar.markdown("---")
@@ -322,10 +366,13 @@ if menue_punkt == "📂 Konfigurator / Katalog":
     st.title("Artikel Konfigurator")
     if katalog_items:
         auswahl_system = st.selectbox("System wählen:", katalog_items)
-        if not index_df.empty and 'Kategorie' in index_df.columns:
-            row = index_df[(index_df['System'] == auswahl_system) & (index_df['Kategorie'] == wahl_kategorie)]
-        else:
-            row = index_df[index_df['System'] == auswahl_system]
+        
+        row = pd.DataFrame()
+        if index_df is not None and not index_df.empty:
+            row = index_df[(index_df['System'] == auswahl_system)]
+            # Falls Kategorie auch filtert, hier verfeinern
+            if 'Kategorie' in index_df.columns and 'wahl_kategorie' in locals():
+                row = row[row['Kategorie'] == wahl_kategorie]
             
         if not row.empty:
             blatt = row.iloc[0]['Blattname']
@@ -333,7 +380,7 @@ if menue_punkt == "📂 Konfigurator / Katalog":
             col_konfig, col_mini_cart = st.columns([2, 1])
             with col_konfig:
                 st.subheader(f"Konfiguration: {auswahl_system}")
-                if df_config.empty: 
+                if df_config is None or df_config.empty: 
                     st.warning("Katalog-Blatt ist leer oder nicht gefunden.")
                 elif 'Formel' not in df_config.columns: 
                     st.error("Fehler: Spalte 'Formel' fehlt in Excel.")
@@ -471,20 +518,20 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             st.markdown("---")
             
             total_artikel = sum(p.get('Preis',0) for p in st.session_state['positionen'])
-            m_sum = st.session_state['zusatzkosten']['montage_mann'] * st.session_state['zusatzkosten']['montage_std'] * st.session_state['zusatzkosten']['montage_satz']
-            k_sum = st.session_state['zusatzkosten']['kran']
+            m_sum = st.session_state['zusatzkosten'].get('montage_mann', 0) * st.session_state['zusatzkosten'].get('montage_std', 0) * st.session_state['zusatzkosten'].get('montage_satz', 0)
+            k_sum = st.session_state['zusatzkosten'].get('kran', 0)
             
-            zuschlag_prozent = st.session_state['zusatzkosten']['zuschlag_prozent']
+            z_proz = st.session_state['zusatzkosten'].get('zuschlag_prozent', 0)
             basis = total_artikel + m_sum + k_sum
-            zuschlag_wert = basis * (zuschlag_prozent / 100.0)
+            zuschlag_wert = basis * (z_proz / 100.0)
             end_summe = basis + zuschlag_wert
 
             if m_sum > 0: st.write(f"➕ Montage: **{m_sum:.2f} €**")
             if k_sum > 0: st.write(f"➕ Kran: **{k_sum:.2f} €**")
             
-            if zuschlag_prozent > 0:
+            if z_proz > 0:
                 st.write(f"---")
-                label = st.session_state['zusatzkosten']['zuschlag_label']
+                label = st.session_state['zusatzkosten'].get('zuschlag_label', 'Normal')
                 st.write(f"➕ Erschwernis ({label}): **{zuschlag_wert:.2f} €**")
                 
             st.markdown(f"### Netto: {end_summe:.2f} €")
@@ -497,21 +544,26 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
         with st.expander("🏗️ Montage & Zusatzkosten", expanded=True):
             st.write("**Montage-Rechner**")
             c_m1, c_m2, c_m3 = st.columns(3)
-            st.session_state['zusatzkosten']['montage_mann'] = c_m1.number_input("Mann", value=st.session_state['zusatzkosten']['montage_mann'], step=1)
-            st.session_state['zusatzkosten']['montage_std'] = c_m2.number_input("Std", value=st.session_state['zusatzkosten']['montage_std'], step=1.0)
-            st.session_state['zusatzkosten']['montage_satz'] = c_m3.number_input("Satz €", value=st.session_state['zusatzkosten']['montage_satz'], step=5.0)
+            # Safe init
+            zk = st.session_state['zusatzkosten']
+            st.session_state['zusatzkosten']['montage_mann'] = c_m1.number_input("Mann", value=int(zk.get('montage_mann', 2)), step=1)
+            st.session_state['zusatzkosten']['montage_std'] = c_m2.number_input("Std", value=float(zk.get('montage_std', 0.0)), step=1.0)
+            st.session_state['zusatzkosten']['montage_satz'] = c_m3.number_input("Satz €", value=float(zk.get('montage_satz', 65.0)), step=5.0)
             
             zeige_details = st.checkbox("Details (Stunden/Satz) im PDF anzeigen?", value=True)
             
             st.markdown("---")
-            st.session_state['zusatzkosten']['kran'] = st.number_input("Kran Pauschale €", value=st.session_state['zusatzkosten']['kran'], step=50.0)
+            st.session_state['zusatzkosten']['kran'] = st.number_input("Kran Pauschale €", value=float(zk.get('kran', 0.0)), step=50.0)
             
             # --- ZUSCHLAG SCHIEBER ---
             st.markdown("---")
             st.write("**Erschwernis / Risiko**")
             
             stufen = {"Normal": 0.0, "Schwierig": 10.0, "Sehr kompliziert": 20.0}
-            wahl_schwierigkeit = st.select_slider("Baustellen-Schwierigkeit:", options=list(stufen.keys()), value="Normal")
+            current_label = zk.get('zuschlag_label', "Normal")
+            if current_label not in stufen: current_label = "Normal"
+            
+            wahl_schwierigkeit = st.select_slider("Baustellen-Schwierigkeit:", options=list(stufen.keys()), value=current_label)
             
             st.session_state['zusatzkosten']['zuschlag_prozent'] = stufen[wahl_schwierigkeit]
             st.session_state['zusatzkosten']['zuschlag_label'] = wahl_schwierigkeit
@@ -523,23 +575,26 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
         
         st.subheader("Kundendaten")
         with st.form("abschluss"):
+            kd = st.session_state['kunden_daten']
             c1, c2 = st.columns(2)
-            name = c1.text_input("Name", value=st.session_state['kunden_daten']['Name'])
-            strasse = c2.text_input("Straße", value=st.session_state['kunden_daten']['Strasse'])
+            name = c1.text_input("Name", value=kd.get('Name', ''))
+            strasse = c2.text_input("Straße", value=kd.get('Strasse', ''))
             c3, c4 = st.columns(2)
-            ort = c3.text_input("Ort", value=st.session_state['kunden_daten']['Ort'])
-            tel = c4.text_input("Tel", value=st.session_state['kunden_daten']['Tel'])
-            email = st.text_input("Email", value=st.session_state['kunden_daten']['Email'])
-            notiz = st.text_area("Notiz", value=st.session_state['kunden_daten']['Notiz'])
+            ort = c3.text_input("Ort", value=kd.get('Ort', ''))
+            tel = c4.text_input("Tel", value=kd.get('Tel', ''))
+            email = st.text_input("Email", value=kd.get('Email', ''))
+            notiz = st.text_area("Notiz", value=kd.get('Notiz', ''))
             st.markdown("---")
             fotos = st.file_uploader("Fotos", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
             submitted = st.form_submit_button("💾 PDFs Generieren")
         if submitted:
             st.session_state['kunden_daten'] = {"Name": name, "Strasse": strasse, "Ort": ort, "Tel": tel, "Email": email, "Notiz": notiz}
-            m_sum = st.session_state['zusatzkosten']['montage_mann'] * st.session_state['zusatzkosten']['montage_std'] * st.session_state['zusatzkosten']['montage_satz']
-            k_sum = st.session_state['zusatzkosten']['kran']
-            z_proz = st.session_state['zusatzkosten']['zuschlag_prozent']
-            z_label = st.session_state['zusatzkosten']['zuschlag_label']
+            # Calc sums
+            zk = st.session_state['zusatzkosten']
+            m_sum = zk.get('montage_mann',0) * zk.get('montage_std',0) * zk.get('montage_satz',0)
+            k_sum = zk.get('kran',0)
+            z_proz = zk.get('zuschlag_prozent',0)
+            z_label = zk.get('zuschlag_label','Normal')
             
             if st.session_state['positionen'] or m_sum > 0 or k_sum > 0:
                 # 1. KUNDEN PDF
