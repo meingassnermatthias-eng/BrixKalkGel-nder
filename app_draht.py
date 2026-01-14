@@ -85,14 +85,19 @@ default_zk = {
     "zuschlag_prozent": 0.0, "zuschlag_label": "Normal"
 }
 if 'zusatzkosten' not in st.session_state or st.session_state['zusatzkosten'] is None:
-    st.session_state['zusatzkosten'] = default_zk
+    st.session_state['zusatzkosten'] = default_zk.copy()
 else:
     # Prüfen ob alle Keys da sind
     for k, v in default_zk.items():
         if k not in st.session_state['zusatzkosten']:
             st.session_state['zusatzkosten'][k] = v
 
-# --- 4. PDF ENGINES ---
+# --- 4. EXCEL GENERATOR (Nur für Reset) ---
+def generiere_neue_excel_datei():
+    """Dummy Generator"""
+    return False 
+
+# --- 5. PDF ENGINES ---
 def clean_text(text):
     if text is None: return ""
     if not isinstance(text, str): text = str(text)
@@ -298,16 +303,9 @@ def create_internal_pdf(positionen_liste, kunden_dict, zusatzkosten):
     pdf.cell(0, 8, "Zusatzkosten-Check:", 0, 1, 'L')
     pdf.set_font("Arial", '', 10)
     
-    m_mann = zusatzkosten.get('montage_mann', 2)
-    m_std = zusatzkosten.get('montage_std', 0)
-    m_satz = zusatzkosten.get('montage_satz', 65)
-    kran = zusatzkosten.get('kran', 0)
-    z_label = zusatzkosten.get('zuschlag_label', 'Normal')
-    z_proz = zusatzkosten.get('zuschlag_prozent', 0)
-    
-    text_zusatz = f"- Montage: {m_mann} Mann x {m_std} Std (Satz: {m_satz} EUR)\n"
-    text_zusatz += f"- Kran: {kran} EUR\n"
-    text_zusatz += f"- Erschwernis: {z_label} ({z_proz}%)"
+    text_zusatz = f"- Montage: {zusatzkosten.get('montage_mann',0)} Mann x {zusatzkosten.get('montage_std',0)} Std (Satz: {zusatzkosten.get('montage_satz',0)} EUR)\n"
+    text_zusatz += f"- Kran: {zusatzkosten.get('kran',0)} EUR\n"
+    text_zusatz += f"- Erschwernis: {zusatzkosten.get('zuschlag_label','')} ({zusatzkosten.get('zuschlag_prozent',0)}%)"
     
     pdf.multi_cell(0, 5, clean_text(text_zusatz), 1)
     return pdf.output(dest='S').encode('latin-1')
@@ -344,7 +342,7 @@ if menue_punkt == "📂 Konfigurator / Katalog":
             with col_konfig:
                 st.subheader(f"Konfiguration: {auswahl_system}")
                 
-                # --- FEHLER-FÄNGER BLOCK ---
+                # --- FEHLER-FÄNGER BLOCK START ---
                 if df_config is None or df_config.empty: 
                     st.warning("Katalog-Blatt ist leer oder nicht gefunden.")
                 elif 'Formel' not in df_config.columns: 
@@ -452,6 +450,7 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                     except Exception as e:
                         st.error(f"⚠️ Fehler im Blatt '{blatt}': {str(e)}")
                         st.info("Tipp: Überprüfe die Excel-Datei auf leere Zeilen oder Schreibfehler bei Variablen.")
+                # --- FEHLER-FÄNGER BLOCK ENDE ---
 
             with col_mini_cart:
                 st.info("🛒 Schnell-Check")
