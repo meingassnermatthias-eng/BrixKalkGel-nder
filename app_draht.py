@@ -85,6 +85,7 @@ if 'positionen' not in st.session_state: st.session_state['positionen'] = []
 if 'kunden_daten' not in st.session_state: 
     st.session_state['kunden_daten'] = {"Name": "", "Strasse": "", "Ort": "", "Tel": "", "Email": "", "Notiz": ""}
 if 'fertiges_pdf' not in st.session_state: st.session_state['fertiges_pdf'] = None
+if 'fertiges_intern_pdf' not in st.session_state: st.session_state['fertiges_intern_pdf'] = None # NEU
 
 if 'zusatzkosten' not in st.session_state:
     st.session_state['zusatzkosten'] = {
@@ -96,7 +97,7 @@ if 'zusatzkosten' not in st.session_state:
         "zuschlag_label": "Normal"
     }
 
-# --- 5. PDF ENGINE (KORRIGIERT: OHNE "ANGEBOT") ---
+# --- 5. PDF ENGINE 1: KUNDE (Kostenschätzung) ---
 def clean_text(text):
     if not isinstance(text, str): text = str(text)
     text = text.replace("€", "EUR").replace("–", "-").replace("„", '"').replace("“", '"')
@@ -107,7 +108,6 @@ class PDF(FPDF):
         if os.path.exists(LOGO_DATEI): self.image(LOGO_DATEI, 10, 8, 60)
         self.set_font('Arial', 'B', 16)
         heute = datetime.now().strftime("%d.%m.%Y")
-        # HIER GEÄNDERT: Wieder zurück auf Kostenschätzung
         titel = f"Kostenschätzung vom {heute}"
         self.cell(0, 18, clean_text(titel), 0, 1, 'R')
         self.ln(10)
@@ -247,6 +247,89 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
             except Exception as e: pdf.cell(0, 10, f"Fehler: {str(e)}", ln=True)
     return pdf.output(dest='S').encode('latin-1')
 
+# --- 6. PDF ENGINE 2: INTERN (Fertigungsliste) ---
+class InternalPDF(FPDF):
+    def header(self):
+        self.set_font('Arial', 'B', 14)
+        heute = datetime.now().strftime("%d.%m.%Y")
+        self.cell(0, 10, clean_text(f"Fertigungs-Datenblatt / ERP-Import - {heute}"), 0, 1, 'L')
+        self.line(10, 20, 200, 20)
+        self.ln(10)
+    def footer(self):
+        self.set_y(-15); self.set_font('Arial', 'I', 8); self.cell(0, 10, f'Seite {self.page_no()}', 0, 0, 'C')
+
+def create_internal_pdf(positionen_liste, kunden_dict, zusatzkosten):
+    pdf = InternalPDF()
+    pdf.alias_nb_pages()
+    pdf.add_page()
+    
+    # Kunde
+    pdf.set_font("Arial", 'B', 11)
+    pdf.cell(0, 8, f"Kunde: {clean_text(kunden_dict['Name'])} ({clean_text(kunden_dict['Ort'])})", 0, 1, 'L')
+    pdf.set_font("Arial", '', 10)
+    if kunden_dict['Notiz']:
+        pdf.multi_cell(0, 5, clean_text(f"Notiz: {kunden_dict['Notiz']}"))
+    pdf.ln(5)
+    
+    # Tabelle Header
+    pdf.set_font("Arial", 'B', 10)
+    pdf.set_fill_color(220, 220, 220)
+    pdf.cell(10, 8, "#", 1, 0, 'C', True)
+    pdf.cell(140, 8, "Artikel & Parameter (für ERP-Eingabe)", 1, 0, 'L', True)
+    pdf.cell(40, 8, "Kalk. Preis", 1, 1, 'R', True)
+    
+    pdf.set_font("Arial", '', 10)
+    
+    total_netto = 0
+    for i, pos in enumerate(positionen_liste):
+        # Wir zerlegen die Beschreibung für bessere Lesbarkeit
+        raw_desc = str(pos['Beschreibung'])
+        parts = raw_desc.split("|")
+        titel = parts[0].strip()
+        params = ""
+        if len(parts) > 1:
+            # Ersetze Kommas durch Zeilenumbrüche für saubere Liste
+            params = parts[1].replace(", ", "\n  - ").strip()
+            if not params.startswith("-"): params = "  - " + params
+            
+        full_text = f"{titel}\n{params}"
+        
+        # Berechne Höhe der Zeile
+        x_start = pdf.get_x()
+        y_start = pdf.get_y()
+        pdf.set_x(20) # Einrücken für Text
+        pdf.multi_cell(140, 5, clean_text(full_text), border=0)
+        y_end = pdf.get_y()
+        row_height = y_end - y_start
+        
+        # Zeichne Rahmen und andere Zellen
+        pdf.set_xy(x_start, y_start)
+        pdf.cell(10, row_height, str(i+1), 1, 0, 'C')
+        pdf.cell(140, row_height, "", 1, 0) # Rahmen für Text
+        pdf.cell(40, row_height, f"{pos['Preis']:.2f}", 1, 1, 'R')
+        
+        total_netto += pos['Preis']
+
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(0, 8, "Zusatzkosten-Check:", 0, 1, 'L')
+    pdf.set_font("Arial", '', 10)
+    
+    m_mann = zusatzkosten['montage_mann']
+    m_std = zusatzkosten['montage_std']
+    m_satz = zusatzkosten['montage_satz']
+    kran = zusatzkosten['kran']
+    zuschlag = zusatzkosten['zuschlag_prozent']
+    z_label = zusatzkosten['zuschlag_label']
+    
+    text_zusatz = f"- Montage: {m_mann} Mann x {m_std} Std (Satz: {m_satz} EUR)\n"
+    text_zusatz += f"- Kran: {kran} EUR\n"
+    text_zusatz += f"- Erschwernis: {z_label} ({zuschlag}%)"
+    
+    pdf.multi_cell(0, 5, clean_text(text_zusatz), 1)
+    
+    return pdf.output(dest='S').encode('latin-1')
+
 # --- NAVIGATION ---
 st.sidebar.header("Navigation")
 index_df = lade_startseite()
@@ -364,7 +447,7 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
                 if c4.button("🗑️", key=f"del_{i}"): indices_to_delete.append(i)
             if indices_to_delete:
                 for index in sorted(indices_to_delete, reverse=True): del st.session_state['positionen'][index]
-                st.session_state['fertiges_pdf'] = None; st.rerun()
+                st.session_state['fertiges_pdf'] = None; st.session_state['fertiges_intern_pdf'] = None; st.rerun()
             st.markdown("---")
             
             total_artikel = sum(p['Preis'] for p in st.session_state['positionen'])
@@ -430,7 +513,7 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             notiz = st.text_area("Notiz", value=st.session_state['kunden_daten']['Notiz'])
             st.markdown("---")
             fotos = st.file_uploader("Fotos", accept_multiple_files=True, type=['png', 'jpg', 'jpeg'])
-            submitted = st.form_submit_button("💾 PDF Generieren")
+            submitted = st.form_submit_button("💾 PDFs Generieren")
         if submitted:
             st.session_state['kunden_daten'] = {"Name": name, "Strasse": strasse, "Ort": ort, "Tel": tel, "Email": email, "Notiz": notiz}
             m_sum = st.session_state['zusatzkosten']['montage_mann'] * st.session_state['zusatzkosten']['montage_std'] * st.session_state['zusatzkosten']['montage_satz']
@@ -439,19 +522,29 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             z_label = st.session_state['zusatzkosten']['zuschlag_label']
             
             if st.session_state['positionen'] or m_sum > 0 or k_sum > 0:
+                # 1. KUNDEN PDF
                 pdf_bytes = create_pdf(st.session_state['positionen'], st.session_state['kunden_daten'], fotos, m_sum, k_sum, zeige_details, z_proz, z_label, zuschlag_transparent)
                 st.session_state['fertiges_pdf'] = pdf_bytes
+                
+                # 2. INTERNE PDF
+                pdf_intern = create_internal_pdf(st.session_state['positionen'], st.session_state['kunden_daten'], st.session_state['zusatzkosten'])
+                st.session_state['fertiges_intern_pdf'] = pdf_intern
+                
                 st.success("Erstellt!")
             else: st.error("Leer.")
+            
+        c_down1, c_down2 = st.columns(2)
         if st.session_state['fertiges_pdf']:
-            st.download_button("⬇️ PDF Laden", data=st.session_state['fertiges_pdf'], file_name="kostenschaetzung.pdf", mime="application/pdf", type="primary")
+            c_down1.download_button("⬇️ Kostenschätzung (Kunde)", data=st.session_state['fertiges_pdf'], file_name="kostenschaetzung.pdf", mime="application/pdf", type="primary")
+        if st.session_state['fertiges_intern_pdf']:
+            c_down2.download_button("⬇️ Fertigungs-Liste (Intern)", data=st.session_state['fertiges_intern_pdf'], file_name="fertigung_erp.pdf", mime="application/pdf", type="secondary")
 
 # TEIL C: ADMIN
 elif menue_punkt == "🔐 Admin":
     st.title("Admin")
     pw = st.text_input("Passwort:", type="password")
     if pw == "1234":
-        st.error("ACHTUNG: Reset löscht alles!")
+        st.error("ACHTUNG: Reset löscht alle manuellen Excel-Änderungen!")
         if st.button("🚀 Katalog-Datei neu erstellen (Reset)", type="primary"):
             if generiere_neue_excel_datei(): st.success("Neu erstellt!"); st.cache_data.clear()
         st.markdown("---")
