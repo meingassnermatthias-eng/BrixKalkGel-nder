@@ -44,6 +44,7 @@ def generiere_neue_excel_datei():
     }
     df_start = pd.DataFrame(startseite_data)
 
+    # Basis-Datenstruktur für Generator (Dummy-Daten für Reset)
     stab_data = [
         {"Typ": "Zahl", "Bezeichnung": "Länge des Geländers (m)", "Variable": "L", "Optionen": "", "Formel": ""},
         {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "Decor 22 (Stäbe eng):204, Decor 60 (Stäbe weit):204, Staketen 40mm:169, Staketen 60mm:169, Staketen 22mm:169, Verti.Sign (Kantig):207", "Formel": ""},
@@ -54,15 +55,9 @@ def generiere_neue_excel_datei():
         {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "((P_Modell + P_Form) * L * F_Faktor) + ((math.ceil(L/1.3)+1) * P_Steher * F_Faktor) + (Ecken * 95)"}
     ]
     df_stab = pd.DataFrame(stab_data)
-
-    # (Hier sind der Kürze halber die anderen DataFrames zusammengefasst, der Generator bleibt gleich wie vorher)
-    # ... [Restliche Generator-Daten für Flaechig, Latten, etc. bleiben identisch] ...
-    # Damit der Code hier nicht zu lang wird, nutze ich die gleichen Strukturen wie im letzten Code für die anderen Blätter.
-    # Da du den Code kopierst, füge ich hier sicherheitshalber Dummy-Daten ein, falls du den Generator-Teil brauchst.
-    # Im echten Betrieb nutzt du einfach die Datei, die du schon hast.
     
-    # Der Einfachheit halber hier kurzgefasst (vollständig im vorherigen Code):
-    df_flaechig = df_stab.copy() 
+    # Kopien für andere Blätter der Einfachheit halber
+    df_flaechig = df_stab.copy()
     df_latten = df_stab.copy()
     df_horiz = df_stab.copy()
     df_glas = df_stab.copy()
@@ -126,7 +121,6 @@ if 'kunden_daten' not in st.session_state:
     st.session_state['kunden_daten'] = {"Name": "", "Strasse": "", "Ort": "", "Tel": "", "Email": "", "Notiz": ""}
 if 'fertiges_pdf' not in st.session_state: st.session_state['fertiges_pdf'] = None
 
-# NEU: Speicher für Zusatzkosten
 if 'zusatzkosten' not in st.session_state:
     st.session_state['zusatzkosten'] = {
         "kran": 0.0,
@@ -156,7 +150,6 @@ class PDF(FPDF):
         self.set_font('Arial', 'I', 8)
         self.cell(0, 10, f'Seite {self.page_no()}', 0, 0, 'C')
 
-# PDF Funktion nimmt jetzt ZUSATZKOSTEN entgegen
 def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe):
     pdf = PDF()
     pdf.alias_nb_pages()
@@ -199,7 +192,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe):
     
     gesamt_summe = 0
     
-    # 1. Normale Artikel
     for pos in positionen_liste:
         raw_desc = str(pos['Beschreibung'])
         parts = raw_desc.split("|")
@@ -221,7 +213,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe):
         pdf.cell(w_gesamt, row_height, f"{pos['Preis']:.2f}", 1, 1, 'R')
         gesamt_summe += pos['Preis']
 
-    # 2. Zusatzkosten (Kran & Montage) als Zeilen einfügen
     if montage_summe > 0:
         pdf.cell(w_desc, 8, clean_text("Montagekosten (gem. Aufwand)"), 1, 0, 'L')
         pdf.cell(w_menge, 8, "1", 1, 0, 'C')
@@ -291,7 +282,8 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                         var_name = str(zeile.get('Variable', '')).strip()
                         
                         if typ == 'zahl':
-                            val = st.number_input(label, value=0.0, step=0.1, key=f"{blatt}_{index}")
+                            # HIER GEÄNDERT: step=1.0 für ganze Schritte beim Klicken
+                            val = st.number_input(label, value=0.0, step=1.0, key=f"{blatt}_{index}")
                             vars_calc[var_name] = val
                             if val > 0: desc_parts.append(f"{label}: {val}")
                         elif typ == 'auswahl':
@@ -352,7 +344,10 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
                 short_desc = pos['Beschreibung'].split("|")[0]
                 c1.write(f"**{short_desc}**")
                 with c1.expander("Details"): st.write(pos['Beschreibung'])
-                neue_menge = c2.number_input("Menge", value=float(pos['Menge']), step=0.1, key=f"qty_{i}", label_visibility="collapsed")
+                
+                # HIER GEÄNDERT: step=1.0
+                neue_menge = c2.number_input("Menge", value=float(pos['Menge']), step=1.0, key=f"qty_{i}", label_visibility="collapsed")
+                
                 if neue_menge != pos['Menge']:
                     st.session_state['positionen'][i]['Menge'] = neue_menge
                     st.session_state['positionen'][i]['Preis'] = neue_menge * pos['Einzelpreis']
@@ -367,7 +362,6 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             st.markdown("---")
             total_artikel = sum(p['Preis'] for p in st.session_state['positionen'])
             
-            # --- ZUSATZKOSTEN ANZEIGE IN LISTE ---
             montage_total = st.session_state['zusatzkosten']['montage_mann'] * st.session_state['zusatzkosten']['montage_std'] * st.session_state['zusatzkosten']['montage_satz']
             kran_total = st.session_state['zusatzkosten']['kran']
             
@@ -386,12 +380,12 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             st.info("Warenkorb leer.")
 
     with col_daten:
-        # --- NEU: ZUSATZKOSTEN INPUT ---
         with st.expander("🏗️ Montage & Zusatzkosten (Optional)", expanded=True):
             st.write("**Montage-Rechner (Intern)**")
             c_m1, c_m2, c_m3 = st.columns(3)
+            # HIER GEÄNDERT: Schritte auf 1.0 gesetzt (außer beim Satz)
             st.session_state['zusatzkosten']['montage_mann'] = c_m1.number_input("Mann", value=st.session_state['zusatzkosten']['montage_mann'], step=1)
-            st.session_state['zusatzkosten']['montage_std'] = c_m2.number_input("Stunden", value=st.session_state['zusatzkosten']['montage_std'], step=0.5)
+            st.session_state['zusatzkosten']['montage_std'] = c_m2.number_input("Stunden", value=st.session_state['zusatzkosten']['montage_std'], step=1.0)
             st.session_state['zusatzkosten']['montage_satz'] = c_m3.number_input("Satz (€)", value=st.session_state['zusatzkosten']['montage_satz'], step=5.0)
             
             mon_sum = st.session_state['zusatzkosten']['montage_mann'] * st.session_state['zusatzkosten']['montage_std'] * st.session_state['zusatzkosten']['montage_satz']
@@ -417,12 +411,10 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
         
         if submitted:
             st.session_state['kunden_daten'] = {"Name": name, "Strasse": strasse, "Ort": ort, "Tel": tel, "Email": email, "Notiz": notiz}
-            # Berechne Summen für PDF
             m_sum = st.session_state['zusatzkosten']['montage_mann'] * st.session_state['zusatzkosten']['montage_std'] * st.session_state['zusatzkosten']['montage_satz']
             k_sum = st.session_state['zusatzkosten']['kran']
             
             if st.session_state['positionen'] or m_sum > 0 or k_sum > 0:
-                # PDF erstellen mit Zusatzkosten
                 pdf_bytes = create_pdf(
                     st.session_state['positionen'], 
                     st.session_state['kunden_daten'], 
