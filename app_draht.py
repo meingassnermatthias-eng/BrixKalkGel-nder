@@ -7,7 +7,7 @@ import tempfile
 import math
 from datetime import datetime
 
-# --- 1. SETUP & KONFIGURATION ---
+# --- 1. SETUP ---
 LOGO_DATEI = "Meingassner Metalltechnik 2023.png"
 EXCEL_DATEI = "katalog.xlsx"
 
@@ -29,56 +29,41 @@ def setup_app_icon(image_file):
 
 setup_app_icon(LOGO_DATEI)
 
-# --- 2. EXCEL GENERATOR (ALU-GELÄNDER + DRAHT + ALU-ZÄUNE/TORE) ---
+# --- 2. EXCEL GENERATOR (GOLDEN MASTER) ---
 def generiere_neue_excel_datei():
-    """Erstellt die katalog.xlsx mit ALLEN 3 PDF-Inhalten komplett neu"""
+    """Erstellt die katalog.xlsx mit ALLEN Inhalten + BETON LOGIK neu"""
     
-    # 1. STARTSEITE (Das Menü)
+    # STARTSEITE
     startseite_data = {
         "System": [
-            # --- ALU GELÄNDER (PDF 1) ---
-            "1. Alu-Geländer Stab (Decor, Staketen)", 
-            "2. Alu-Geländer Flächig",
-            "3. Alu-Geländer Glas", 
-            # --- ALU ZÄUNE (PDF 3 - NEU) ---
-            "4. Alu-Zaun Stab & Latten",
-            "5. Alu-Zaun Sichtschutz (Lamello)",
-            "6. Alu-Tore (Gehtür & 2-Flügel)",
-            "7. Alu-Schiebetore",
-            # --- DRAHTGITTER (PDF 2) ---
-            "8. Draht-Gittermatten (Doppelstab)",
-            "9. Draht-Geflecht & Stein",
-            # --- EXTRAS ---
-            "10. Zubehör & Extras"
+            "1. Alu-Geländer Stab", "2. Alu-Geländer Flächig", "3. Alu-Geländer Glas", 
+            "4. Alu-Zaun Stab & Latten", "5. Alu-Zaun Sichtschutz", "6. Alu-Tore", "7. Alu-Schiebetore",
+            "8. Draht-Gittermatten (Smart)", "9. Draht-Geflecht & Stein", "10. Zubehör & Extras"
         ],
         "Blattname": [
             "Brix_Gel_Stab", "Brix_Gel_Flaechig", "Brix_Gel_Glas",
             "Brix_Zaun_Stab", "Brix_Zaun_Sicht", "Brix_Tore", "Brix_Schiebe",
-            "Draht_Matten", "Draht_Mix",
-            "Extras"
+            "Draht_Matten", "Draht_Mix", "Extras"
         ]
     }
     df_start = pd.DataFrame(startseite_data)
 
-    # ==========================================
-    # TEIL A: ALU GELÄNDER (Wie gehabt)
-    # ==========================================
+    # --- TEIL A: ALU GELÄNDER ---
     gel_stab_data = [
         {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "Decor 22 (Stäbe eng):204, Decor 60 (Stäbe weit):204, Staketen 40mm:169, Staketen 60mm:169, Verti.Sign (Kantig):207", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard (STF):1.0, Sonder (SOF):1.10, Spezial (SPF):1.30", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "Decor 22 (Stäbe eng):204, Decor 60 (Stäbe weit):204, Staketen 40mm:169, Staketen 60mm:169, Verti.Sign:207", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10, Spezial:1.30", "Formel": ""},
         {"Typ": "Auswahl", "Bezeichnung": "Montage Steher", "Variable": "P_Steher", "Optionen": "Aufsatz (Boden):125, Seite (Wand):161", "Formel": ""},
         {"Typ": "Zahl", "Bezeichnung": "Anzahl Ecken", "Variable": "Ecken", "Optionen": "", "Formel": ""},
         {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
         {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "(P_Modell * L * F_Faktor) + ((math.ceil(L/1.3)+1) * P_Steher * F_Faktor) + (Ecken * 95) + (L * P_Arbeit)"}
     ]
     df_gel_stab = pd.DataFrame(gel_stab_data)
-    
-    df_gel_flaechig = df_gel_stab.copy() # Vereinfacht für Code-Länge
+    df_gel_flaechig = df_gel_stab.copy()
     
     gel_glas_data = [
         {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "System", "Variable": "P_System", "Optionen": "Glasal (Rahmen):307, Glasalo (Seitlich):284, Glas-Klemmen:180", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "System", "Variable": "P_System", "Optionen": "Glasal:307, Glasalo:284, Glas-Klemmen:180", "Formel": ""},
         {"Typ": "Auswahl", "Bezeichnung": "Glas-Füllung", "Variable": "P_Glas", "Optionen": "VSG Klar:130, VSG Matt:165", "Formel": ""},
         {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
         {"Typ": "Auswahl", "Bezeichnung": "Montage Steher", "Variable": "P_Steher", "Optionen": "Aufsatz:125, Seite:161", "Formel": ""},
@@ -88,101 +73,72 @@ def generiere_neue_excel_datei():
     ]
     df_gel_glas = pd.DataFrame(gel_glas_data)
 
-    # ==========================================
-    # TEIL B: ALU ZÄUNE (NEU aus PDF 3)
-    # ==========================================
-    # 4. Alu-Zaun Stab & Latten
+    # --- TEIL B: ALU ZÄUNE ---
     zaun_stab_data = [
-        {"Typ": "Zahl", "Bezeichnung": "Länge des Zauns (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Zaun-Modell", "Variable": "P_Modell", 
-         # Preise ca. aus PDF S. 6-31
-         "Optionen": "Decor 22 (Stäbe):180, Latten Classic:190, Palisaden:175, Inquer (Querstäbe):200", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Höhe", "Variable": "H_Faktor", 
-         "Optionen": "H 800-1000mm:1.0, H 1000-1200mm:1.2, H 1200-1500mm:1.4", "Formel": "Aufpreis für Höhe"},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", 
-         "Optionen": "Standard (STF):1.0, Sonder (SOF):1.10, Holzdekor:1.4", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Säulen-Befestigung", "Variable": "P_Saeule", 
-         "Optionen": "Zum Einbetonieren:85, Mit Dübelplatte:110", "Formel": "Stückpreis Alu-Säule"},
+        {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "Decor 22:180, Latten Classic:190, Palisaden:175, Inquer:200", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Höhe", "Variable": "H_Faktor", "Optionen": "H 800-1000:1.0, H 1000-1200:1.2, H 1200-1500:1.4", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10, Holz:1.4", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Säule", "Variable": "P_Saeule", "Optionen": "Betonieren:85, Dübeln:110", "Formel": ""},
         {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
-        # Formel: Meterpreis * Höhe * Farbe + Säulen * Farbe
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", 
-         "Formel": "(P_Modell * H_Faktor * L * F_Faktor) + ((math.ceil(L/2.0)+1) * P_Saeule * F_Faktor) + (L * P_Arbeit)"}
+        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "(P_Modell * H_Faktor * L * F_Faktor) + ((math.ceil(L/2.0)+1) * P_Saeule * F_Faktor) + (L * P_Arbeit)"}
     ]
     df_zaun_stab = pd.DataFrame(zaun_stab_data)
-
-    # 5. Alu-Zaun Sichtschutz (Lamello etc.)
+    
     zaun_sicht_data = [
-        {"Typ": "Zahl", "Bezeichnung": "Länge des Zauns (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", 
-         # Preise ca PDF S. 38-43 (Teurer da viel Material)
-         "Optionen": "Lamello (Blickdicht):290, Listello (Waagrecht):280, Platten-Füllung:260", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Höhe", "Variable": "H_Faktor", 
-         "Optionen": "H 1000mm:1.0, H 1250mm:1.25, H 1500mm:1.5, H 1800mm (Sichtschutz):1.8", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", 
-         "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Säulen (Stabil)", "Variable": "P_Saeule", 
-         "Optionen": "Zum Einbetonieren:120, Mit Dübelplatte:150", "Formel": ""},
+        {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "Lamello:290, Listello:280, Platten:260", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Höhe", "Variable": "H_Faktor", "Optionen": "H 1000:1.0, H 1250:1.25, H 1500:1.5, H 1800:1.8", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Säule", "Variable": "P_Saeule", "Optionen": "Betonieren:120, Dübeln:150", "Formel": ""},
         {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", 
-         "Formel": "(P_Modell * H_Faktor * L * F_Faktor) + ((math.ceil(L/1.8)+1) * P_Saeule * F_Faktor) + (L * P_Arbeit)"}
+        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "(P_Modell * H_Faktor * L * F_Faktor) + ((math.ceil(L/1.8)+1) * P_Saeule * F_Faktor) + (L * P_Arbeit)"}
     ]
     df_zaun_sicht = pd.DataFrame(zaun_sicht_data)
 
-    # 6. Alu-Tore (Drehflügel)
     tore_data = [
-        {"Typ": "Auswahl", "Bezeichnung": "Tor Typ", "Variable": "P_Basis", 
-         # Preise PDF S. 46-51
-         "Optionen": "Gehtür 1-Flg (ca 1m):950, Zweiflügel-Tor (ca 3m):2200, Zweiflügel-Tor (ca 4m):2600", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Füllung", "Variable": "P_Full", 
-         "Optionen": "Stab/Latten (Standard):0, Lamello (Sichtschutz):350", "Formel": "Aufpreis Pauschal"},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", 
-         "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Antrieb / E-Öffner", "Variable": "P_Antrieb", 
-         "Optionen": "Manuell (Schloss/Riegel):0, E-Öffner (für Gehtür):150, E-Antrieb Set (für 2-Flg Tor):1250", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Typ", "Variable": "P_Basis", "Optionen": "Gehtür (1m):950, 2-Flg Tor (3m):2200, 2-Flg Tor (4m):2600", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Füllung", "Variable": "P_Full", "Optionen": "Stab/Latten:0, Sichtschutz:350", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Antrieb", "Variable": "P_Antrieb", "Optionen": "Manuell:0, E-Öffner:150, E-Antrieb Set:1250", "Formel": ""},
         {"Typ": "Zahl", "Bezeichnung": "Anzahl", "Variable": "Menge", "Optionen": "", "Formel": ""},
-        {"Typ": "Zahl", "Bezeichnung": "Montage (Pauschal €)", "Variable": "P_Montage", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", 
-         "Formel": "((P_Basis + P_Full) * F_Faktor * Menge) + (P_Antrieb * Menge) + P_Montage"}
+        {"Typ": "Zahl", "Bezeichnung": "Montage (Pauschal)", "Variable": "P_Montage", "Optionen": "", "Formel": ""},
+        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "((P_Basis + P_Full) * F_Faktor * Menge) + (P_Antrieb * Menge) + P_Montage"}
     ]
     df_tore = pd.DataFrame(tore_data)
 
-    # 7. Alu-Schiebetore (Freitragend)
     schiebe_data = [
         {"Typ": "Zahl", "Bezeichnung": "Durchfahrtslichte (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Höhe", "Variable": "H_Faktor", 
-         "Optionen": "H 1000:1.0, H 1250:1.1, H 1500:1.25", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Modell-Basis (Preis/m)", "Variable": "P_Modell", 
-         "Optionen": "Schiebetor C-Profil (Stab/Latte):1400, Schiebetor C-Profil (Sichtschutz):1600", 
-         "Formel": "Basispreis pro Meter Lichte (inkl. Laufwerk)"},
-        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", 
-         "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "E-Antrieb Paket", "Variable": "P_Antrieb", 
-         "Optionen": "Ohne (Manuell):0, E-Antrieb Set (Motor, Licht, LS):1450", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Höhe", "Variable": "H_Faktor", "Optionen": "H 1000:1.0, H 1250:1.1, H 1500:1.25", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Modell", "Variable": "P_Modell", "Optionen": "C-Profil Stab:1400, C-Profil Sichtschutz:1600", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Standard:1.0, Sonder:1.10", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Antrieb", "Variable": "P_Antrieb", "Optionen": "Manuell:0, E-Antrieb Set:1450", "Formel": ""},
         {"Typ": "Zahl", "Bezeichnung": "Fundament/Montage Pauschale", "Variable": "P_Montage", "Optionen": "", "Formel": ""},
-        # Formel grob: (Meterpreis * Länge * HöheFaktor * Farbe) + Antrieb + Montage
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", 
-         "Formel": "(P_Modell * L * H_Faktor * F_Faktor) + P_Antrieb + P_Montage"}
+        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "(P_Modell * L * H_Faktor * F_Faktor) + P_Antrieb + P_Montage"}
     ]
     df_schiebe = pd.DataFrame(schiebe_data)
 
-
-    # ==========================================
-    # TEIL C: DRAHTGITTER (Wie gehabt)
-    # ==========================================
+    # --- TEIL C: DRAHTGITTER MIT BETON-LOGIK ---
+    # Hier ist die Logik: Ist_Beton (1 oder 0) schaltet zwischen Sackpreis und Konsole um.
     matten_data = [
         {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Matte H", "Variable": "P_Matte", "Optionen": "H 1030 (Leicht):22, H 1230 (Leicht):26, H 1030 (Schwer):32", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Säule", "Variable": "P_Saeule", "Optionen": "Klemmhalter:35, Abdeckleiste:45", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Montageart", "Variable": "P_Fund", "Optionen": "Betonieren:0, Dübelplatte:18", "Formel": ""},
+        {"Typ": "Zahl", "Bezeichnung": "Preis/Sack Beton (€)", "Variable": "P_Sack", "Optionen": "", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Konsole Typ (wenn Dübeln)", "Variable": "P_Konsole", "Optionen": "---:0, Leicht:15, Mittel:25, Schwer:45", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Montage-Art", "Variable": "Ist_Beton", "Optionen": "Einbetonieren:1, Aufdübeln:0", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Matte Höhe", "Variable": "P_Matte", "Optionen": "H 830:18, H 1030:22, H 1230:26, H 1430:31", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Säulen-Typ", "Variable": "P_Saeule", "Optionen": "Klemmhalter:35, Abdeckleiste:45", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Farbe", "Variable": "F_Faktor", "Optionen": "Verzinkt:1.0, Farbe:1.15", "Formel": ""},
         {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
-        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "(L * P_Matte) + ((math.ceil(L/2.5)+1) * (P_Saeule + P_Fund)) + (L * P_Arbeit)"}
+        # Die Formel: (Säule + (Ist_Beton*2*Sack) + ((1-Ist_Beton)*Konsole))
+        {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", 
+         "Formel": "(L * P_Matte * F_Faktor) + ((math.ceil(L/2.5)+1) * ((P_Saeule * F_Faktor) + (Ist_Beton * 2 * P_Sack) + ((1-Ist_Beton) * P_Konsole))) + (L * P_Arbeit)"}
     ]
     df_matten = pd.DataFrame(matten_data)
     
     df_draht_mix = pd.DataFrame([
         {"Typ": "Zahl", "Bezeichnung": "Länge (m)", "Variable": "L", "Optionen": "", "Formel": ""},
         {"Typ": "Auswahl", "Bezeichnung": "Typ", "Variable": "P_Typ", "Optionen": "Geflecht 150cm:18, Steinkorb 15cm:180", "Formel": ""},
-        {"Typ": "Auswahl", "Bezeichnung": "Zubehör/Steine (pro m)", "Variable": "P_Zub", "Optionen": "Standard:20, Steinfüllung:150", "Formel": ""},
+        {"Typ": "Auswahl", "Bezeichnung": "Zubehör/Steine", "Variable": "P_Zub", "Optionen": "Standard:20, Steinfüllung:150", "Formel": ""},
         {"Typ": "Zahl", "Bezeichnung": "Montage (€/m)", "Variable": "P_Arbeit", "Optionen": "", "Formel": ""},
         {"Typ": "Preis", "Bezeichnung": "Gesamtpreis", "Variable": "Endpreis", "Optionen": "", "Formel": "L * (P_Typ + P_Zub + P_Arbeit)"}
     ])
@@ -194,23 +150,18 @@ def generiere_neue_excel_datei():
     ]
     df_extras = pd.DataFrame(extra_data)
 
-    # SPEICHERN
     try:
         with pd.ExcelWriter(EXCEL_DATEI, engine="openpyxl") as writer:
             df_start.to_excel(writer, sheet_name="Startseite", index=False)
-            # Alu Geländer
             df_gel_stab.to_excel(writer, sheet_name="Brix_Gel_Stab", index=False)
             df_gel_flaechig.to_excel(writer, sheet_name="Brix_Gel_Flaechig", index=False)
             df_gel_glas.to_excel(writer, sheet_name="Brix_Gel_Glas", index=False)
-            # Alu Zaun/Tor
             df_zaun_stab.to_excel(writer, sheet_name="Brix_Zaun_Stab", index=False)
             df_zaun_sicht.to_excel(writer, sheet_name="Brix_Zaun_Sicht", index=False)
             df_tore.to_excel(writer, sheet_name="Brix_Tore", index=False)
             df_schiebe.to_excel(writer, sheet_name="Brix_Schiebe", index=False)
-            # Draht
             df_matten.to_excel(writer, sheet_name="Draht_Matten", index=False)
             df_draht_mix.to_excel(writer, sheet_name="Draht_Mix", index=False)
-            # Extras
             df_extras.to_excel(writer, sheet_name="Extras", index=False)
         return True
     except Exception as e:
@@ -254,7 +205,6 @@ if 'positionen' not in st.session_state: st.session_state['positionen'] = []
 if 'kunden_daten' not in st.session_state: 
     st.session_state['kunden_daten'] = {"Name": "", "Strasse": "", "Ort": "", "Tel": "", "Email": "", "Notiz": ""}
 if 'fertiges_pdf' not in st.session_state: st.session_state['fertiges_pdf'] = None
-
 if 'zusatzkosten' not in st.session_state:
     st.session_state['zusatzkosten'] = {"kran": 0.0, "montage_mann": 2, "montage_std": 0.0, "montage_satz": 65.0}
 
