@@ -14,9 +14,9 @@ MWST_SATZ = 0.20  # 20% MwSt
 
 st.set_page_config(page_title="Meingassner App", layout="wide", page_icon=LOGO_DATEI)
 
-# --- NOTFALL RESET (Löscht kaputten Speicher) ---
-st.sidebar.header("Hilfe & Reset")
-if st.sidebar.button("⚠️ APP NEUSTARTEN (Speicher löschen)", help="Klicken, wenn Fehlermeldungen auftauchen"):
+# NOTFALL RESET
+st.sidebar.header("Hilfe")
+if st.sidebar.button("⚠️ Speicher leeren (Reset)", help="Klicken bei hartnäckigen Fehlern"):
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     st.rerun()
@@ -33,8 +33,7 @@ def setup_app_icon(image_file):
             """
             st.markdown(icon_html, unsafe_allow_html=True)
             st.sidebar.image(image_file, width=200)
-        except:
-            pass
+        except: pass
 
 setup_app_icon(LOGO_DATEI)
 
@@ -74,40 +73,31 @@ def speichere_excel(df, blatt_name):
         return True
     except: return False
 
-# --- 3. EXCEL GENERATOR (Dummy für Sicherheit) ---
-def generiere_neue_excel_datei():
-    return False
-
-# --- 4. SESSION STATE (Sicherheits-Initialisierung) ---
+# --- 3. SESSION STATE ---
 def init_state():
     if 'positionen' not in st.session_state or st.session_state['positionen'] is None: 
         st.session_state['positionen'] = []
-
     if 'kunden_daten' not in st.session_state or st.session_state['kunden_daten'] is None: 
         st.session_state['kunden_daten'] = {"Name": "", "Strasse": "", "Ort": "", "Tel": "", "Email": "", "Notiz": ""}
-
     if 'fertiges_pdf' not in st.session_state: st.session_state['fertiges_pdf'] = None
     if 'fertiges_intern_pdf' not in st.session_state: st.session_state['fertiges_intern_pdf'] = None
 
-    # ZUSATZKOSTEN SICHER MACHEN
     default_zk = {
         "kran": 0.0, "montage_mann": 2, "montage_std": 0.0, "montage_satz": 65.0,
         "zuschlag_prozent": 0.0, "zuschlag_label": "Normal"
     }
-    
-    # Wenn Key fehlt oder Wert None ist -> Neu setzen
     if 'zusatzkosten' not in st.session_state or st.session_state['zusatzkosten'] is None:
         st.session_state['zusatzkosten'] = default_zk.copy()
     else:
-        # Wenn Key da ist, aber Schlüssel fehlen -> Ergänzen
-        if not isinstance(st.session_state['zusatzkosten'], dict):
-             st.session_state['zusatzkosten'] = default_zk.copy()
-        else:
-            for k, v in default_zk.items():
-                if k not in st.session_state['zusatzkosten']:
-                    st.session_state['zusatzkosten'][k] = v
+        # Fehlende Keys ergänzen
+        for k, v in default_zk.items():
+            if k not in st.session_state['zusatzkosten']:
+                st.session_state['zusatzkosten'][k] = v
 
 init_state()
+
+# --- 4. EXCEL GENERATOR (Dummy) ---
+def generiere_neue_excel_datei(): return False
 
 # --- 5. PDF ENGINES ---
 def clean_text(text):
@@ -135,7 +125,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
     pdf.alias_nb_pages()
     pdf.add_page()
     
-    # Safe Dict Access
     if not kunden_dict: kunden_dict = {}
     
     pdf.ln(10); pdf.set_font("Arial", 'B', 12); pdf.cell(0, 6, "Kundeninformation:", ln=True); pdf.set_font("Arial", size=10)
@@ -178,7 +167,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
             details += f"\n   (entspricht {einheit_preis:.2f} EUR / {pos.get('RefEinheit', 'Stk')})"
 
         final_desc_text = clean_text(f"{main_title}{details}")
-        
         x_start, y_start = pdf.get_x(), pdf.get_y()
         pdf.multi_cell(w_desc, 5, final_desc_text, border=1, align='L')
         y_end = pdf.get_y(); row_height = y_end - y_start
@@ -239,8 +227,10 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
     pdf.set_font("Arial", '', 11)
     pdf.cell(w_desc + w_menge + w_ep, 6, "Summe Netto:", 0, 0, 'R')
     pdf.cell(w_gesamt, 6, f"{netto:.2f} EUR", 0, 1, 'R')
+    
     pdf.cell(w_desc + w_menge + w_ep, 6, f"zzgl. {int(MWST_SATZ*100)}% MwSt:", 0, 0, 'R')
     pdf.cell(w_gesamt, 6, f"{mwst_betrag:.2f} EUR", 0, 1, 'R')
+    
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(w_desc + w_menge + w_ep, 10, "GESAMTSUMME BRUTTO:", 0, 0, 'R')
     pdf.cell(w_gesamt, 10, f"{brutto:.2f} EUR", 1, 1, 'R')
@@ -360,7 +350,7 @@ if menue_punkt == "📂 Konfigurator / Katalog":
             with col_konfig:
                 st.subheader(f"Konfiguration: {auswahl_system}")
                 
-                # --- FEHLER-FÄNGER ---
+                # --- ROBUSTER KONFIGURATOR ---
                 if df_config is None or df_config.empty: 
                     st.warning("Katalog-Blatt ist leer oder nicht gefunden.")
                 elif 'Formel' not in df_config.columns: 
@@ -418,55 +408,61 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                 st.markdown("---")
                                 safe_env = {"__builtins__": None, "math": math, "round": round, "int": int, "float": float}
                                 safe_env.update(vars_calc)
-                                preis = eval(formel, safe_env)
-                                st.subheader(f"Preis: {preis:.2f} €")
-                                if st.button("In den Warenkorb", type="primary"):
-                                    full_desc = f"{auswahl_system} | " + ", ".join(desc_parts)
-                                    
-                                    ref_menge = 1.0; ref_einheit = "Stk"
-                                    if 'L' in vars_calc and vars_calc['L'] > 0:
-                                        ref_menge = vars_calc['L']; ref_einheit = "lfm"
-                                    elif 'H' in vars_calc and vars_calc['H'] > 0:
-                                        ref_menge = vars_calc['H']; ref_einheit = "lfm Höhe"
-                                    elif 'L_Podest' in vars_calc and 'B' in vars_calc and vars_calc['L_Podest'] > 0:
-                                        ref_menge = vars_calc['L_Podest'] * vars_calc['B']; ref_einheit = "m²"
-                                    
-                                    mat_liste = []
-                                    if 'L' in vars_calc and vars_calc['L'] > 0:
-                                        l = vars_calc['L']
-                                        abstand = 1.3 
-                                        if 'Dist' in vars_calc and vars_calc['Dist'] > 0: abstand = vars_calc['Dist']
-                                        elif 'Edelstahl' in auswahl_system: abstand = 1.2
-                                        elif 'Draht' in auswahl_system: abstand = 2.5
+                                try:
+                                    preis = eval(formel, safe_env)
+                                    st.subheader(f"Preis: {preis:.2f} €")
+                                    if st.button("In den Warenkorb", type="primary"):
+                                        full_desc = f"{auswahl_system} | " + ", ".join(desc_parts)
                                         
-                                        anz_steher = math.ceil(l / abstand) + 1
-                                        mat_liste.append(f"Steher (alle {abstand}m): {anz_steher} Stk")
+                                        ref_menge = 1.0; ref_einheit = "Stk"
+                                        if 'L' in vars_calc and vars_calc['L'] > 0:
+                                            ref_menge = vars_calc['L']; ref_einheit = "lfm"
+                                        elif 'H' in vars_calc and vars_calc['H'] > 0:
+                                            ref_menge = vars_calc['H']; ref_einheit = "lfm Höhe"
+                                        elif 'L_Podest' in vars_calc and 'B' in vars_calc and vars_calc['L_Podest'] > 0:
+                                            ref_menge = vars_calc['L_Podest'] * vars_calc['B']; ref_einheit = "m²"
                                         
-                                        if 'Ist_Beton' in vars_calc:
-                                            if vars_calc['Ist_Beton'] == 1:
-                                                mat_liste.append(f"Beton (2/Steher): {anz_steher * 2} Säcke")
-                                            else:
-                                                mat_liste.append(f"Dübelplatten: {anz_steher} Stk")
-                                        if 'Ecken' in vars_calc and vars_calc['Ecken'] > 0:
-                                            mat_liste.append(f"Eck-Verbinder: {int(vars_calc['Ecken'])} Stk")
+                                        mat_liste = []
+                                        if 'L' in vars_calc and vars_calc['L'] > 0:
+                                            l = vars_calc['L']
+                                            abstand = 1.3 
+                                            if 'Dist' in vars_calc and vars_calc['Dist'] > 0: abstand = vars_calc['Dist']
+                                            elif 'Edelstahl' in auswahl_system: abstand = 1.2
+                                            elif 'Draht' in auswahl_system: abstand = 2.5
+                                            
+                                            anz_steher = math.ceil(l / abstand) + 1
+                                            mat_liste.append(f"Steher (alle {abstand}m): {anz_steher} Stk")
+                                            
+                                            if 'Ist_Beton' in vars_calc:
+                                                if vars_calc['Ist_Beton'] == 1:
+                                                    mat_liste.append(f"Beton (2/Steher): {anz_steher * 2} Säcke")
+                                                else:
+                                                    mat_liste.append(f"Dübelplatten: {anz_steher} Stk")
+                                            if 'Ecken' in vars_calc and vars_calc['Ecken'] > 0:
+                                                mat_liste.append(f"Eck-Verbinder: {int(vars_calc['Ecken'])} Stk")
 
-                                    if 'H' in vars_calc and vars_calc['H'] > 0:
-                                        h = vars_calc['H']
-                                        stufen = math.ceil(h / 0.18)
-                                        wangen_lfm = h * 1.8 * 2
-                                        mat_liste.append(f"Stufen (H/18cm): {stufen} Stk")
-                                        mat_liste.append(f"Wangen-Profil: ca. {wangen_lfm:.2f} lfm")
+                                        if 'H' in vars_calc and vars_calc['H'] > 0:
+                                            h = vars_calc['H']
+                                            stufen = math.ceil(h / 0.18)
+                                            wangen_lfm = h * 1.8 * 2
+                                            mat_liste.append(f"Stufen (H/18cm): {stufen} Stk")
+                                            mat_liste.append(f"Wangen-Profil: ca. {wangen_lfm:.2f} lfm")
 
-                                    st.session_state['positionen'].append({
-                                        "Beschreibung": full_desc, "Menge": 1.0, 
-                                        "Einzelpreis": preis, "Preis": preis,
-                                        "RefMenge": ref_menge, "RefEinheit": ref_einheit,
-                                        "MaterialDetails": mat_liste
-                                    })
-                                    st.success("Hinzugefügt!")
+                                        st.session_state['positionen'].append({
+                                            "Beschreibung": full_desc, "Menge": 1.0, 
+                                            "Einzelpreis": preis, "Preis": preis,
+                                            "RefMenge": ref_menge, "RefEinheit": ref_einheit,
+                                            "MaterialDetails": mat_liste
+                                        })
+                                        st.success("Hinzugefügt!")
+                                except NameError as ne:
+                                    st.error(f"⚠️ FEHLER IN EXCEL-FORMEL: {str(ne)}")
+                                    st.info(f"Die Formel verwendet eine Variable, die oben nicht definiert wurde. Bitte prüfen!")
+                                except Exception as calc_err:
+                                    st.error(f"Berechnungsfehler: {str(calc_err)}")
+
                     except Exception as e:
-                        st.error(f"⚠️ Fehler im Blatt '{blatt}': {str(e)}")
-                        st.info("Tipp: Überprüfe die Excel-Datei auf leere Zeilen oder Schreibfehler bei Variablen.")
+                        st.error(f"⚠️ Allgemeiner Fehler im Blatt '{blatt}': {str(e)}")
 
             with col_mini_cart:
                 st.info("🛒 Schnell-Check")
