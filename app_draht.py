@@ -362,7 +362,7 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                             var_name = str(zeile.get('Variable', '')).strip()
                             
                             if typ == 'zahl':
-                                # --- NEU: STANDARDWERT AUS EXCEL ---
+                                # STANDARDWERT LOGIK
                                 std_val = 0.0
                                 try:
                                     raw_val = str(zeile.get('Optionen', '')).strip()
@@ -406,6 +406,17 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                 summe_wahl = sum(opts_dict.get(x, 0) for x in wahl_liste)
                                 vars_calc[var_name] = summe_wahl
                                 if wahl_liste: desc_parts.append(f"{label}: {', '.join(wahl_liste)}")
+
+                            # --- NEUER TYP: BERECHNUNG ---
+                            elif typ == 'berechnung':
+                                formel = str(zeile.get('Formel', ''))
+                                try:
+                                    safe_env = {"__builtins__": None, "math": math, "round": round, "int": int, "float": float}
+                                    safe_env.update(vars_calc)
+                                    calc_val = eval(formel, safe_env)
+                                    vars_calc[var_name] = calc_val
+                                except:
+                                    vars_calc[var_name] = 0
 
                             elif typ == 'preis':
                                 formel = str(zeile.get('Formel', ''))
