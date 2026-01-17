@@ -89,7 +89,6 @@ def init_state():
     if 'zusatzkosten' not in st.session_state or st.session_state['zusatzkosten'] is None:
         st.session_state['zusatzkosten'] = default_zk.copy()
     else:
-        # Fehlende Keys ergänzen
         for k, v in default_zk.items():
             if k not in st.session_state['zusatzkosten']:
                 st.session_state['zusatzkosten'][k] = v
@@ -227,10 +226,8 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
     pdf.set_font("Arial", '', 11)
     pdf.cell(w_desc + w_menge + w_ep, 6, "Summe Netto:", 0, 0, 'R')
     pdf.cell(w_gesamt, 6, f"{netto:.2f} EUR", 0, 1, 'R')
-    
     pdf.cell(w_desc + w_menge + w_ep, 6, f"zzgl. {int(MWST_SATZ*100)}% MwSt:", 0, 0, 'R')
     pdf.cell(w_gesamt, 6, f"{mwst_betrag:.2f} EUR", 0, 1, 'R')
-    
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(w_desc + w_menge + w_ep, 10, "GESAMTSUMME BRUTTO:", 0, 0, 'R')
     pdf.cell(w_gesamt, 10, f"{brutto:.2f} EUR", 1, 1, 'R')
@@ -350,7 +347,6 @@ if menue_punkt == "📂 Konfigurator / Katalog":
             with col_konfig:
                 st.subheader(f"Konfiguration: {auswahl_system}")
                 
-                # --- ROBUSTER KONFIGURATOR ---
                 if df_config is None or df_config.empty: 
                     st.warning("Katalog-Blatt ist leer oder nicht gefunden.")
                 elif 'Formel' not in df_config.columns: 
@@ -366,9 +362,17 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                             var_name = str(zeile.get('Variable', '')).strip()
                             
                             if typ == 'zahl':
-                                val = st.number_input(label, value=0.0, step=1.0, key=f"{blatt}_{index}")
+                                # --- NEU: STANDARDWERT AUS EXCEL ---
+                                std_val = 0.0
+                                try:
+                                    raw_val = str(zeile.get('Optionen', '')).strip()
+                                    if raw_val and raw_val.lower() != 'nan':
+                                        std_val = float(raw_val)
+                                except: std_val = 0.0
+                                
+                                val = st.number_input(label, value=std_val, step=1.0, key=f"{blatt}_{index}")
                                 vars_calc[var_name] = val
-                                if val > 0: desc_parts.append(f"{label}: {val}")
+                                if val != 0: desc_parts.append(f"{label}: {val}")
                             
                             elif typ == 'auswahl':
                                 raw_opts = str(zeile.get('Optionen', '')).split(',')
