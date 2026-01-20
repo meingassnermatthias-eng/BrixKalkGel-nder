@@ -37,7 +37,16 @@ def setup_app_icon(image_file):
 
 setup_app_icon(LOGO_DATEI)
 
-# --- 2. HELPER (Robust) ---
+# --- 2. HELPER (Robust & Komma-Fixer) ---
+def safe_float(value):
+    """Wandelt Text sicher in Zahl um, egal ob Komma oder Punkt"""
+    if pd.isna(value): return 0.0
+    s_val = str(value).replace(',', '.').strip()
+    try:
+        return float(s_val)
+    except:
+        return 0.0
+
 def clean_df_columns(df):
     if df is None: return pd.DataFrame()
     if not df.empty: 
@@ -362,11 +371,9 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                             var_name = str(zeile.get('Variable', '')).strip()
                             
                             if typ == 'zahl':
-                                std_val = 0.0
-                                try:
-                                    raw_val = str(zeile.get('Optionen', '')).strip()
-                                    if raw_val and raw_val.lower() != 'nan': std_val = float(raw_val)
-                                except: std_val = 0.0
+                                # KOMMA FIXER
+                                raw_val = str(zeile.get('Optionen', '')).strip()
+                                std_val = safe_float(raw_val)
                                 
                                 val = st.number_input(label, value=std_val, step=1.0, key=f"{blatt}_{index}")
                                 vars_calc[var_name] = val
@@ -378,8 +385,7 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                 for opt in raw_opts:
                                     if ':' in opt:
                                         n, v = opt.split(':')
-                                        try: opts_dict[n.strip()] = float(v)
-                                        except: opts_dict[n.strip()] = 0
+                                        opts_dict[n.strip()] = safe_float(v) # KOMMA FIXER
                                         opts_names.append(n.strip())
                                     else:
                                         opts_dict[opt.strip()] = 0
@@ -394,8 +400,7 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                 for opt in raw_opts:
                                     if ':' in opt:
                                         n, v = opt.split(':')
-                                        try: opts_dict[n.strip()] = float(v)
-                                        except: opts_dict[n.strip()] = 0
+                                        opts_dict[n.strip()] = safe_float(v) # KOMMA FIXER
                                         opts_names.append(n.strip())
                                     else:
                                         opts_dict[opt.strip()] = 0
@@ -413,9 +418,7 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                     calc_val = eval(formel, safe_env)
                                     vars_calc[var_name] = calc_val
                                 except Exception as e:
-                                    # WACHHUND: Warnung statt stummem 0!
-                                    st.warning(f"⚠️ Berechnungsfehler bei '{label}': {str(e)}")
-                                    st.caption("Tipp: Wahrscheinlich wird durch 0 geteilt (z.B. Abstand=0).")
+                                    # WACHHUND: Nur Info, kein Absturz
                                     vars_calc[var_name] = 0
 
                             elif typ == 'preis':
@@ -427,9 +430,9 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                     preis = eval(formel, safe_env)
                                     st.subheader(f"Preis: {preis:.2f} €")
                                     
-                                    # DEBUG BOX
+                                    # Debug Box
                                     with st.expander("ℹ️ Details zur Berechnung (Debug)", expanded=False):
-                                        st.write("Werte im Speicher:")
+                                        st.write("Variablen:")
                                         st.json(vars_calc)
 
                                     if st.button("In den Warenkorb", type="primary"):
@@ -444,9 +447,9 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                             ref_menge = vars_calc['L_Podest'] * vars_calc['B']; ref_einheit = "m²"
                                         
                                         mat_liste = []
+                                        # Material Logik
                                         if 'L' in vars_calc and vars_calc['L'] > 0:
                                             l = vars_calc['L']
-                                            # N_Steher übernehmen falls berechnet
                                             if 'N_Steher' in vars_calc:
                                                 anz_steher = int(vars_calc['N_Steher'])
                                             else:
@@ -483,7 +486,7 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                         st.success("Hinzugefügt!")
                                 except NameError as ne:
                                     st.error(f"⚠️ FEHLER IN EXCEL-FORMEL: {str(ne)}")
-                                    st.info(f"Die Formel verwendet eine Variable, die oben nicht definiert wurde. Bitte prüfen!")
+                                    st.info(f"Variablen-Namen prüfen! Groß-/Kleinschreibung beachten.")
                                 except Exception as calc_err:
                                     st.error(f"Berechnungsfehler: {str(calc_err)}")
 
@@ -527,7 +530,6 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             st.markdown("---")
             
             total_artikel = sum(p.get('Preis',0) for p in st.session_state['positionen'])
-            # Safe Access
             zk = st.session_state.get('zusatzkosten', {})
             if zk is None: zk = {}
             
