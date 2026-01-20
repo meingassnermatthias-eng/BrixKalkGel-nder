@@ -412,7 +412,10 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                     safe_env.update(vars_calc)
                                     calc_val = eval(formel, safe_env)
                                     vars_calc[var_name] = calc_val
-                                except:
+                                except Exception as e:
+                                    # WACHHUND: Warnung statt stummem 0!
+                                    st.warning(f"⚠️ Berechnungsfehler bei '{label}': {str(e)}")
+                                    st.caption("Tipp: Wahrscheinlich wird durch 0 geteilt (z.B. Abstand=0).")
                                     vars_calc[var_name] = 0
 
                             elif typ == 'preis':
@@ -441,7 +444,6 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                             ref_menge = vars_calc['L_Podest'] * vars_calc['B']; ref_einheit = "m²"
                                         
                                         mat_liste = []
-                                        # Material Logik für Stückliste
                                         if 'L' in vars_calc and vars_calc['L'] > 0:
                                             l = vars_calc['L']
                                             # N_Steher übernehmen falls berechnet
