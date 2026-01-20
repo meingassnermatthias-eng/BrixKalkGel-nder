@@ -362,12 +362,10 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                             var_name = str(zeile.get('Variable', '')).strip()
                             
                             if typ == 'zahl':
-                                # STANDARDWERT LOGIK
                                 std_val = 0.0
                                 try:
                                     raw_val = str(zeile.get('Optionen', '')).strip()
-                                    if raw_val and raw_val.lower() != 'nan':
-                                        std_val = float(raw_val)
+                                    if raw_val and raw_val.lower() != 'nan': std_val = float(raw_val)
                                 except: std_val = 0.0
                                 
                                 val = st.number_input(label, value=std_val, step=1.0, key=f"{blatt}_{index}")
@@ -407,7 +405,6 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                 vars_calc[var_name] = summe_wahl
                                 if wahl_liste: desc_parts.append(f"{label}: {', '.join(wahl_liste)}")
 
-                            # --- NEUER TYP: BERECHNUNG ---
                             elif typ == 'berechnung':
                                 formel = str(zeile.get('Formel', ''))
                                 try:
@@ -426,6 +423,12 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                 try:
                                     preis = eval(formel, safe_env)
                                     st.subheader(f"Preis: {preis:.2f} €")
+                                    
+                                    # DEBUG BOX
+                                    with st.expander("ℹ️ Details zur Berechnung (Debug)", expanded=False):
+                                        st.write("Werte im Speicher:")
+                                        st.json(vars_calc)
+
                                     if st.button("In den Warenkorb", type="primary"):
                                         full_desc = f"{auswahl_system} | " + ", ".join(desc_parts)
                                         
@@ -438,15 +441,20 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                             ref_menge = vars_calc['L_Podest'] * vars_calc['B']; ref_einheit = "m²"
                                         
                                         mat_liste = []
+                                        # Material Logik für Stückliste
                                         if 'L' in vars_calc and vars_calc['L'] > 0:
                                             l = vars_calc['L']
-                                            abstand = 1.3 
-                                            if 'Dist' in vars_calc and vars_calc['Dist'] > 0: abstand = vars_calc['Dist']
-                                            elif 'Edelstahl' in auswahl_system: abstand = 1.2
-                                            elif 'Draht' in auswahl_system: abstand = 2.5
+                                            # N_Steher übernehmen falls berechnet
+                                            if 'N_Steher' in vars_calc:
+                                                anz_steher = int(vars_calc['N_Steher'])
+                                            else:
+                                                abstand = 1.3 
+                                                if 'Dist' in vars_calc and vars_calc['Dist'] > 0: abstand = vars_calc['Dist']
+                                                elif 'Edelstahl' in auswahl_system: abstand = 1.2
+                                                elif 'Draht' in auswahl_system: abstand = 2.5
+                                                anz_steher = math.ceil(l / abstand) + 1
                                             
-                                            anz_steher = math.ceil(l / abstand) + 1
-                                            mat_liste.append(f"Steher (alle {abstand}m): {anz_steher} Stk")
+                                            mat_liste.append(f"Steher: {anz_steher} Stk")
                                             
                                             if 'Ist_Beton' in vars_calc:
                                                 if vars_calc['Ist_Beton'] == 1:
@@ -458,10 +466,11 @@ if menue_punkt == "📂 Konfigurator / Katalog":
 
                                         if 'H' in vars_calc and vars_calc['H'] > 0:
                                             h = vars_calc['H']
-                                            stufen = math.ceil(h / 0.18)
-                                            wangen_lfm = h * 1.8 * 2
-                                            mat_liste.append(f"Stufen (H/18cm): {stufen} Stk")
-                                            mat_liste.append(f"Wangen-Profil: ca. {wangen_lfm:.2f} lfm")
+                                            if 'N_Rows' in vars_calc:
+                                                mat_liste.append(f"Anzahl Füllungs-Reihen: {int(vars_calc['N_Rows'])}")
+                                            else:
+                                                stufen = math.ceil(h / 0.18)
+                                                mat_liste.append(f"Stufen (H/18cm): {stufen} Stk")
 
                                         st.session_state['positionen'].append({
                                             "Beschreibung": full_desc, "Menge": 1.0, 
