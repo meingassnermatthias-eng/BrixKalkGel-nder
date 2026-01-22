@@ -371,7 +371,6 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                             var_name = str(zeile.get('Variable', '')).strip()
                             
                             if typ == 'zahl':
-                                # KOMMA FIXER
                                 raw_val = str(zeile.get('Optionen', '')).strip()
                                 std_val = safe_float(raw_val)
                                 
@@ -382,17 +381,26 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                             elif typ == 'auswahl':
                                 raw_opts = str(zeile.get('Optionen', '')).split(',')
                                 opts_dict = {}; opts_names = []
-                                for opt in raw_opts:
-                                    if ':' in opt:
-                                        n, v = opt.split(':')
-                                        opts_dict[n.strip()] = safe_float(v) # KOMMA FIXER
-                                        opts_names.append(n.strip())
+                                
+                                if not raw_opts or (len(raw_opts) == 1 and raw_opts[0] == ''):
+                                    st.error(f"❌ FEHLER in Zeile '{label}': Keine Optionen gefunden!")
+                                    st.code(f"Gelesener Wert im Excel: '{zeile.get('Optionen', '')}'", language="text")
+                                else:
+                                    for opt in raw_opts:
+                                        if ':' in opt:
+                                            n, v = opt.split(':')
+                                            opts_dict[n.strip()] = safe_float(v)
+                                            opts_names.append(n.strip())
+                                        else:
+                                            opts_dict[opt.strip()] = 0
+                                            opts_names.append(opt.strip())
+                                    
+                                    if opts_names:
+                                        wahl = st.selectbox(label, opts_names, key=f"{blatt}_{index}")
+                                        vars_calc[var_name] = opts_dict.get(wahl, 0)
+                                        desc_parts.append(f"{label}: {wahl}")
                                     else:
-                                        opts_dict[opt.strip()] = 0
-                                        opts_names.append(opt.strip())
-                                wahl = st.selectbox(label, opts_names, key=f"{blatt}_{index}")
-                                vars_calc[var_name] = opts_dict.get(wahl, 0)
-                                desc_parts.append(f"{label}: {wahl}")
+                                        st.warning(f"Dropdown '{label}' ist leer. Prüfe Syntax 'Text:Preis, Text:Preis'")
                             
                             elif typ == 'mehrfach':
                                 raw_opts = str(zeile.get('Optionen', '')).split(',')
@@ -400,7 +408,7 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                 for opt in raw_opts:
                                     if ':' in opt:
                                         n, v = opt.split(':')
-                                        opts_dict[n.strip()] = safe_float(v) # KOMMA FIXER
+                                        opts_dict[n.strip()] = safe_float(v)
                                         opts_names.append(n.strip())
                                     else:
                                         opts_dict[opt.strip()] = 0
@@ -418,7 +426,6 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                     calc_val = eval(formel, safe_env)
                                     vars_calc[var_name] = calc_val
                                 except Exception as e:
-                                    # WACHHUND: Nur Info, kein Absturz
                                     vars_calc[var_name] = 0
 
                             elif typ == 'preis':
@@ -430,7 +437,6 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                     preis = eval(formel, safe_env)
                                     st.subheader(f"Preis: {preis:.2f} €")
                                     
-                                    # Debug Box
                                     with st.expander("ℹ️ Details zur Berechnung (Debug)", expanded=False):
                                         st.write("Variablen:")
                                         st.json(vars_calc)
@@ -447,19 +453,29 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                             ref_menge = vars_calc['L_Podest'] * vars_calc['B']; ref_einheit = "m²"
                                         
                                         mat_liste = []
-                                        # Material Logik
+                                        # --- INTELLIGENTE MATERIAL-LISTE ---
                                         if 'L' in vars_calc and vars_calc['L'] > 0:
                                             l = vars_calc['L']
-                                            if 'N_Steher' in vars_calc:
-                                                anz_steher = int(vars_calc['N_Steher'])
-                                            else:
+                                            
+                                            # Fall 1: Terrassenüberdachung (Neu)
+                                            if 'N_Spar' in vars_calc:
+                                                mat_liste.append(f"Anzahl Säulen: {int(vars_calc.get('N_Col', 0))}")
+                                                mat_liste.append(f"Anzahl Sparren: {int(vars_calc['N_Spar'])}")
+                                            
+                                            # Fall 2: Horizontales Geländer (Neu)
+                                            elif 'N_Rows' in vars_calc:
+                                                if 'N_Steher' in vars_calc:
+                                                    mat_liste.append(f"Steher: {int(vars_calc['N_Steher'])} Stk")
+                                                mat_liste.append(f"Füllungs-Reihen: {int(vars_calc['N_Rows'])}")
+                                            
+                                            # Fall 3: Standard Zäune/Geländer (Fallback)
+                                            elif 'Treppe' not in str(auswahl_system) and 'N_Col' not in vars_calc:
                                                 abstand = 1.3 
                                                 if 'Dist' in vars_calc and vars_calc['Dist'] > 0: abstand = vars_calc['Dist']
                                                 elif 'Edelstahl' in auswahl_system: abstand = 1.2
                                                 elif 'Draht' in auswahl_system: abstand = 2.5
                                                 anz_steher = math.ceil(l / abstand) + 1
-                                            
-                                            mat_liste.append(f"Steher: {anz_steher} Stk")
+                                                mat_liste.append(f"Steher (kalkuliert): {anz_steher} Stk")
                                             
                                             if 'Ist_Beton' in vars_calc:
                                                 if vars_calc['Ist_Beton'] == 1:
@@ -469,11 +485,11 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                             if 'Ecken' in vars_calc and vars_calc['Ecken'] > 0:
                                                 mat_liste.append(f"Eck-Verbinder: {int(vars_calc['Ecken'])} Stk")
 
+                                        # Fall 4: Treppen (Nur wenn explizit Treppe im Namen oder System)
                                         if 'H' in vars_calc and vars_calc['H'] > 0:
                                             h = vars_calc['H']
-                                            if 'N_Rows' in vars_calc:
-                                                mat_liste.append(f"Anzahl Füllungs-Reihen: {int(vars_calc['N_Rows'])}")
-                                            else:
+                                            # Nur Stufen rechnen, wenn es keine Reihen (Geländer) oder Säulen (Dach) sind
+                                            if 'N_Rows' not in vars_calc and 'N_Col' not in vars_calc:
                                                 stufen = math.ceil(h / 0.18)
                                                 mat_liste.append(f"Stufen (H/18cm): {stufen} Stk")
 
