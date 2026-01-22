@@ -14,6 +14,55 @@ MWST_SATZ = 0.20  # 20% MwSt
 
 st.set_page_config(page_title="Meingassner App", layout="wide", page_icon=LOGO_DATEI)
 
+# --- 2. PASSWORT SCHUTZ (Der Türsteher) ---
+def check_password():
+    """Returns `True` if the user had the correct password."""
+
+    # Prüfen ob überhaupt ein Passwort im System hinterlegt ist
+    if "password" not in st.secrets:
+        st.error("⚠️ ACHTUNG: Es wurde noch kein Passwort in den Streamlit 'Secrets' hinterlegt.")
+        st.info("Gehe auf share.streamlit.io -> App Settings -> Secrets und trage ein: password = \"DeinPasswort\"")
+        return False
+
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if st.session_state["password"] == st.secrets["password"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Passwort aus dem Cache löschen
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # Erste Anzeige: Eingabefeld
+        st.text_input(
+            "🔒 Bitte Passwort eingeben:", 
+            type="password", 
+            on_change=password_entered, 
+            key="password"
+        )
+        return False
+    elif not st.session_state["password_correct"]:
+        # Passwort war falsch
+        st.text_input(
+            "🔒 Bitte Passwort eingeben:", 
+            type="password", 
+            on_change=password_entered, 
+            key="password"
+        )
+        st.error("😕 Passwort falsch")
+        return False
+    else:
+        # Passwort war korrekt
+        return True
+
+# --- ZUGRIFFSPRÜFUNG ---
+if not check_password():
+    st.stop()  # HIER STOPPT DIE APP WENN PASSWORT FALSCH/FEHLT
+
+# ---------------------------------------------------------
+# AB HIER LÄUFT DIE NORMALE APP (NUR NACH LOGIN)
+# ---------------------------------------------------------
+
 # NOTFALL RESET
 st.sidebar.header("Hilfe")
 if st.sidebar.button("⚠️ Speicher leeren (Reset)", help="Klicken bei hartnäckigen Fehlern"):
@@ -37,7 +86,7 @@ def setup_app_icon(image_file):
 
 setup_app_icon(LOGO_DATEI)
 
-# --- 2. HELPER (Robust & Komma-Fixer) ---
+# --- HELPER (Robust & Komma-Fixer) ---
 def safe_float(value):
     """Wandelt Text sicher in Zahl um, egal ob Komma oder Punkt"""
     if pd.isna(value): return 0.0
@@ -82,7 +131,7 @@ def speichere_excel(df, blatt_name):
         return True
     except: return False
 
-# --- 3. SESSION STATE ---
+# --- SESSION STATE ---
 def init_state():
     if 'positionen' not in st.session_state or st.session_state['positionen'] is None: 
         st.session_state['positionen'] = []
@@ -104,10 +153,7 @@ def init_state():
 
 init_state()
 
-# --- 4. EXCEL GENERATOR (Dummy) ---
-def generiere_neue_excel_datei(): return False
-
-# --- 5. PDF ENGINES ---
+# --- PDF ENGINES ---
 def clean_text(text):
     if text is None: return ""
     if not isinstance(text, str): text = str(text)
@@ -453,55 +499,51 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                             ref_menge = vars_calc['L_Podest'] * vars_calc['B']; ref_einheit = "m²"
                                         
                                         mat_liste = []
-                                        
-                                        # 1. TERRASSENÜBERDACHUNG (Priorität)
-                                        if 'N_Spar' in vars_calc:
-                                            l = vars_calc.get('L', 0)
-                                            b = vars_calc.get('B', 0)
-                                            h = vars_calc.get('H', 0)
-                                            n_col = int(vars_calc.get('N_Col', 0))
-                                            n_spar = int(vars_calc.get('N_Spar', 0))
-                                            
-                                            # ERP-Daten
-                                            dachflaeche = l * b
-                                            # Schätzung Stahlfläche: Säulen (40cm) + Sparren (30cm) + Träger (50cm) -> Faktor ~0.4
-                                            stahl_lfm = (n_col * h) + (n_spar * b) + l
-                                            stahl_flaeche = stahl_lfm * 0.4
-                                            
-                                            mat_liste.append(f"Dachfläche (Glas/Folie): {dachflaeche:.2f} m²")
-                                            mat_liste.append(f"Säulen: {n_col} Stk | Sparren: {n_spar} Stk")
-                                            mat_liste.append(f"Laufmeter Stahlprofile (Gesamt): {stahl_lfm:.2f} m")
-                                            mat_liste.append(f"Oberfläche Stahl (ca. Beschichtung): {stahl_flaeche:.2f} m²")
-
-                                        # 2. HORIZONTAL GELÄNDER
-                                        elif 'N_Rows' in vars_calc:
-                                            l = vars_calc.get('L', 0)
-                                            h = vars_calc.get('H', 0)
-                                            n_steher = int(vars_calc.get('N_Steher', 0))
-                                            n_rows = int(vars_calc.get('N_Rows', 0))
-                                            
-                                            mat_liste.append(f"Steher: {n_steher} Stk")
-                                            mat_liste.append(f"Füllung: {n_rows} Reihen")
-                                            mat_liste.append(f"Laufmeter Füllung: {(l * n_rows):.2f} m")
-                                            mat_liste.append(f"Ansichtsfläche: {(l * h):.2f} m²")
-
-                                        # 3. STANDARD (Zäune, Einfaches Geländer)
-                                        elif 'L' in vars_calc and 'Treppe' not in str(auswahl_system):
+                                        # --- INTELLIGENTE MATERIAL-LISTE ---
+                                        if 'L' in vars_calc and vars_calc['L'] > 0:
                                             l = vars_calc['L']
-                                            abstand = 1.3 
-                                            if 'Dist' in vars_calc and vars_calc['Dist'] > 0: abstand = vars_calc['Dist']
-                                            elif 'Edelstahl' in auswahl_system: abstand = 1.2
-                                            elif 'Draht' in auswahl_system: abstand = 2.5
-                                            anz_steher = math.ceil(l / abstand) + 1
-                                            mat_liste.append(f"Steher (kalkuliert): {anz_steher} Stk")
                                             
-                                            if 'H' in vars_calc:
-                                                mat_liste.append(f"Ansichtsfläche: {(l * vars_calc['H']):.2f} m²")
+                                            # Fall 1: Terrassenüberdachung
+                                            if 'N_Spar' in vars_calc:
+                                                b = vars_calc.get('B', 0)
+                                                h = vars_calc.get('H', 0)
+                                                n_col = int(vars_calc.get('N_Col', 0))
+                                                n_spar = int(vars_calc.get('N_Spar', 0))
+                                                
+                                                dachflaeche = l * b
+                                                stahl_lfm = (n_col * h) + (n_spar * b) + l
+                                                stahl_flaeche = stahl_lfm * 0.4
+                                                
+                                                mat_liste.append(f"Dachfläche (Glas/Folie): {dachflaeche:.2f} m²")
+                                                mat_liste.append(f"Säulen: {n_col} Stk | Sparren: {n_spar} Stk")
+                                                mat_liste.append(f"Laufmeter Stahlprofile (Gesamt): {stahl_lfm:.2f} m")
+                                                mat_liste.append(f"Oberfläche Stahl (ca. Beschichtung): {stahl_flaeche:.2f} m²")
 
-                                        # 4. TREPPEN (Nur wenn explizit H da und keine anderen Indikatoren)
-                                        if 'H' in vars_calc and 'N_Spar' not in vars_calc and 'N_Rows' not in vars_calc:
-                                            # Prüfen ob Systemname "Treppe" enthält
-                                            if 'Treppe' in str(auswahl_system):
+                                            # Fall 2: Horizontal Geländer
+                                            elif 'N_Rows' in vars_calc:
+                                                h = vars_calc.get('H', 0)
+                                                n_steher = int(vars_calc.get('N_Steher', 0))
+                                                n_rows = int(vars_calc.get('N_Rows', 0))
+                                                
+                                                mat_liste.append(f"Steher: {n_steher} Stk")
+                                                mat_liste.append(f"Füllung: {n_rows} Reihen")
+                                                mat_liste.append(f"Laufmeter Füllung: {(l * n_rows):.2f} m")
+                                                mat_liste.append(f"Ansichtsfläche: {(l * h):.2f} m²")
+
+                                            # Fall 3: Standard Zäune/Geländer
+                                            elif 'Treppe' not in str(auswahl_system) and 'N_Col' not in vars_calc:
+                                                abstand = 1.3 
+                                                if 'Dist' in vars_calc and vars_calc['Dist'] > 0: abstand = vars_calc['Dist']
+                                                elif 'Edelstahl' in auswahl_system: abstand = 1.2
+                                                elif 'Draht' in auswahl_system: abstand = 2.5
+                                                anz_steher = math.ceil(l / abstand) + 1
+                                                mat_liste.append(f"Steher (kalkuliert): {anz_steher} Stk")
+                                                if 'H' in vars_calc:
+                                                    mat_liste.append(f"Ansichtsfläche: {(l * vars_calc['H']):.2f} m²")
+
+                                        # Fall 4: Treppen (Nur wenn explizit H da und keine anderen Indikatoren)
+                                        if 'H' in vars_calc and vars_calc['H'] > 0:
+                                            if 'N_Spar' not in vars_calc and 'N_Rows' not in vars_calc and 'Treppe' in str(auswahl_system):
                                                 h = vars_calc['H']
                                                 stufen = math.ceil(h / 0.18)
                                                 mat_liste.append(f"Stufen (H/18cm): {stufen} Stk")
