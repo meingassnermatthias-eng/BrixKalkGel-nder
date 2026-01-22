@@ -453,45 +453,67 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                             ref_menge = vars_calc['L_Podest'] * vars_calc['B']; ref_einheit = "m²"
                                         
                                         mat_liste = []
-                                        # --- INTELLIGENTE MATERIAL-LISTE ---
-                                        if 'L' in vars_calc and vars_calc['L'] > 0:
-                                            l = vars_calc['L']
+                                        
+                                        # 1. TERRASSENÜBERDACHUNG (Priorität)
+                                        if 'N_Spar' in vars_calc:
+                                            l = vars_calc.get('L', 0)
+                                            b = vars_calc.get('B', 0)
+                                            h = vars_calc.get('H', 0)
+                                            n_col = int(vars_calc.get('N_Col', 0))
+                                            n_spar = int(vars_calc.get('N_Spar', 0))
                                             
-                                            # Fall 1: Terrassenüberdachung (Neu)
-                                            if 'N_Spar' in vars_calc:
-                                                mat_liste.append(f"Anzahl Säulen: {int(vars_calc.get('N_Col', 0))}")
-                                                mat_liste.append(f"Anzahl Sparren: {int(vars_calc['N_Spar'])}")
+                                            # ERP-Daten
+                                            dachflaeche = l * b
+                                            # Schätzung Stahlfläche: Säulen (40cm) + Sparren (30cm) + Träger (50cm) -> Faktor ~0.4
+                                            stahl_lfm = (n_col * h) + (n_spar * b) + l
+                                            stahl_flaeche = stahl_lfm * 0.4
                                             
-                                            # Fall 2: Horizontales Geländer (Neu)
-                                            elif 'N_Rows' in vars_calc:
-                                                if 'N_Steher' in vars_calc:
-                                                    mat_liste.append(f"Steher: {int(vars_calc['N_Steher'])} Stk")
-                                                mat_liste.append(f"Füllungs-Reihen: {int(vars_calc['N_Rows'])}")
-                                            
-                                            # Fall 3: Standard Zäune/Geländer (Fallback)
-                                            elif 'Treppe' not in str(auswahl_system) and 'N_Col' not in vars_calc:
-                                                abstand = 1.3 
-                                                if 'Dist' in vars_calc and vars_calc['Dist'] > 0: abstand = vars_calc['Dist']
-                                                elif 'Edelstahl' in auswahl_system: abstand = 1.2
-                                                elif 'Draht' in auswahl_system: abstand = 2.5
-                                                anz_steher = math.ceil(l / abstand) + 1
-                                                mat_liste.append(f"Steher (kalkuliert): {anz_steher} Stk")
-                                            
-                                            if 'Ist_Beton' in vars_calc:
-                                                if vars_calc['Ist_Beton'] == 1:
-                                                    mat_liste.append(f"Beton (2/Steher): {anz_steher * 2} Säcke")
-                                                else:
-                                                    mat_liste.append(f"Dübelplatten: {anz_steher} Stk")
-                                            if 'Ecken' in vars_calc and vars_calc['Ecken'] > 0:
-                                                mat_liste.append(f"Eck-Verbinder: {int(vars_calc['Ecken'])} Stk")
+                                            mat_liste.append(f"Dachfläche (Glas/Folie): {dachflaeche:.2f} m²")
+                                            mat_liste.append(f"Säulen: {n_col} Stk | Sparren: {n_spar} Stk")
+                                            mat_liste.append(f"Laufmeter Stahlprofile (Gesamt): {stahl_lfm:.2f} m")
+                                            mat_liste.append(f"Oberfläche Stahl (ca. Beschichtung): {stahl_flaeche:.2f} m²")
 
-                                        # Fall 4: Treppen (Nur wenn explizit Treppe im Namen oder System)
-                                        if 'H' in vars_calc and vars_calc['H'] > 0:
-                                            h = vars_calc['H']
-                                            # Nur Stufen rechnen, wenn es keine Reihen (Geländer) oder Säulen (Dach) sind
-                                            if 'N_Rows' not in vars_calc and 'N_Col' not in vars_calc:
+                                        # 2. HORIZONTAL GELÄNDER
+                                        elif 'N_Rows' in vars_calc:
+                                            l = vars_calc.get('L', 0)
+                                            h = vars_calc.get('H', 0)
+                                            n_steher = int(vars_calc.get('N_Steher', 0))
+                                            n_rows = int(vars_calc.get('N_Rows', 0))
+                                            
+                                            mat_liste.append(f"Steher: {n_steher} Stk")
+                                            mat_liste.append(f"Füllung: {n_rows} Reihen")
+                                            mat_liste.append(f"Laufmeter Füllung: {(l * n_rows):.2f} m")
+                                            mat_liste.append(f"Ansichtsfläche: {(l * h):.2f} m²")
+
+                                        # 3. STANDARD (Zäune, Einfaches Geländer)
+                                        elif 'L' in vars_calc and 'Treppe' not in str(auswahl_system):
+                                            l = vars_calc['L']
+                                            abstand = 1.3 
+                                            if 'Dist' in vars_calc and vars_calc['Dist'] > 0: abstand = vars_calc['Dist']
+                                            elif 'Edelstahl' in auswahl_system: abstand = 1.2
+                                            elif 'Draht' in auswahl_system: abstand = 2.5
+                                            anz_steher = math.ceil(l / abstand) + 1
+                                            mat_liste.append(f"Steher (kalkuliert): {anz_steher} Stk")
+                                            
+                                            if 'H' in vars_calc:
+                                                mat_liste.append(f"Ansichtsfläche: {(l * vars_calc['H']):.2f} m²")
+
+                                        # 4. TREPPEN (Nur wenn explizit H da und keine anderen Indikatoren)
+                                        if 'H' in vars_calc and 'N_Spar' not in vars_calc and 'N_Rows' not in vars_calc:
+                                            # Prüfen ob Systemname "Treppe" enthält
+                                            if 'Treppe' in str(auswahl_system):
+                                                h = vars_calc['H']
                                                 stufen = math.ceil(h / 0.18)
                                                 mat_liste.append(f"Stufen (H/18cm): {stufen} Stk")
+
+                                        # Beton / Ecken (Immer prüfen)
+                                        if 'Ist_Beton' in vars_calc:
+                                            if vars_calc['Ist_Beton'] == 1:
+                                                mat_liste.append(f"Beton (2/Steher): {anz_steher * 2} Säcke")
+                                            else:
+                                                mat_liste.append(f"Dübelplatten: {anz_steher} Stk")
+                                        if 'Ecken' in vars_calc and vars_calc['Ecken'] > 0:
+                                            mat_liste.append(f"Eck-Verbinder: {int(vars_calc['Ecken'])} Stk")
 
                                         st.session_state['positionen'].append({
                                             "Beschreibung": full_desc, "Menge": 1.0, 
