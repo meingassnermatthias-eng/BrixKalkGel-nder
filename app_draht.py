@@ -714,7 +714,7 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
 elif menue_punkt == "🔐 Admin":
     st.title("Admin")
     pw = st.text_input("Passwort:", type="password")
-    if pw == "1234":
+    if pw == "1205":
         st.error("ACHTUNG: Reset löscht alle manuellen Excel-Änderungen!")
         if st.button("🚀 Katalog-Datei neu erstellen (Reset)", type="primary"):
             if generiere_neue_excel_datei(): st.success("Neu erstellt!"); st.cache_data.clear()
