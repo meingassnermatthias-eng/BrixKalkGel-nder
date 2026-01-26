@@ -21,8 +21,7 @@ st.set_page_config(page_title="Meingassner Kalkulator", layout="wide", page_icon
 # ==========================================
 def check_password():
     if "password" not in st.secrets:
-        # Fallback für lokale Tests ohne Secrets
-        return True 
+        return True # Fallback für lokal
 
     def password_entered():
         if st.session_state["password"] == st.secrets["password"]:
@@ -32,11 +31,11 @@ def check_password():
             st.session_state["password_correct"] = False
 
     if "password_correct" not in st.session_state:
-        st.text_input("🔒 Bitte Passwort eingeben:", type="password", on_change=password_entered, key="password")
+        st.text_input("🔒 Passwort:", type="password", on_change=password_entered, key="password")
         return False
     elif not st.session_state["password_correct"]:
-        st.text_input("🔒 Bitte Passwort eingeben:", type="password", on_change=password_entered, key="password")
-        st.error("⛔ Passwort falsch.")
+        st.text_input("🔒 Passwort:", type="password", on_change=password_entered, key="password")
+        st.error("⛔ Falsch")
         return False
     else:
         return True
@@ -65,7 +64,7 @@ def clean_df_columns(df):
 
 def lade_startseite():
     if not os.path.exists(EXCEL_DATEI):
-        st.error(f"❌ Datei '{EXCEL_DATEI}' nicht gefunden!")
+        st.error(f"❌ Datei '{EXCEL_DATEI}' fehlt!")
         return pd.DataFrame()
     try: return clean_df_columns(pd.read_excel(EXCEL_DATEI, sheet_name="Startseite"))
     except: return pd.DataFrame()
@@ -73,11 +72,10 @@ def lade_startseite():
 def lade_blatt(blatt_name):
     if not os.path.exists(EXCEL_DATEI): return pd.DataFrame()
     try: 
-        sauberer_name = str(blatt_name).strip()
-        df = pd.read_excel(EXCEL_DATEI, sheet_name=sauberer_name)
+        df = pd.read_excel(EXCEL_DATEI, sheet_name=str(blatt_name).strip())
         return clean_df_columns(df)
     except ValueError:
-        st.error(f"❌ FEHLER: Blatt '{blatt_name}' fehlt in Excel!")
+        st.error(f"❌ Blatt '{blatt_name}' fehlt in Excel!")
         return pd.DataFrame()
     except Exception: return pd.DataFrame()
 
@@ -116,14 +114,13 @@ def init_state():
     default_zk = {
         "kran": 0.0, "montage_mann": 2, "montage_std": 0.0, "montage_satz": 65.0,
         "zuschlag_prozent": 0.0, "zuschlag_label": "Normal",
-        "provision_prozent": 0.0, # Versteckter Aufschlag
-        "rabatt_prozent": 0.0,    # Sichtbarer Rabatt
-        "skonto_prozent": 0.0     # Skonto Info
+        "provision_prozent": 0.0,
+        "rabatt_prozent": 0.0,
+        "skonto_prozent": 0.0
     }
     if 'zusatzkosten' not in st.session_state:
         st.session_state['zusatzkosten'] = default_zk.copy()
     else:
-        # Neue Keys hinzufügen falls Session alt ist
         for k, v in default_zk.items():
             if k not in st.session_state['zusatzkosten']:
                 st.session_state['zusatzkosten'][k] = v
@@ -131,7 +128,7 @@ def init_state():
 init_state()
 
 # ==========================================
-# 5. PDF ENGINES (MIT PROVISION & RABATT)
+# 5. PDF ENGINE (MIT POSITIONSNUMMERN & LAYOUT FIX)
 # ==========================================
 def clean_text(text):
     if text is None: return ""
@@ -142,155 +139,261 @@ def clean_text(text):
 class PDF(FPDF):
     def header(self):
         if os.path.exists(LOGO_DATEI): 
-            try: self.image(LOGO_DATEI, 10, 8, 60)
+            try: self.image(LOGO_DATEI, 10, 8, 50)
             except: pass
-        self.set_font('Arial', 'B', 16)
-        heute = datetime.now().strftime("%d.%m.%Y")
-        self.cell(0, 18, clean_text(f"Kostenschätzung vom {heute}"), 0, 1, 'R')
-        self.ln(10)
+        
+        self.set_font('Helvetica', 'B', 16)
+        self.set_text_color(44, 62, 80)
+        self.cell(0, 10, clean_text("Kostenschätzung"), 0, 1, 'R')
+        self.set_font('Helvetica', '', 10)
+        self.set_text_color(100, 100, 100)
+        self.cell(0, 6, clean_text(f"Datum: {datetime.now().strftime('%d.%m.%Y')}"), 0, 1, 'R')
+        self.set_draw_color(200, 200, 200)
+        self.line(10, 32, 200, 32)
+        self.ln(15)
+
     def footer(self):
-        self.set_y(-15); self.set_font('Arial', 'I', 8); self.cell(0, 10, f'Seite {self.page_no()}', 0, 0, 'C')
+        self.set_y(-15)
+        self.set_font('Helvetica', 'I', 8)
+        self.set_text_color(128, 128, 128)
+        self.cell(0, 10, f'Seite {self.page_no()}', 0, 0, 'C')
+
+    def table_header(self):
+        self.set_font("Helvetica", 'B', 9)
+        self.set_fill_color(240, 240, 240)
+        self.set_text_color(0, 0, 0)
+        self.set_draw_color(220, 220, 220)
+        
+        # Spalten: Pos, Beschreibung, Menge, EP, Gesamt
+        self.cell(10, 8, "Pos.", 1, 0, 'C', True)
+        self.cell(95, 8, "Beschreibung", 1, 0, 'L', True)
+        self.cell(20, 8, "Menge", 1, 0, 'C', True)
+        self.cell(30, 8, "EP", 1, 0, 'R', True)
+        self.cell(35, 8, "Gesamt", 1, 1, 'R', True)
 
 def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, zeige_details, zuschlag_prozent, zuschlag_label, zuschlag_transparent, provision_prozent, rabatt_prozent, skonto_prozent):
-    pdf = PDF(); pdf.alias_nb_pages(); pdf.add_page()
+    pdf = PDF()
+    pdf.set_auto_page_break(auto=True, margin=20) # WICHTIG für automatischen Umbruch
+    pdf.alias_nb_pages()
+    pdf.add_page()
     
-    # KUNDENINFO
-    pdf.ln(10); pdf.set_font("Arial", 'B', 12); pdf.cell(0, 6, "Kundeninformation:", ln=True); pdf.set_font("Arial", size=10)
-    k_text = f"{kunden_dict.get('Name','')}\n{kunden_dict.get('Strasse','')}\n{kunden_dict.get('Ort','')}\n\nTel: {kunden_dict.get('Tel','')}\nEmail: {kunden_dict.get('Email','')}"
-    pdf.multi_cell(0, 5, clean_text(k_text))
+    # Adresse
+    pdf.set_font("Helvetica", 'B', 11)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(0, 6, clean_text("Empfänger:"), 0, 1)
+    pdf.set_font("Helvetica", '', 11)
+    adresse = f"{kunden_dict.get('Name','')}\n{kunden_dict.get('Strasse','')}\n{kunden_dict.get('Ort','')}"
+    pdf.multi_cell(0, 6, clean_text(adresse))
+    
     if kunden_dict.get("Notiz"):
-        pdf.ln(5); pdf.set_font("Arial", 'B', 10); pdf.cell(0, 5, "Bemerkung:", ln=True); pdf.set_font("Arial", size=10)
-        pdf.multi_cell(0, 5, clean_text(kunden_dict["Notiz"]))
+        pdf.ln(5)
+        pdf.set_font("Helvetica", 'I', 10)
+        pdf.set_fill_color(250, 250, 250)
+        pdf.multi_cell(0, 6, clean_text(f"Notiz: {kunden_dict['Notiz']}"), 0, 'L', True)
+    
     pdf.ln(10)
+    pdf.table_header()
     
-    # TABELLE SETUP
-    pdf.set_font("Arial", 'B', 10); pdf.set_fill_color(240, 240, 240)
-    w_desc, w_menge, w_ep, w_gesamt = 100, 25, 30, 35
-    pdf.cell(w_desc, 8, "Beschreibung", 1, 0, 'L', True); pdf.cell(w_menge, 8, "Menge", 1, 0, 'C', True)
-    pdf.cell(w_ep, 8, "EP (EUR)", 1, 0, 'R', True); pdf.cell(w_gesamt, 8, "Gesamt", 1, 1, 'R', True)
-    pdf.set_font("Arial", size=10)
+    # --- TABELLEN INHALT ---
+    pdf.set_font("Helvetica", '', 10)
     
-    # FAKTOR FÜR VERSTECKTE PROVISION
-    # Wenn Provision 10%, dann Faktor 1.10. Alle Einzelpreise werden damit multipliziert.
     prov_faktor = 1 + (provision_prozent / 100.0)
-
     subtotal_list = 0
     
-    # POSITIONEN
+    # Zähler für Positionsnummer
+    pos_nr = 1
+    
     for pos in positionen_liste:
         if not pos: continue
         
-        # Preise für Kunden aufblasen (versteckte Provision)
         ep_kunde = pos.get('Einzelpreis', 0) * prov_faktor
         gp_kunde = pos.get('Preis', 0) * prov_faktor
-        
-        raw_desc = str(pos.get('Beschreibung', '')); parts = raw_desc.split("|")
-        main_title = parts[0].strip()
-        details = ("\n" + parts[1].replace(",", "\n -").strip()) if len(parts) > 1 else ""
-        
-        if pos.get('RefMenge', 0) > 0:
-            einheit_preis_k = ep_kunde / float(pos['RefMenge'])
-            details += f"\n   (entspricht {einheit_preis_k:.2f} EUR / {pos.get('RefEinheit', 'Stk')})"
-
-        x_start, y_start = pdf.get_x(), pdf.get_y()
-        pdf.multi_cell(w_desc, 5, clean_text(f"{main_title}{details}"), border=1, align='L')
-        y_end = pdf.get_y(); row_height = y_end - y_start
-        pdf.set_xy(x_start + w_desc, y_start)
-        pdf.cell(w_menge, row_height, clean_text(str(pos.get('Menge', 0))), 1, 0, 'C')
-        pdf.cell(w_ep, row_height, f"{ep_kunde:.2f}", 1, 0, 'R')
-        pdf.cell(w_gesamt, row_height, f"{gp_kunde:.2f}", 1, 1, 'R')
         subtotal_list += gp_kunde
+        
+        # Text
+        raw_desc = str(pos.get('Beschreibung', ''))
+        parts = raw_desc.split("|")
+        titel = parts[0].strip()
+        
+        details = ""
+        if len(parts) > 1:
+            details = "\n" + parts[1].replace(",", "\n •").strip()
+            if not details.strip().startswith("•"): details = details.replace("\n", "\n •", 1)
+            
+        full_text = f"{titel}{details}"
+        if pos.get('RefMenge', 0) > 0:
+            ep_ref = ep_kunde / float(pos['RefMenge'])
+            full_text += f"\n(entspr. {ep_ref:.2f} EUR / {pos.get('RefEinheit', 'Stk')})"
 
-    # ZUSATZKOSTEN (auch mit Provision versehen!)
+        # --- INTELLIGENTER ZEILENUMBRUCH ---
+        # Wir berechnen, wie hoch die Zeile wird
+        # Breite der Beschreibungsspalte = 95
+        x_start = pdf.get_x()
+        y_start = pdf.get_y()
+        
+        # Test-Druck (unsichtbar) um Höhe zu prüfen wäre ideal, aber FPDF ist simpel.
+        # Wir schätzen: Anzahl Zeilenumbrüche im Text + Länge Text
+        
+        # 1. Wir drucken die Beschreibung in eine Zelle
+        pdf.set_x(20) # Einrücken nach Pos-Spalte (10mm + 10mm Rand)
+        
+        # Prüfen ob Platz reicht, sonst neue Seite
+        # Geschätzte Höhe: ca. 5mm pro Zeile
+        lines = full_text.count('\n') + (len(full_text) / 50) 
+        needed_height = lines * 5 + 10
+        
+        if pdf.get_y() + needed_height > 260:
+            pdf.add_page()
+            pdf.table_header()
+            y_start = pdf.get_y()
+
+        # Pos Nr
+        pdf.set_xy(10, y_start)
+        pdf.cell(10, 5, str(pos_nr), 0, 0, 'C') # Rahmen erst am Ende zeichnen
+        
+        # Beschreibung
+        pdf.set_xy(20, y_start)
+        pdf.multi_cell(95, 5, clean_text(full_text), border=0, align='L')
+        y_end = pdf.get_y()
+        row_height = y_end - y_start
+        
+        # Werte (Menge, EP, Gesamt) auf gleicher Höhe zentriert oder oben
+        pdf.set_xy(115, y_start)
+        pdf.cell(20, row_height, clean_text(str(pos.get('Menge', 0))), 0, 0, 'C')
+        pdf.cell(30, row_height, f"{ep_kunde:.2f}", 0, 0, 'R')
+        pdf.cell(35, row_height, f"{gp_kunde:.2f}", 0, 0, 'R')
+        
+        # Linie unten ziehen (als Zeilenabschluss)
+        pdf.line(10, y_end, 200, y_end)
+        pdf.set_y(y_end) # Cursor für nächste Zeile
+        
+        pos_nr += 1
+
+    # --- ZUSATZKOSTEN (als eigene Positionen) ---
+    montage_final = (montage_summe * prov_faktor) 
+    kran_final = (kran_summe * prov_faktor)
+    
+    # Zuschlag berechnen
+    basis_prov = subtotal_list + montage_final + kran_final
     zuschlag_wert = 0
-    # Erschwernis
-    basis_fuer_zuschlag = subtotal_list + (montage_summe * prov_faktor) + (kran_summe * prov_faktor)
-    if zuschlag_prozent > 0:
-        zuschlag_wert = basis_fuer_zuschlag * (zuschlag_prozent / 100.0)
+    if zuschlag_prozent > 0: zuschlag_wert = basis_prov * (zuschlag_prozent / 100.0)
+    
+    versteckter_zuschlag = zuschlag_wert if not zuschlag_transparent else 0
+    sichtbarer_zuschlag = zuschlag_wert if zuschlag_transparent else 0
+    
+    # Montage inkl. evtl. verstecktem Zuschlag
+    montage_final += versteckter_zuschlag
 
-    versteckter_zuschlag = 0
-    if zuschlag_prozent > 0 and not zuschlag_transparent:
-        versteckter_zuschlag = zuschlag_wert
-        zuschlag_wert = 0
-
-    # Montage
-    montage_final = (montage_summe * prov_faktor) + versteckter_zuschlag
     if montage_final > 0:
+        if pdf.get_y() > 250: pdf.add_page(); pdf.table_header()
         txt = "Montagearbeiten" if zeige_details else "Montage & Regie (Pauschal)"
-        pdf.cell(w_desc, 8, clean_text(txt), 1, 0, 'L'); pdf.cell(w_menge, 8, "1", 1, 0, 'C')
-        pdf.cell(w_ep, 8, f"{montage_final:.2f}", 1, 0, 'R'); pdf.cell(w_gesamt, 8, f"{montage_final:.2f}", 1, 1, 'R')
+        pdf.cell(10, 8, str(pos_nr), 0, 0, 'C')
+        pdf.cell(95, 8, clean_text(txt), 0, 0, 'L')
+        pdf.cell(20, 8, "1", 0, 0, 'C')
+        pdf.cell(30, 8, f"{montage_final:.2f}", 0, 0, 'R')
+        pdf.cell(35, 8, f"{montage_final:.2f}", 0, 1, 'R')
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
         subtotal_list += montage_final
+        pos_nr += 1
 
-    # Kran
-    kran_final = kran_summe * prov_faktor
     if kran_final > 0:
-        pdf.cell(w_desc, 8, clean_text("Kranarbeiten"), 1, 0, 'L'); pdf.cell(w_menge, 8, "1", 1, 0, 'C')
-        pdf.cell(w_ep, 8, f"{kran_final:.2f}", 1, 0, 'R'); pdf.cell(w_gesamt, 8, f"{kran_final:.2f}", 1, 1, 'R')
+        if pdf.get_y() > 250: pdf.add_page(); pdf.table_header()
+        pdf.cell(10, 8, str(pos_nr), 0, 0, 'C')
+        pdf.cell(95, 8, "Kranarbeiten / Hebegerät", 0, 0, 'L')
+        pdf.cell(20, 8, "1", 0, 0, 'C')
+        pdf.cell(30, 8, f"{kran_final:.2f}", 0, 0, 'R')
+        pdf.cell(35, 8, f"{kran_final:.2f}", 0, 1, 'R')
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
         subtotal_list += kran_final
+        pos_nr += 1
 
-    # Erschwernis sichtbar
-    if zuschlag_wert > 0:
-        pdf.cell(w_desc + w_menge + w_ep, 8, "Zwischensumme:", 0, 0, 'R'); pdf.cell(w_gesamt, 8, f"{subtotal_list:.2f}", 1, 1, 'R')
-        label = f"Erschwernis ({zuschlag_label} {zuschlag_prozent}%)"
-        pdf.cell(w_desc + w_menge + w_ep, 8, clean_text(label), 0, 0, 'R'); pdf.cell(w_gesamt, 8, f"{zuschlag_wert:.2f}", 1, 1, 'R')
-        subtotal_list += zuschlag_wert
+    if sichtbarer_zuschlag > 0:
+        if pdf.get_y() > 250: pdf.add_page(); pdf.table_header()
+        pdf.cell(10, 8, str(pos_nr), 0, 0, 'C')
+        label = f"Erschwerniszuschlag ({zuschlag_label} {zuschlag_prozent}%)"
+        pdf.cell(95, 8, clean_text(label), 0, 0, 'L')
+        pdf.cell(20, 8, "1", 0, 0, 'C')
+        pdf.cell(30, 8, f"{sichtbarer_zuschlag:.2f}", 0, 0, 'R')
+        pdf.cell(35, 8, f"{sichtbarer_zuschlag:.2f}", 0, 1, 'R')
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+        subtotal_list += sichtbarer_zuschlag
+        pos_nr += 1
 
-    # --- RABATT BLOCK ---
-    rabatt_wert = 0
+    # --- BLOCK FÜR ENDSUMMEN (Zusammenhalten!) ---
+    # Wir prüfen, ob noch ca. 50mm Platz ist. Wenn nicht -> Neue Seite
+    if pdf.get_y() > 230: 
+        pdf.add_page()
+    
+    pdf.ln(5)
+    
+    # RABATT
     if rabatt_prozent > 0:
         rabatt_wert = subtotal_list * (rabatt_prozent / 100.0)
-        pdf.ln(2)
-        pdf.set_font("Arial", '', 10)
-        pdf.cell(w_desc + w_menge + w_ep, 6, "Zwischensumme Listenpreis:", 0, 0, 'R')
-        pdf.cell(w_gesamt, 6, f"{subtotal_list:.2f}", 0, 1, 'R')
+        pdf.set_font("Helvetica", '', 10)
+        pdf.cell(155, 6, "Zwischensumme:", 0, 0, 'R')
+        pdf.cell(35, 6, f"{subtotal_list:.2f}", 0, 1, 'R')
         
-        pdf.set_font("Arial", 'B', 10)
-        pdf.set_text_color(200, 0, 0) # Rot für Rabatt
-        pdf.cell(w_desc + w_menge + w_ep, 6, f"Abzug Rabatt ({rabatt_prozent:.1f}%):", 0, 0, 'R')
-        pdf.cell(w_gesamt, 6, f"- {rabatt_wert:.2f}", 0, 1, 'R')
-        pdf.set_text_color(0, 0, 0) # Schwarz zurück
-        
+        pdf.set_text_color(200, 50, 50)
+        pdf.set_font("Helvetica", 'B', 10)
+        pdf.cell(155, 6, f"Abzüglich Rabatt ({rabatt_prozent:.1f}%):", 0, 0, 'R')
+        pdf.cell(35, 6, f"- {rabatt_wert:.2f}", 0, 1, 'R')
+        pdf.set_text_color(0, 0, 0)
         subtotal_list -= rabatt_wert
 
-    # STEUER & ENDSUMME
     netto = subtotal_list
     mwst = netto * MWST_SATZ
     brutto = netto + mwst
 
-    pdf.ln(2); pdf.set_font("Arial", 'B', 12)
-    pdf.cell(w_desc + w_menge + w_ep, 0, "", 0, 0, 'R')
-    pdf.line(pdf.get_x() + w_desc + w_menge + w_ep, pdf.get_y(), pdf.get_x() + w_desc + w_menge + w_ep + w_gesamt, pdf.get_y())
     pdf.ln(2)
+    # Strich über Summe
+    x_line = 130
+    pdf.line(x_line, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(1)
     
-    pdf.set_font("Arial", '', 11)
-    pdf.cell(w_desc + w_menge + w_ep, 6, "Summe Netto:", 0, 0, 'R'); pdf.cell(w_gesamt, 6, f"{netto:.2f} EUR", 0, 1, 'R')
-    pdf.cell(w_desc + w_menge + w_ep, 6, f"zzgl. {int(MWST_SATZ*100)}% MwSt:", 0, 0, 'R'); pdf.cell(w_gesamt, 6, f"{mwst:.2f} EUR", 0, 1, 'R')
-    pdf.set_font("Arial", 'B', 14); pdf.cell(w_desc + w_menge + w_ep, 10, "GESAMTSUMME:", 0, 0, 'R'); pdf.cell(w_gesamt, 10, f"{brutto:.2f} EUR", 1, 1, 'R')
+    pdf.set_font("Helvetica", '', 11)
+    pdf.cell(155, 6, "Summe Netto:", 0, 0, 'R')
+    pdf.cell(35, 6, f"{netto:.2f} EUR", 0, 1, 'R')
+    
+    pdf.cell(155, 6, f"zzgl. {int(MWST_SATZ*100)}% MwSt:", 0, 0, 'R')
+    pdf.cell(35, 6, f"{mwst:.2f} EUR", 0, 1, 'R')
+    
+    pdf.ln(3)
+    pdf.set_font("Helvetica", 'B', 12)
+    pdf.set_fill_color(230, 236, 240)
+    # Gesamtsummen-Block
+    pdf.cell(120, 10, "", 0, 0) # Leerraum links
+    pdf.cell(35, 10, "GESAMTSUMME:", 0, 0, 'R', True)
+    pdf.cell(35, 10, f"{brutto:.2f} EUR", 0, 1, 'R', True)
 
-    # SKONTO TEXT
+    # Skonto
     if skonto_prozent > 0:
         skonto_wert = brutto * (skonto_prozent / 100.0)
-        zahlbar_skonto = brutto - skonto_wert
+        zahlbar = brutto - skonto_wert
         pdf.ln(5)
-        pdf.set_font("Arial", 'I', 10)
-        text_skonto = f"Zahlbar sofort rein Netto. Bei Zahlung innerhalb von 10 Tagen gewähren wir {skonto_prozent}% Skonto ({skonto_wert:.2f} EUR). Zahlbetrag dann: {zahlbar_skonto:.2f} EUR."
-        pdf.multi_cell(0, 5, clean_text(text_skonto), 0, 'R')
+        pdf.set_font("Helvetica", '', 9)
+        pdf.set_text_color(80, 80, 80)
+        pdf.cell(0, 5, clean_text(f"Zahlbar bei {skonto_prozent}% Skonto innerhalb 10 Tagen: {zahlbar:.2f} EUR"), 0, 1, 'R')
 
+    # Fotos
     if fotos:
         pdf.add_page()
+        pdf.set_font("Helvetica", 'B', 12)
+        pdf.set_text_color(0,0,0)
+        pdf.cell(0, 10, "Baustellendokumentation", 0, 1)
         for f in fotos:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t: t.write(f.getvalue()); tmp=t.name
-            pdf.image(tmp, w=160); pdf.ln(10); os.unlink(tmp)
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as t:
+                    t.write(f.getvalue()); tmp=t.name
+                pdf.image(tmp, x=15, w=180)
+                pdf.ln(5)
+                os.unlink(tmp)
+            except: pass
+
     return pdf.output(dest='S').encode('latin-1')
 
 def create_internal_pdf(positionen_liste, kunden_dict, zusatzkosten):
     pdf = PDF(); pdf.alias_nb_pages(); pdf.add_page()
     pdf.set_font("Arial", 'B', 11); pdf.cell(0, 8, f"INTERN: {clean_text(kunden_dict.get('Name',''))}", 0, 1)
-    
-    # INTERNE KALKULATION ZEIGEN
-    prov = zusatzkosten.get('provision_prozent', 0)
-    pdf.set_font("Arial", '', 10)
-    pdf.cell(0, 6, f"Versteckte Provision eingerechnet: {prov}%", 0, 1)
     
     pdf.ln(5); pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", 'B', 10)
     pdf.cell(10, 8, "#", 1, 0, 'C', True); pdf.cell(120, 8, "Material & AV (Echte Kosten)", 1, 0, 'L', True); pdf.cell(60, 8, "Kalk. Wert (Ohne Prov)", 1, 1, 'R', True)
@@ -302,7 +405,6 @@ def create_internal_pdf(positionen_liste, kunden_dict, zusatzkosten):
         if pos.get('MaterialDetails'):
             for d in pos['MaterialDetails']: details += f"\n  -> {d}"
         
-        # Intern zeigen wir den "echten" Preis ohne Provision
         preis_intern = pos.get('Preis', 0)
         total_intern += preis_intern
         
@@ -316,10 +418,10 @@ def create_internal_pdf(positionen_liste, kunden_dict, zusatzkosten):
         pdf.set_xy(20+120, y_start)
         pdf.cell(60, h, f"{preis_intern:.2f}", 1, 1, 'R')
         pdf.set_y(y_end)
+        pdf.line(10, y_end, 200, y_end)
         
     pdf.ln(5); 
     pdf.cell(0, 10, clean_text(f"Zusatz: Montage {zusatzkosten.get('montage_std')}h / {zusatzkosten.get('montage_mann')} Mann"), 1, 1)
-    
     return pdf.output(dest='S').encode('latin-1')
 
 # ==========================================
@@ -402,23 +504,23 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                     with st.expander("Debug"): st.json(vars_calc)
                                     if st.button("In den Warenkorb", type="primary"):
                                         mat=[]
-                                        # MATERIAL LOGIK
                                         l = vars_calc.get('L',0)
-                                        if 'P_Glas' in vars_calc and 'N_Felder' in vars_calc: # Glasgel
+                                        # Material Logik
+                                        if 'P_Glas' in vars_calc and 'N_Felder' in vars_calc:
                                             h=vars_calc.get('H',0.85); calc_l=max(l,1.0)
                                             mat.append(f"Glasfläche: {(calc_l*h):.2f} m²"); mat.append(f"Handlauf: {calc_l:.2f}m")
                                             n_k=int(vars_calc['N_Felder'])*4
                                             if 'Ecken' in vars_calc: n_k+=int(vars_calc['Ecken'])*4
                                             mat.append(f"Klemmen: {n_k} Stk")
-                                        elif 'N_Spar' in vars_calc: # Terrasse
+                                        elif 'N_Spar' in vars_calc:
                                             mat.append(f"Dachfläche: {(l*vars_calc.get('B',0)):.2f} m²")
                                             mat.append(f"Säulen: {int(vars_calc.get('N_Col',0))} | Sparren: {int(vars_calc.get('N_Spar',0))}")
                                             lfm=(int(vars_calc.get('N_Col',0))*vars_calc.get('H',2.5)) + (int(vars_calc.get('N_Spar',0))*vars_calc.get('B',0)) + l
-                                            mat.append(f"Stahlfläche (Beschichtung): {(lfm*0.4):.2f} m²")
-                                        elif 'N_Rows' in vars_calc: # Horizontal
+                                            mat.append(f"Stahlfläche: {(lfm*0.4):.2f} m²")
+                                        elif 'N_Rows' in vars_calc:
                                             mat.append(f"Füllung: {int(vars_calc['N_Rows'])} Reihen")
-                                            mat.append(f"Laufmeter Füllung: {(l*int(vars_calc['N_Rows'])):.2f} m")
-                                        elif l>0 and 'Treppe' not in str(auswahl_system): # Standard
+                                            mat.append(f"Laufmeter: {(l*int(vars_calc['N_Rows'])):.2f} m")
+                                        elif l>0 and 'Treppe' not in str(auswahl_system):
                                             abst=1.2 if 'Edelstahl' in auswahl_system else 1.3
                                             stps=math.ceil(l/abst)+1; mat.append(f"Steher: {stps} Stk")
                                         
@@ -446,7 +548,7 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             to_del = []
             for i, p in enumerate(st.session_state['positionen']):
                 cc1, cc2, cc3, cc4 = st.columns([3, 1, 1, 0.5])
-                cc1.markdown(f"**{p['Beschreibung'].split('|')[0]}**"); cc1.caption(p['Beschreibung'])
+                cc1.markdown(f"**Pos {i+1}: {p['Beschreibung'].split('|')[0]}**"); cc1.caption(p['Beschreibung'])
                 p['Menge'] = cc2.number_input("Anz", value=float(p['Menge']), step=1.0, key=f"q_{i}")
                 p['Preis'] = p['Menge'] * p['Einzelpreis']
                 cc3.write(f"{p['Preis']:.2f} €")
@@ -473,11 +575,10 @@ elif menue_punkt == "🛒 Warenkorb / Abschluss":
             zk['zuschlag_prozent'] = st.slider("Risiko %", 0, 30, int(zk.get('zuschlag_prozent',0)))
             zk['zuschlag_transparent'] = st.checkbox("Sichtbar?", value=True)
 
-        with st.expander("💰 Preisgestaltung (Provision & Rabatt)", expanded=True):
-            st.info("Diese Einstellungen beeinflussen den Endpreis!")
-            zk['provision_prozent'] = st.number_input("Versteckte Provision % (aufschlagen)", 0.0, 50.0, float(zk.get('provision_prozent',0)), step=1.0, help="Erhöht Einzelpreise auf dem PDF unsichtbar")
-            zk['rabatt_prozent'] = st.number_input("Sichtbarer Rabatt % (abziehen)", 0.0, 50.0, float(zk.get('rabatt_prozent',0)), step=1.0, help="Wird am Ende sichtbar abgezogen")
-            zk['skonto_prozent'] = st.number_input("Skonto Info %", 0.0, 10.0, float(zk.get('skonto_prozent',0)), step=1.0, help="Nur Text-Info im Footer")
+        with st.expander("💰 Preisgestaltung", expanded=True):
+            zk['provision_prozent'] = st.number_input("Versteckte Provision %", 0.0, 50.0, float(zk.get('provision_prozent',0)), step=1.0)
+            zk['rabatt_prozent'] = st.number_input("Rabatt % (Sichtbar)", 0.0, 50.0, float(zk.get('rabatt_prozent',0)), step=1.0)
+            zk['skonto_prozent'] = st.number_input("Skonto Info %", 0.0, 10.0, float(zk.get('skonto_prozent',0)), step=1.0)
 
         st.subheader("Kunde & PDF")
         with st.form("pdf"):
