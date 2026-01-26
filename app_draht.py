@@ -17,11 +17,11 @@ MWST_SATZ = 0.20  # 20% MwSt
 st.set_page_config(page_title="Meingassner Kalkulator", layout="wide", page_icon=LOGO_DATEI)
 
 # ==========================================
-# 2. SICHERHEIT (PASSWORT-CHECK)
+# 2. SICHERHEIT
 # ==========================================
 def check_password():
     if "password" not in st.secrets:
-        return True # Fallback für lokal
+        return True 
 
     def password_entered():
         if st.session_state["password"] == st.secrets["password"]:
@@ -44,7 +44,7 @@ if not check_password():
     st.stop()
 
 # ==========================================
-# 3. HELFER-FUNKTIONEN
+# 3. HELFER
 # ==========================================
 def safe_float(value):
     if pd.isna(value): return 0.0
@@ -128,11 +128,13 @@ def init_state():
 init_state()
 
 # ==========================================
-# 5. PDF ENGINE (MIT POSITIONSNUMMERN & LAYOUT FIX)
+# 5. PDF ENGINE (Modern + Robust)
 # ==========================================
 def clean_text(text):
     if text is None: return ""
     text = str(text).replace("€", "EUR").replace("–", "-").replace("„", '"').replace("“", '"')
+    # Ersetze Bulletpoints durch Bindestriche um Fragezeichen zu vermeiden
+    text = text.replace("•", "-")
     try: return text.encode('latin-1', 'replace').decode('latin-1')
     except: return text
 
@@ -145,12 +147,14 @@ class PDF(FPDF):
         self.set_font('Helvetica', 'B', 16)
         self.set_text_color(44, 62, 80)
         self.cell(0, 10, clean_text("Kostenschätzung"), 0, 1, 'R')
+        
         self.set_font('Helvetica', '', 10)
         self.set_text_color(100, 100, 100)
         self.cell(0, 6, clean_text(f"Datum: {datetime.now().strftime('%d.%m.%Y')}"), 0, 1, 'R')
+        
         self.set_draw_color(200, 200, 200)
-        self.line(10, 32, 200, 32)
-        self.ln(15)
+        self.line(10, 35, 200, 35)
+        self.ln(20)
 
     def footer(self):
         self.set_y(-15)
@@ -173,7 +177,7 @@ class PDF(FPDF):
 
 def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, zeige_details, zuschlag_prozent, zuschlag_label, zuschlag_transparent, provision_prozent, rabatt_prozent, skonto_prozent):
     pdf = PDF()
-    pdf.set_auto_page_break(auto=True, margin=20) # WICHTIG für automatischen Umbruch
+    pdf.set_auto_page_break(auto=True, margin=20) 
     pdf.alias_nb_pages()
     pdf.add_page()
     
@@ -194,13 +198,11 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
     pdf.ln(10)
     pdf.table_header()
     
-    # --- TABELLEN INHALT ---
+    # --- INHALT ---
     pdf.set_font("Helvetica", '', 10)
     
     prov_faktor = 1 + (provision_prozent / 100.0)
     subtotal_list = 0
-    
-    # Zähler für Positionsnummer
     pos_nr = 1
     
     for pos in positionen_liste:
@@ -210,70 +212,57 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
         gp_kunde = pos.get('Preis', 0) * prov_faktor
         subtotal_list += gp_kunde
         
-        # Text
         raw_desc = str(pos.get('Beschreibung', ''))
         parts = raw_desc.split("|")
         titel = parts[0].strip()
         
         details = ""
         if len(parts) > 1:
-            details = "\n" + parts[1].replace(",", "\n •").strip()
-            if not details.strip().startswith("•"): details = details.replace("\n", "\n •", 1)
+            # Hier nutzen wir "-" statt Bulletpoint
+            details = "\n" + parts[1].replace(",", "\n -").strip()
+            if not details.strip().startswith("-"): details = details.replace("\n", "\n -", 1)
             
         full_text = f"{titel}{details}"
         if pos.get('RefMenge', 0) > 0:
             ep_ref = ep_kunde / float(pos['RefMenge'])
             full_text += f"\n(entspr. {ep_ref:.2f} EUR / {pos.get('RefEinheit', 'Stk')})"
 
-        # --- INTELLIGENTER ZEILENUMBRUCH ---
-        # Wir berechnen, wie hoch die Zeile wird
-        # Breite der Beschreibungsspalte = 95
-        x_start = pdf.get_x()
-        y_start = pdf.get_y()
-        
-        # Test-Druck (unsichtbar) um Höhe zu prüfen wäre ideal, aber FPDF ist simpel.
-        # Wir schätzen: Anzahl Zeilenumbrüche im Text + Länge Text
-        
-        # 1. Wir drucken die Beschreibung in eine Zelle
-        pdf.set_x(20) # Einrücken nach Pos-Spalte (10mm + 10mm Rand)
-        
-        # Prüfen ob Platz reicht, sonst neue Seite
-        # Geschätzte Höhe: ca. 5mm pro Zeile
+        # Check Platzbedarf
         lines = full_text.count('\n') + (len(full_text) / 50) 
         needed_height = lines * 5 + 10
-        
         if pdf.get_y() + needed_height > 260:
             pdf.add_page()
             pdf.table_header()
-            y_start = pdf.get_y()
 
-        # Pos Nr
-        pdf.set_xy(10, y_start)
-        pdf.cell(10, 5, str(pos_nr), 0, 0, 'C') # Rahmen erst am Ende zeichnen
+        y_start = pdf.get_y()
         
-        # Beschreibung
+        # Pos
+        pdf.set_xy(10, y_start)
+        pdf.cell(10, 5, str(pos_nr), 0, 0, 'C') 
+        
+        # Text
         pdf.set_xy(20, y_start)
         pdf.multi_cell(95, 5, clean_text(full_text), border=0, align='L')
         y_end = pdf.get_y()
         row_height = y_end - y_start
         
-        # Werte (Menge, EP, Gesamt) auf gleicher Höhe zentriert oder oben
+        # Werte
         pdf.set_xy(115, y_start)
         pdf.cell(20, row_height, clean_text(str(pos.get('Menge', 0))), 0, 0, 'C')
         pdf.cell(30, row_height, f"{ep_kunde:.2f}", 0, 0, 'R')
         pdf.cell(35, row_height, f"{gp_kunde:.2f}", 0, 0, 'R')
         
-        # Linie unten ziehen (als Zeilenabschluss)
+        # Linie unten (grau)
+        pdf.set_draw_color(220, 220, 220)
         pdf.line(10, y_end, 200, y_end)
-        pdf.set_y(y_end) # Cursor für nächste Zeile
+        pdf.set_y(y_end)
         
         pos_nr += 1
 
-    # --- ZUSATZKOSTEN (als eigene Positionen) ---
+    # --- ZUSATZKOSTEN ---
     montage_final = (montage_summe * prov_faktor) 
     kran_final = (kran_summe * prov_faktor)
     
-    # Zuschlag berechnen
     basis_prov = subtotal_list + montage_final + kran_final
     zuschlag_wert = 0
     if zuschlag_prozent > 0: zuschlag_wert = basis_prov * (zuschlag_prozent / 100.0)
@@ -281,7 +270,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
     versteckter_zuschlag = zuschlag_wert if not zuschlag_transparent else 0
     sichtbarer_zuschlag = zuschlag_wert if zuschlag_transparent else 0
     
-    # Montage inkl. evtl. verstecktem Zuschlag
     montage_final += versteckter_zuschlag
 
     if montage_final > 0:
@@ -319,10 +307,8 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
         subtotal_list += sichtbarer_zuschlag
         pos_nr += 1
 
-    # --- BLOCK FÜR ENDSUMMEN (Zusammenhalten!) ---
-    # Wir prüfen, ob noch ca. 50mm Platz ist. Wenn nicht -> Neue Seite
-    if pdf.get_y() > 230: 
-        pdf.add_page()
+    # --- BLOCK FÜR ENDSUMMEN ---
+    if pdf.get_y() > 230: pdf.add_page()
     
     pdf.ln(5)
     
@@ -346,8 +332,8 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
 
     pdf.ln(2)
     # Strich über Summe
-    x_line = 130
-    pdf.line(x_line, pdf.get_y(), 200, pdf.get_y())
+    pdf.set_draw_color(44, 62, 80)
+    pdf.line(130, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(1)
     
     pdf.set_font("Helvetica", '', 11)
@@ -360,12 +346,10 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
     pdf.ln(3)
     pdf.set_font("Helvetica", 'B', 12)
     pdf.set_fill_color(230, 236, 240)
-    # Gesamtsummen-Block
-    pdf.cell(120, 10, "", 0, 0) # Leerraum links
+    pdf.cell(120, 10, "", 0, 0) 
     pdf.cell(35, 10, "GESAMTSUMME:", 0, 0, 'R', True)
     pdf.cell(35, 10, f"{brutto:.2f} EUR", 0, 1, 'R', True)
 
-    # Skonto
     if skonto_prozent > 0:
         skonto_wert = brutto * (skonto_prozent / 100.0)
         zahlbar = brutto - skonto_wert
@@ -374,7 +358,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
         pdf.set_text_color(80, 80, 80)
         pdf.cell(0, 5, clean_text(f"Zahlbar bei {skonto_prozent}% Skonto innerhalb 10 Tagen: {zahlbar:.2f} EUR"), 0, 1, 'R')
 
-    # Fotos
     if fotos:
         pdf.add_page()
         pdf.set_font("Helvetica", 'B', 12)
