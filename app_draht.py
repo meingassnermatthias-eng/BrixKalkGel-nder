@@ -26,8 +26,7 @@ def check_password():
     if "password" not in st.secrets:
         st.warning("⚠️ ACHTUNG: Es ist kein Passwort konfiguriert.")
         st.info("Bitte in Streamlit unter 'Settings' -> 'Secrets' eintragen: password = \"DeinPasswort\"")
-        # Im Notfall (für lokale Tests ohne Secrets) erlauben wir Zugriff, 
-        # aber warnen. Für Produktion unbedingt Secrets nutzen!
+        # Im Notfall (für lokale Tests ohne Secrets) erlauben wir Zugriff
         return True 
 
     def password_entered():
@@ -414,7 +413,8 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                             if typ == 'zahl':
                                 raw_val = str(zeile.get('Optionen', '')).strip()
                                 std_val = safe_float(raw_val)
-                                val = st.number_input(label, value=std_val, step=0.1, key=f"{blatt}_{index}")
+                                # WICHTIG: step=1.0 für ganze Schritte, aber float für Berechnungen
+                                val = st.number_input(label, value=std_val, step=1.0, key=f"{blatt}_{index}")
                                 vars_calc[var_name] = val
                                 if val != 0: desc_parts.append(f"{label}: {val}")
                             
