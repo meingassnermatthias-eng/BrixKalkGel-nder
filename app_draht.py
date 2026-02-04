@@ -128,13 +128,12 @@ def init_state():
 init_state()
 
 # ==========================================
-# 5. PDF ENGINE (Modern + Robust)
+# 5. PDF ENGINE
 # ==========================================
 def clean_text(text):
     if text is None: return ""
     text = str(text).replace("€", "EUR").replace("–", "-").replace("„", '"').replace("“", '"')
-    # Ersetze Bulletpoints durch Bindestriche um Fragezeichen zu vermeiden
-    text = text.replace("•", "-")
+    text = text.replace("•", "-") # Fix für Fragezeichen
     try: return text.encode('latin-1', 'replace').decode('latin-1')
     except: return text
 
@@ -167,8 +166,6 @@ class PDF(FPDF):
         self.set_fill_color(240, 240, 240)
         self.set_text_color(0, 0, 0)
         self.set_draw_color(220, 220, 220)
-        
-        # Spalten: Pos, Beschreibung, Menge, EP, Gesamt
         self.cell(10, 8, "Pos.", 1, 0, 'C', True)
         self.cell(95, 8, "Beschreibung", 1, 0, 'L', True)
         self.cell(20, 8, "Menge", 1, 0, 'C', True)
@@ -198,7 +195,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
     pdf.ln(10)
     pdf.table_header()
     
-    # --- INHALT ---
     pdf.set_font("Helvetica", '', 10)
     
     prov_faktor = 1 + (provision_prozent / 100.0)
@@ -215,10 +211,8 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
         raw_desc = str(pos.get('Beschreibung', ''))
         parts = raw_desc.split("|")
         titel = parts[0].strip()
-        
         details = ""
         if len(parts) > 1:
-            # Hier nutzen wir "-" statt Bulletpoint
             details = "\n" + parts[1].replace(",", "\n -").strip()
             if not details.strip().startswith("-"): details = details.replace("\n", "\n -", 1)
             
@@ -227,7 +221,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
             ep_ref = ep_kunde / float(pos['RefMenge'])
             full_text += f"\n(entspr. {ep_ref:.2f} EUR / {pos.get('RefEinheit', 'Stk')})"
 
-        # Check Platzbedarf
         lines = full_text.count('\n') + (len(full_text) / 50) 
         needed_height = lines * 5 + 10
         if pdf.get_y() + needed_height > 260:
@@ -235,31 +228,24 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
             pdf.table_header()
 
         y_start = pdf.get_y()
-        
-        # Pos
         pdf.set_xy(10, y_start)
         pdf.cell(10, 5, str(pos_nr), 0, 0, 'C') 
         
-        # Text
         pdf.set_xy(20, y_start)
         pdf.multi_cell(95, 5, clean_text(full_text), border=0, align='L')
         y_end = pdf.get_y()
         row_height = y_end - y_start
         
-        # Werte
         pdf.set_xy(115, y_start)
         pdf.cell(20, row_height, clean_text(str(pos.get('Menge', 0))), 0, 0, 'C')
         pdf.cell(30, row_height, f"{ep_kunde:.2f}", 0, 0, 'R')
         pdf.cell(35, row_height, f"{gp_kunde:.2f}", 0, 0, 'R')
         
-        # Linie unten (grau)
         pdf.set_draw_color(220, 220, 220)
         pdf.line(10, y_end, 200, y_end)
         pdf.set_y(y_end)
-        
         pos_nr += 1
 
-    # --- ZUSATZKOSTEN ---
     montage_final = (montage_summe * prov_faktor) 
     kran_final = (kran_summe * prov_faktor)
     
@@ -307,12 +293,9 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
         subtotal_list += sichtbarer_zuschlag
         pos_nr += 1
 
-    # --- BLOCK FÜR ENDSUMMEN ---
     if pdf.get_y() > 230: pdf.add_page()
-    
     pdf.ln(5)
     
-    # RABATT
     if rabatt_prozent > 0:
         rabatt_wert = subtotal_list * (rabatt_prozent / 100.0)
         pdf.set_font("Helvetica", '', 10)
@@ -331,7 +314,6 @@ def create_pdf(positionen_liste, kunden_dict, fotos, montage_summe, kran_summe, 
     brutto = netto + mwst
 
     pdf.ln(2)
-    # Strich über Summe
     pdf.set_draw_color(44, 62, 80)
     pdf.line(130, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(1)
@@ -488,24 +470,36 @@ if menue_punkt == "📂 Konfigurator / Katalog":
                                     if st.button("In den Warenkorb", type="primary"):
                                         mat=[]
                                         l = vars_calc.get('L',0)
-                                        # Material Logik
-                                        if 'P_Glas' in vars_calc and 'N_Felder' in vars_calc:
+                                        # MATERIAL LOGIK
+                                        if 'N_Bars' in vars_calc: # STABGELÄNDER (NEU!)
+                                            mat.append(f"Anzahl Stäbe: {int(vars_calc['N_Bars'])} Stk")
+                                            mat.append(f"Gesamtlänge Füllstäbe: {(int(vars_calc['N_Bars']) * vars_calc.get('H', 1.0)):.2f} m")
+                                            if 'N_Post' in vars_calc: mat.append(f"Pfosten: {int(vars_calc['N_Post'])} Stk")
+                                        
+                                        elif 'P_Glas' in vars_calc and 'N_Felder' in vars_calc: # GLAS
                                             h=vars_calc.get('H',0.85); calc_l=max(l,1.0)
                                             mat.append(f"Glasfläche: {(calc_l*h):.2f} m²"); mat.append(f"Handlauf: {calc_l:.2f}m")
                                             n_k=int(vars_calc['N_Felder'])*4
                                             if 'Ecken' in vars_calc: n_k+=int(vars_calc['Ecken'])*4
                                             mat.append(f"Klemmen: {n_k} Stk")
-                                        elif 'N_Spar' in vars_calc:
+                                        
+                                        elif 'N_Spar' in vars_calc: # TERRA
                                             mat.append(f"Dachfläche: {(l*vars_calc.get('B',0)):.2f} m²")
                                             mat.append(f"Säulen: {int(vars_calc.get('N_Col',0))} | Sparren: {int(vars_calc.get('N_Spar',0))}")
                                             lfm=(int(vars_calc.get('N_Col',0))*vars_calc.get('H',2.5)) + (int(vars_calc.get('N_Spar',0))*vars_calc.get('B',0)) + l
                                             mat.append(f"Stahlfläche: {(lfm*0.4):.2f} m²")
-                                        elif 'N_Rows' in vars_calc:
+                                        
+                                        elif 'N_Rows' in vars_calc: # HORIZONT
                                             mat.append(f"Füllung: {int(vars_calc['N_Rows'])} Reihen")
                                             mat.append(f"Laufmeter: {(l*int(vars_calc['N_Rows'])):.2f} m")
-                                        elif l>0 and 'Treppe' not in str(auswahl_system):
+                                        
+                                        elif l>0 and 'Treppe' not in str(auswahl_system): # STANDARD
                                             abst=1.2 if 'Edelstahl' in auswahl_system else 1.3
                                             stps=math.ceil(l/abst)+1; mat.append(f"Steher: {stps} Stk")
+                                        
+                                        # Allgemeines
+                                        if 'H' in vars_calc and 'Treppe' in str(auswahl_system):
+                                            mat.append(f"Stufen (H/18cm): {math.ceil(vars_calc['H']/0.18)} Stk")
                                         
                                         st.session_state['positionen'].append({
                                             "Beschreibung": f"{auswahl_system} | " + ",".join(desc_parts),
