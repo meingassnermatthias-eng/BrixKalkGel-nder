@@ -4,12 +4,37 @@ Zuschnittoptimierung für die Werkstatt: Stangen und Profile (1D), Bleche und
 Platten (2D) sowie DXF-Import von Abwicklungen aus HiCAD (z. B.
 Alucobond-Kassetten).
 
-## Starten
+## Am eigenen Rechner starten
+
+**Windows:** Doppelklick auf `start_nesting.bat`. Beim ersten Start richtet das
+Skript eine eigene Python-Umgebung ein und lädt die benötigten Pakete – das
+dauert ein paar Minuten, jeder weitere Start geht sofort. Danach öffnet sich
+die Oberfläche im Browser.
+
+Einzige Voraussetzung: Python 3.10 oder neuer von
+[python.org](https://www.python.org/downloads/), bei der Installation
+**„Add Python to PATH"** ankreuzen.
+
+**macOS / Linux:**
+
+```bash
+chmod +x start_nesting.sh    # nur einmal nötig
+./start_nesting.sh
+```
+
+**Von Hand:**
 
 ```bash
 pip install -r requirements.txt
 streamlit run app_nesting.py
 ```
+
+**Ohne Installation ausprobieren:** Das Projekt auf GitHub öffnen, oben rechts
+*Code → Codespaces → Create codespace* wählen und im Terminal
+`streamlit run app_nesting.py` eingeben. Läuft komplett im Browser.
+
+Die Oberfläche läuft nur auf dem eigenen Rechner (`localhost`) – es gehen keine
+Daten nach außen.
 
 ## Dateien
 
