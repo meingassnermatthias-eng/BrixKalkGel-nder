@@ -77,6 +77,47 @@ class _Blatt(FPDF):
         self.set_text_color(0, 0, 0)
 
 
+def _fuellstil(style: str) -> str:
+    """PDF-Operator fuer Fuellen/Umranden mit Even-Odd-Regel (Ausschnitte)."""
+    return {"F": "f*", "FD": "B*", "DF": "B*", "D": "S"}.get(style, "S")
+
+
+def zeichne_kontur(pdf, ringe, style: str = "FD") -> bool:
+    """
+    Zeichnet eine Teilekontur samt Ausschnitten als einen Pfad.
+
+    Geschrieben wird direkt in den Seiteninhalt (funktioniert mit fpdf 1.7 und
+    fpdf2). Ausschnitte bleiben durch die Even-Odd-Regel frei. Rueckgabe False,
+    wenn die Ausgabe nicht moeglich war - dann zeichnet der Aufrufer ein Rechteck.
+    """
+    if not ringe or len(ringe[0]) < 3:
+        return False
+    try:
+        k, hoehe = pdf.k, pdf.h
+        stuecke = []
+        for ring in ringe:
+            if len(ring) < 3:
+                continue
+            x, y = ring[0]
+            stuecke.append(f"{x * k:.2f} {(hoehe - y) * k:.2f} m")
+            for x, y in ring[1:]:
+                stuecke.append(f"{x * k:.2f} {(hoehe - y) * k:.2f} l")
+            stuecke.append("h")
+        stuecke.append(_fuellstil(style))
+        pdf._out(" ".join(stuecke))
+        return True
+    except Exception:
+        pass
+    # Notnagel: wenigstens die Aussenkontur ueber die Bibliothek zeichnen
+    if hasattr(pdf, "polygon"):
+        try:
+            pdf.polygon(list(ringe[0]), style=style)
+            return True
+        except Exception:
+            return False
+    return False
+
+
 def _kennzahlen(pdf, zeilen):
     pdf.set_font("Arial", "", 9)
     for links, rechts in zeilen:
@@ -240,10 +281,16 @@ def pdf_2d(ergebnis, projekt: str = "", parameter: dict | None = None) -> bytes:
                               f"({ergebnis.ausnutzung_prozent:.1f} %)"),
         ("Verschnitt:", f"{(ergebnis.gesamt_flaeche - ergebnis.genutzte_flaeche) / 1e6:.2f} m2 "
                         f"({ergebnis.verschnitt_prozent:.1f} %)"),
+        ("Genutzt (echte Kontur):", f"{ergebnis.echte_flaeche / 1e6:.2f} m2 "
+                                    f"({ergebnis.ausnutzung_echt_prozent:.1f} %)"),
         ("Materialkosten:", f"{ergebnis.gesamt_kosten:.2f} EUR"),
         ("Schnittfuge / Besaeumung:", f"{parameter.get('saegeblatt', 0):.1f} mm / "
                                       f"{parameter.get('besaeumung', 0):.0f} mm"),
-        ("Schnittart:", parameter.get("modus", "guillotine")),
+        ("Schnittart:", {"guillotine": "Guillotine (durchgehende Schnitte)",
+                         "frei": "Frei (Bounding-Box)",
+                         "kontur": "Kontur (echtes Nesting)"}.get(
+                             parameter.get("modus", "guillotine"),
+                             parameter.get("modus", "guillotine"))),
     ])
 
     for nr, plan in enumerate(ergebnis.plaene, start=1):
@@ -274,25 +321,18 @@ def pdf_2d(ergebnis, projekt: str = "", parameter: dict | None = None) -> bytes:
         pdf.set_fill_color(245, 245, 247)
         pdf.rect(x0, y0, b_mm, h_mm, "FD")
 
+        # erst alle Flaechen, dann alle Beschriftungen - sonst deckt ein spaeter
+        # gezeichnetes Teil die Beschriftung des darunterliegenden zu
         for p in plan.platzierungen:
             r, g, bl = _hex_rgb(farbe_fuer(p.bezeichnung, farben))
             pdf.set_fill_color(r, g, bl)
             pdf.set_line_width(0.25)
             konturen = p.welt_kontur() if p.kontur else []
-            if konturen and hasattr(pdf, "polygon"):
-                aussen = [(px(x), py(y)) for x, y in konturen[0]]
-                try:
-                    pdf.polygon(aussen, style="FD")
-                except Exception:
-                    pdf.rect(px(p.x), py(p.y + p.hoehe), p.breite * skala,
-                             p.hoehe * skala, "FD")
-                pdf.set_fill_color(245, 245, 247)
-                for loch in konturen[1:]:
-                    try:
-                        pdf.polygon([(px(x), py(y)) for x, y in loch], style="FD")
-                    except Exception:
-                        pass
-            else:
+            gezeichnet = False
+            if konturen:
+                gezeichnet = zeichne_kontur(
+                    pdf, [[(px(x), py(y)) for x, y in ring] for ring in konturen], "FD")
+            if not gezeichnet:
                 pdf.rect(px(p.x), py(p.y + p.hoehe), p.breite * skala,
                          p.hoehe * skala, "FD")
 
@@ -304,6 +344,7 @@ def pdf_2d(ergebnis, projekt: str = "", parameter: dict | None = None) -> bytes:
                     pdf.line(px(a[0]), py(a[1]), px(b[0]), py(b[1]))
             pdf.set_draw_color(60, 60, 60)
 
+        for p in plan.platzierungen:
             if p.breite * skala > 16 and p.hoehe * skala > 7:
                 pdf.set_xy(px(p.x), py(p.y + p.hoehe / 2) - 2.6)
                 pdf.set_font("Arial", "B", 6.5)
@@ -312,13 +353,13 @@ def pdf_2d(ergebnis, projekt: str = "", parameter: dict | None = None) -> bytes:
                 pdf.set_font("Arial", "", 6)
                 pdf.cell(p.breite * skala, 2.6,
                          _txt(f"{p.breite:.0f}x{p.hoehe:.0f}"
-                              + (" gedreht" if p.gedreht else "")), 0, 0, "C")
+                              + (f" {p.winkel:.0f}Grad" if p.winkel else "")), 0, 0, "C")
                 pdf.set_text_color(0, 0, 0)
 
         pdf.set_y(y0 + h_mm + 4)
         spalten = [("Pos", 12, "C"), ("Teil", 62, "L"), ("Breite", 22, "R"),
                    ("Hoehe", 22, "R"), ("X", 22, "R"), ("Y", 22, "R"),
-                   ("Gedreht", 22, "C")]
+                   ("Drehung", 22, "C")]
         _tabellenkopf(pdf, spalten)
         for i, p in enumerate(plan.platzierungen, start=1):
             if pdf.get_y() > 265:
@@ -326,7 +367,7 @@ def pdf_2d(ergebnis, projekt: str = "", parameter: dict | None = None) -> bytes:
                 _tabellenkopf(pdf, spalten)
             _tabellenzeile(pdf, spalten, [
                 i, p.bezeichnung, f"{p.breite:.0f}", f"{p.hoehe:.0f}",
-                f"{p.x:.0f}", f"{p.y:.0f}", "ja" if p.gedreht else "-",
+                f"{p.x:.0f}", f"{p.y:.0f}", f"{p.winkel:.0f} Grad",
             ], i % 2 == 0)
 
     if ergebnis.fehlende:

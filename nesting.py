@@ -160,6 +160,13 @@ class Zuschnitt2D:
 
 @dataclass
 class Platzierung2D:
+    """
+    Ein platziertes Teil auf einer Tafel.
+
+    x/y/breite/hoehe beschreiben die Bounding-Box in Tafelkoordinaten.
+    'kontur' bleibt immer in den ungedrehten Teilkoordinaten; die Lage in der
+    Tafel ergibt sich aus winkel + versatz (siehe welt_kontur()).
+    """
     bezeichnung: str
     x: float
     y: float
@@ -168,6 +175,8 @@ class Platzierung2D:
     gedreht: bool = False
     kontur: list = field(default_factory=list)
     stichlinien: list = field(default_factory=list)
+    winkel: float = 0.0                       # Drehung in Grad, gegen den Uhrzeigersinn
+    versatz: tuple = (0.0, 0.0)               # Nullpunktkorrektur nach der Drehung
 
     @property
     def flaeche(self) -> float:
@@ -216,13 +225,21 @@ class Tafelplan:
 
     @property
     def ausnutzung(self) -> float:
-        return self.belegte_flaeche / self.flaeche if self.flaeche else 0.0
+        """
+        Anteil echtes Nutzmaterial an der Tafel.
+
+        Bezugsgroesse ist die Konturflaeche, nicht die Bounding-Box: bei
+        verzahnten Teilen ueberlappen sich die Bounding-Boxen, die Summe
+        koennte sonst ueber 100 % liegen.
+        """
+        return self.teile_flaeche / self.flaeche if self.flaeche else 0.0
 
 
 @dataclass
 class Ergebnis2D:
     plaene: list[Tafelplan] = field(default_factory=list)
     fehlende: list[tuple[str, float, float, int]] = field(default_factory=list)
+    hinweise: list[str] = field(default_factory=list)
 
     @property
     def anzahl_tafeln(self) -> int:
@@ -241,6 +258,11 @@ class Ergebnis2D:
         return sum(p.preis for p in self.plaene)
 
     @property
+    def echte_flaeche(self) -> float:
+        """Summe der echten Konturflaechen (ohne Bounding-Box-Zuschlag)."""
+        return sum(p.teile_flaeche for p in self.plaene)
+
+    @property
     def verschnitt_prozent(self) -> float:
         if not self.gesamt_flaeche:
             return 0.0
@@ -249,6 +271,13 @@ class Ergebnis2D:
     @property
     def ausnutzung_prozent(self) -> float:
         return 100.0 - self.verschnitt_prozent
+
+    @property
+    def ausnutzung_echt_prozent(self) -> float:
+        """Ausnutzung bezogen auf die echte Teilekontur."""
+        if not self.gesamt_flaeche:
+            return 0.0
+        return 100.0 * self.echte_flaeche / self.gesamt_flaeche
 
 
 def _polygon_flaeche(punkte: list) -> float:
@@ -266,18 +295,51 @@ def _polygon_flaeche(punkte: list) -> float:
 
 def _transformiere(punkte: list, p: "Platzierung2D") -> list:
     """
-    Rechnet Teilkoordinaten in Tafelkoordinaten um.
-    Bei gedrehten Teilen wird um 90 Grad gegen den Uhrzeigersinn gedreht;
-    aus der Bounding-Box (b, h) wird dabei (h, b).
+    Rechnet Teilkoordinaten in Tafelkoordinaten um:
+    erst um 'winkel' drehen, dann um 'versatz' korrigieren (damit die gedrehte
+    Bounding-Box wieder bei 0/0 beginnt), dann an die Tafelposition schieben.
     """
+    bogen = math.radians(p.winkel or 0.0)
+    cos, sin = math.cos(bogen), math.sin(bogen)
+    dx, dy = p.versatz if p.versatz else (0.0, 0.0)
     ergebnis = []
     for punkt in punkte:
         x, y = float(punkt[0]), float(punkt[1])
-        if p.gedreht:
-            # (x, y) -> (breite - y, x); breite ist hier bereits die gedrehte Breite
-            x, y = p.breite - y, x
-        ergebnis.append((p.x + x, p.y + y))
+        if bogen:
+            x, y = x * cos - y * sin, x * sin + y * cos
+        ergebnis.append((p.x + x + dx, p.y + y + dy))
     return ergebnis
+
+
+def drehe_polygone(polygone: list, winkel: float) -> tuple[list, float, float]:
+    """
+    Dreht eine Teilekontur (Aussenkontur + Ausschnitte) um 'winkel' Grad und
+    schiebt sie in den Nullpunkt.
+
+    Rueckgabe: (gedrehte Polygone, Breite, Hoehe) der neuen Bounding-Box.
+    """
+    bogen = math.radians(winkel)
+    cos, sin = math.cos(bogen), math.sin(bogen)
+    gedreht = [[(x * cos - y * sin, x * sin + y * cos) for x, y in polygon]
+               for polygon in polygone]
+    if not gedreht or not gedreht[0]:
+        return gedreht, 0.0, 0.0
+    xs = [x for x, _ in gedreht[0]]
+    ys = [y for _, y in gedreht[0]]
+    x0, y0 = min(xs), min(ys)
+    verschoben = [[(x - x0, y - y0) for x, y in polygon] for polygon in gedreht]
+    return verschoben, max(xs) - x0, max(ys) - y0
+
+
+def versatz_fuer(polygone: list, winkel: float) -> tuple[float, float]:
+    """Nullpunktkorrektur, die drehe_polygone() anwenden wuerde."""
+    if not polygone or not polygone[0]:
+        return (0.0, 0.0)
+    bogen = math.radians(winkel)
+    cos, sin = math.cos(bogen), math.sin(bogen)
+    xs = [x * cos - y * sin for x, y in polygone[0]]
+    ys = [x * sin + y * cos for x, y in polygone[0]]
+    return (-min(xs), -min(ys))
 
 
 # ==========================================================
@@ -574,7 +636,9 @@ def _maxrects_tafel(freie_teile: list[dict], breite: float, hoehe: float,
         fx, fy, fb, fh = rechteck
         platzierungen.append(Platzierung2D(
             teil["bezeichnung"], fx, fy, tb, th, gedreht,
-            teil.get("kontur", []), teil.get("stichlinien", [])))
+            teil.get("kontur", []), teil.get("stichlinien", []),
+            winkel=90.0 if gedreht else 0.0,
+            versatz=(tb, 0.0) if gedreht else (0.0, 0.0)))
         teil["offen"] -= 1
 
         bb, bh = tb + saegeblatt, th + saegeblatt
@@ -645,7 +709,9 @@ def _guillotine_tafel(freie_teile: list[dict], breite: float, hoehe: float,
             _, teil, tb, th, gedreht = bestes
             platzierungen.append(Platzierung2D(
                 teil["bezeichnung"], x, y, tb, th, gedreht,
-                teil.get("kontur", []), teil.get("stichlinien", [])))
+                teil.get("kontur", []), teil.get("stichlinien", []),
+                winkel=90.0 if gedreht else 0.0,
+                versatz=(tb, 0.0) if gedreht else (0.0, 0.0)))
             teil["offen"] -= 1
             x += tb + saegeblatt
             rest_breite -= tb + saegeblatt

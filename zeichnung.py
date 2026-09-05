@@ -153,6 +153,8 @@ def svg_tafel(plan, nummer: int = 1, max_px: int = 620,
         f'fill="{FARBE_TAFEL}" stroke="#374151" stroke-width="1.5"/>',
     ]
 
+    # erst alle Flaechen, dann alle Beschriftungen - sonst verdeckt ein spaeter
+    # gezeichnetes Teil den Text des darunterliegenden
     for p in plan.platzierungen:
         farbe = farbe_fuer(p.bezeichnung, farben)
         konturen = p.welt_kontur() if p.kontur else []
@@ -174,6 +176,7 @@ def svg_tafel(plan, nummer: int = 1, max_px: int = 620,
                 f'width="{p.breite * skala:.2f}" height="{p.hoehe * skala:.2f}" '
                 f'fill="{farbe}" fill-opacity="0.85" stroke="#111827" stroke-width="0.9"/>')
 
+    for p in plan.platzierungen:
         if p.breite * skala > 44 and p.hoehe * skala > 22:
             mx = sx(p.x + p.breite / 2)
             my = sy(p.y + p.hoehe / 2)
@@ -184,7 +187,8 @@ def svg_tafel(plan, nummer: int = 1, max_px: int = 620,
             teile.append(
                 f'<text x="{mx:.2f}" y="{my + 9:.2f}" text-anchor="middle" '
                 f'font-family="sans-serif" font-size="9" fill="#F9FAFB">'
-                f'{p.breite:.0f} x {p.hoehe:.0f}{" &#8635;" if p.gedreht else ""}</text>')
+                f'{p.breite:.0f} x {p.hoehe:.0f}'
+                + (f' &#8635;{p.winkel:.0f}&#176;' if p.winkel else '') + '</text>')
 
     teile.append(
         f'<text x="{rand}" y="{kopf + h_px + 14:.0f}" font-family="sans-serif" '

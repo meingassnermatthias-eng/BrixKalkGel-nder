@@ -20,6 +20,13 @@ from nesting import (
     Stange, Tafel, Teil, Zuschnitt2D,
     optimize_1d, optimize_2d, parse_1d_eingabe, parse_2d_eingabe,
 )
+
+try:
+    from kontur_nesting import FEINE_WINKEL, STANDARD_WINKEL, optimize_2d_kontur
+    KONTUR_OK = True
+except Exception as exc:                      # numpy fehlt
+    KONTUR_OK = False
+    KONTUR_FEHLER = str(exc)
 from zeichnung import farbkarte, legende, namen_aus_plan, svg_stange, svg_tafel, svg_teil
 
 try:
@@ -210,11 +217,45 @@ with st.sidebar:
     schnittfuge = st.number_input("Schnittfuge / Fräserdurchmesser (mm)", 0.0, 50.0, 5.0, 0.5,
                                   help="Abstand zwischen zwei Teilen")
     besaeumung = st.number_input("Besäumung Tafelrand (mm)", 0.0, 200.0, 10.0, 5.0)
-    modus_text = st.radio("Schnittart", ["Guillotine (durchgehende Schnitte)",
-                                         "Frei (Laser / Plasma / CNC-Fräse)"],
-                          help="Guillotine für Tafelschere und Plattensäge, "
-                               "frei für Konturschneiden")
-    modus = "guillotine" if modus_text.startswith("Guillotine") else "frei"
+    schnittarten = ["Guillotine (durchgehende Schnitte)",
+                    "Frei (Laser / Plasma / CNC-Fräse)"]
+    if KONTUR_OK:
+        schnittarten.append("Kontur (echtes Nesting)")
+    modus_text = st.radio(
+        "Schnittart", schnittarten,
+        help="Guillotine für Tafelschere und Plattensäge, frei für Konturschneiden, "
+             "Kontur für ineinandergreifende Teile (Ausklinkungen, L-Formen, "
+             "Dreiecke, Ausschnitte)")
+    if modus_text.startswith("Guillotine"):
+        modus = "guillotine"
+    elif modus_text.startswith("Frei"):
+        modus = "frei"
+    else:
+        modus = "kontur"
+
+    raster = 5.0
+    winkel = STANDARD_WINKEL if KONTUR_OK else ()
+    nachverdichten = True
+    versuche = 3
+    if modus == "kontur":
+        raster = st.select_slider(
+            "Rasterweite (mm)", options=[1.0, 2.0, 3.0, 5.0, 8.0, 10.0], value=5.0,
+            help="Genauigkeit der Konturrechnung. Kleiner = dichter geschachtelt, "
+                 "aber deutlich langsamer.")
+        drehung = st.radio("Erlaubte Drehung",
+                           ["90°-Schritte", "auch 45°-Schritte", "keine Drehung"],
+                           help="45°-Schritte lohnen bei schrägen Teilen, "
+                                "brauchen aber die doppelte Rechenzeit.")
+        winkel = {"90°-Schritte": STANDARD_WINKEL,
+                  "auch 45°-Schritte": FEINE_WINKEL,
+                  "keine Drehung": (0.0,)}[drehung]
+        nachverdichten = st.checkbox(
+            "Ausschnitte und Taschen mitnutzen", True,
+            help="Sucht für die übrigen Teile auf der ganzen Tafel nach Platz, "
+                 "also auch innerhalb von Fensterausschnitten.")
+        versuche = st.slider("Suchtiefe", 1, 5, 3,
+                             help="Anzahl durchprobierter Schachtelstrategien. "
+                                  "Mehr = etwas besser, aber langsamer.")
 
     st.markdown("---")
     st.caption("Alle Maße in Millimeter. Preise netto.")
@@ -222,6 +263,8 @@ with st.sidebar:
 parameter_1d = {"saegeblatt": saegeblatt, "anschnitt": anschnitt, "endschnitt": endschnitt,
                 "min_reststueck": min_rest, "reste_zuerst": reste_zuerst}
 parameter_2d = {"saegeblatt": schnittfuge, "besaeumung": besaeumung, "modus": modus}
+if modus == "kontur":
+    parameter_2d["raster"] = raster
 
 
 # ==========================================================
@@ -307,14 +350,29 @@ def bestellliste_1d(erg) -> pd.DataFrame:
 
 
 def zeige_ergebnis_2d(erg):
-    k = st.columns(5)
+    # Bei echten Konturen weicht die Teilefläche von der Bounding-Box ab
+    mit_kontur = abs(erg.echte_flaeche - erg.genutzte_flaeche) > 1.0
+    k = st.columns(6 if mit_kontur else 5)
     k[0].metric("Tafeln", erg.anzahl_tafeln)
     k[1].metric("Tafelfläche", f"{erg.gesamt_flaeche / 1e6:.2f} m²")
-    k[2].metric("Ausnutzung", f"{erg.ausnutzung_prozent:.1f} %")
-    k[3].metric("Verschnitt", f"{erg.verschnitt_prozent:.1f} %",
-                f"{(erg.gesamt_flaeche - erg.genutzte_flaeche) / 1e6:.2f} m²",
-                delta_color="inverse")
-    k[4].metric("Materialkosten", f"{erg.gesamt_kosten:,.2f} €".replace(",", "."))
+    if mit_kontur:
+        k[2].metric("Ausnutzung Kontur", f"{erg.ausnutzung_echt_prozent:.1f} %",
+                    help="Echte Teilefläche bezogen auf die Tafelfläche")
+        k[3].metric("Ausnutzung Außenmaß", f"{erg.ausnutzung_prozent:.1f} %",
+                    help="Bounding-Box der Teile bezogen auf die Tafelfläche")
+        k[4].metric("Abfall", f"{100 - erg.ausnutzung_echt_prozent:.1f} %",
+                    f"{(erg.gesamt_flaeche - erg.echte_flaeche) / 1e6:.2f} m²",
+                    delta_color="inverse")
+        k[5].metric("Materialkosten", f"{erg.gesamt_kosten:,.2f} €".replace(",", "."))
+    else:
+        k[2].metric("Ausnutzung", f"{erg.ausnutzung_prozent:.1f} %")
+        k[3].metric("Verschnitt", f"{erg.verschnitt_prozent:.1f} %",
+                    f"{(erg.gesamt_flaeche - erg.genutzte_flaeche) / 1e6:.2f} m²",
+                    delta_color="inverse")
+        k[4].metric("Materialkosten", f"{erg.gesamt_kosten:,.2f} €".replace(",", "."))
+
+    for hinweis in getattr(erg, "hinweise", []):
+        st.info(hinweis)
 
     if erg.fehlende:
         zeilen = ", ".join(f"{a}× {b} ({x:.0f}×{y:.0f} mm)" for b, x, y, a in erg.fehlende)
@@ -346,7 +404,7 @@ def teileliste_2d(erg) -> pd.DataFrame:
                 "Pos": i, "Teil": p.bezeichnung,
                 "Breite (mm)": round(p.breite, 1), "Höhe (mm)": round(p.hoehe, 1),
                 "X (mm)": round(p.x, 1), "Y (mm)": round(p.y, 1),
-                "Gedreht": "ja" if p.gedreht else "nein",
+                "Drehung": f"{p.winkel:.0f}°",
             })
     return pd.DataFrame(zeilen)
 
@@ -512,8 +570,14 @@ with tab_2d:
                 "Drehbar": st.column_config.CheckboxColumn(
                     help="Aus bei Walz-/Dekorrichtung (z. B. Alucobond metallic)"),
             })
-        st.caption("Aus dem DXF-Import übernommene Teile behalten ihre echte Kontur "
-                   "(Spalte Kontur = ja) und werden über die Außenmaße geschachtelt.")
+        if modus == "kontur":
+            st.caption("Schnittart **Kontur**: aus dem DXF übernommene Teile werden mit "
+                       "ihrer echten Form geschachtelt und greifen ineinander. "
+                       "Teile ohne DXF-Kontur gelten als Rechteck.")
+        else:
+            st.caption("Aus dem DXF-Import übernommene Teile behalten ihre echte Kontur, "
+                       "geschachtelt wird bei dieser Schnittart aber über die Außenmaße. "
+                       "Für echtes Konturnesting die Schnittart *Kontur* wählen.")
 
         with st.expander("Schnellerfassung (eine Zeile je Position)"):
             eingabe2 = st.text_area(
@@ -585,9 +649,15 @@ with tab_2d:
             st.warning("Bitte mindestens eine Tafel erfassen.")
         else:
             with st.spinner("Schachtele ..."):
-                st.session_state.erg_2d = optimize_2d(
-                    teile, tafeln, saegeblatt=schnittfuge, besaeumung=besaeumung,
-                    modus=modus)
+                if modus == "kontur":
+                    st.session_state.erg_2d = optimize_2d_kontur(
+                        teile, tafeln, saegeblatt=schnittfuge, besaeumung=besaeumung,
+                        raster=raster, winkel=winkel, versuche=versuche,
+                        nachverdichten=nachverdichten)
+                else:
+                    st.session_state.erg_2d = optimize_2d(
+                        teile, tafeln, saegeblatt=schnittfuge, besaeumung=besaeumung,
+                        modus=modus)
 
     if st.session_state.erg_2d is not None:
         erg = st.session_state.erg_2d
@@ -781,12 +851,38 @@ gerechnet (vollständige Kombinationssuche je Stange), danach die nächste Stang
 Die Sägeblattstärke, ein Anschnitt am Anfang und eine Reserve am Ende werden
 mitgerechnet. Teile werden nur mit Teilen desselben **Profils** kombiniert.
 
-**2D &ndash; Bleche und Platten.** Zwei Schnittarten:
+**2D &ndash; Bleche und Platten.** Drei Schnittarten:
 
 * **Guillotine** &ndash; durchgehende Schnitte in Streifen. Passt zu Tafelschere,
   Plattensäge und Kreissäge.
-* **Frei** &ndash; die Teile werden dicht verschachtelt (MaxRects). Nur sinnvoll,
-  wenn die Maschine Konturen fährt (Laser, Plasma, CNC-Fräse).
+* **Frei** &ndash; die Teile werden als Rechtecke dicht verschachtelt (MaxRects).
+  Nur sinnvoll, wenn die Maschine Konturen fährt (Laser, Plasma, CNC-Fräse).
+* **Kontur** &ndash; echtes Nesting mit der tatsächlichen Teileform: Teile greifen
+  ineinander, Ausklinkungen und Fensterausschnitte werden mitgenutzt.
+
+**Wann lohnt sich Kontur-Nesting?** Immer dann, wenn die Teile nicht rechteckig
+sind &ndash; L-Formen, Dreiecke, Trapeze, Kassetten mit tiefen Ausklinkungen. In
+den Tests halbiert es dort den Tafelbedarf (Dreiecke 2 &rarr; 1 Tafel, L-Winkel
+4 &rarr; 2 Tafeln). Bei reinen Rechtecken bringt es dagegen nichts; das Programm
+rechnet dann zusätzlich das einfache Verfahren mit und übernimmt automatisch
+den besseren Plan &ndash; schlechter als *Frei* kann Kontur also nie werden.
+
+So arbeitet das Verfahren: jede Kontur wird in ein Raster übersetzt und um die
+halbe Schnittfuge aufgeweitet; anschließend fällt jedes Teil an der günstigsten
+Stelle nach unten und rutscht dabei in vorhandene Taschen. Weil nach außen
+gerundet wird, ist die eingestellte Schnittfuge garantiert eingehalten &ndash;
+im Zweifel steht etwas mehr Abstand, nie weniger.
+
+Stellschrauben:
+
+* **Rasterweite** &ndash; 5 mm ist ein guter Kompromiss. 1&ndash;2 mm schachtelt
+  dichter, rechnet aber deutlich länger.
+* **Erlaubte Drehung** &ndash; 90°-Schritte reichen meist. 45°-Schritte lohnen
+  bei schrägen Teilen. Teile mit Walz- oder Dekorrichtung bleiben über den
+  Haken *Drehbar* ohnehin ungedreht.
+* **Ausschnitte und Taschen mitnutzen** &ndash; legt kleine Teile in
+  Fensterausschnitte großer Teile.
+* **Suchtiefe** &ndash; probiert mehrere Schachtelstrategien durch.
 
 **DXF &ndash; HiCAD / Alucobond.** Die Abwicklungen werden eingelesen, die
 Außenkontur und die Ausschnitte werden erkannt, Fräs- und Falzlinien getrennt
@@ -806,10 +902,15 @@ sich im Reiter *DXF-Import* von Hand ändern.
 
 ### Grenzen, die man kennen sollte
 
-* Beim 2D-Nesting wird über die **Außenmaße (Bounding-Box)** geschachtelt, auch
-  wenn die echte Kontur bekannt ist. Bei Kassetten mit Eckausklinkungen bleibt
-  dadurch etwas Material liegen, das ein Konturnesting noch nutzen könnte.
-* Gedreht wird um 90°, nicht um beliebige Winkel.
+* Bei den Schnittarten *Guillotine* und *Frei* wird über die **Außenmaße
+  (Bounding-Box)** geschachtelt. Wer die echte Teileform ausnutzen will, nimmt
+  die Schnittart **Kontur**.
+* Das Konturnesting rechnet im Raster (Standard 5 mm). Die Teile stehen dadurch
+  gelegentlich ein paar Millimeter weiter auseinander als nötig &ndash; nie
+  enger als die eingestellte Schnittfuge.
+* Gedreht wird in 90°- oder 45°-Schritten, nicht in beliebigen Winkeln.
+* Teile werden nicht ineinander verschoben, sondern von oben eingelegt. Eine
+  Tasche, die nur seitlich erreichbar wäre, bleibt frei.
 * Die Optimierung ist eine sehr gute Heuristik, kein mathematisches Optimum.
   Bei üblichen Werkstattaufgaben liegt der Verschnitt erfahrungsgemäß nur
   wenige Prozent über dem theoretischen Bestwert.

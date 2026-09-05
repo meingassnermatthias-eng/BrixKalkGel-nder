@@ -16,12 +16,14 @@ streamlit run app_nesting.py
 | Datei | Inhalt |
 |---|---|
 | `app_nesting.py` | Streamlit-Oberfläche (1D, 2D, DXF-Import, Hilfe) |
-| `nesting.py` | Rechenkern, ohne Fremdbibliotheken |
+| `nesting.py` | Rechenkern 1D und 2D (Bounding-Box), ohne Fremdbibliotheken |
+| `kontur_nesting.py` | Echtes Konturnesting (True Shape Nesting), braucht numpy |
 | `dxf_import.py` | DXF lesen (HiCAD/Alucobond) und Schachtelplan als DXF schreiben |
 | `zeichnung.py` | Schnittpläne als SVG für die Oberfläche |
 | `pdf_export.py` | Werkstattdruck als PDF |
 | `test_nesting.py` | Tests des Rechenkerns – `python3 test_nesting.py` |
 | `test_dxf.py` | Tests des DXF-Wegs – `python3 test_dxf.py` |
+| `test_kontur.py` | Tests des Konturnestings – `python3 test_kontur.py` |
 
 Alle Maße in Millimeter.
 
@@ -48,12 +50,13 @@ Schnellerfassung statt Tabelle:
 
 ## 2D – Bleche und Platten
 
-Zwei Schnittarten:
+Drei Schnittarten:
 
 * **Guillotine** – durchgehende Schnitte in Streifen, passend für Tafelschere,
   Plattensäge und Kreissäge.
-* **Frei** – dichte Verschachtelung (MaxRects), nur sinnvoll, wenn die Maschine
-  Konturen fährt (Laser, Plasma, CNC-Fräse).
+* **Frei** – dichte Verschachtelung der Außenmaße (MaxRects), nur sinnvoll, wenn
+  die Maschine Konturen fährt (Laser, Plasma, CNC-Fräse).
+* **Kontur** – echtes Nesting mit der tatsächlichen Teileform (siehe unten).
 
 Schnittfuge (bzw. Fräserdurchmesser) und umlaufende Besäumung werden
 mitgerechnet. Teile können um 90° gedreht werden; bei Walz- oder Dekorrichtung
@@ -61,6 +64,57 @@ mitgerechnet. Teile können um 90° gedreht werden; bei Walz- oder Dekorrichtung
 
 Ausgabe: Schachtelplan als PDF, Teileliste als Excel/CSV und der komplette
 Schachtelplan als DXF (Layer `TAFEL`, `KONTUR`, `FRAESLINIE`, `BESCHRIFTUNG`).
+
+## Konturnesting (True Shape Nesting)
+
+Schachtelt mit der echten Teileform statt mit dem umschreibenden Rechteck.
+Teile greifen ineinander, Ausklinkungen werden mitgenutzt und kleine Teile
+landen bei Bedarf in den Fensterausschnitten großer Teile.
+
+Was es bringt (gemessen in `test_kontur.py`, Tafel 1250×2500 bzw. 1500×3000):
+
+| Auftrag | Außenmaß-Nesting | Konturnesting |
+|---|---|---|
+| 16 Dreiecke 600×400 | 2 Tafeln, 31 % | **1 Tafel, 61 %** |
+| 10 L-Winkel 800×800 | 4 Tafeln, 22 % | **2 Tafeln, 43 %** |
+| Rahmen mit Ausschnitt + Einleger | 2 Tafeln | **1 Tafel** |
+| Reine Rechtecke | 2 Tafeln, 57 % | 2 Tafeln, 57 % |
+| Kassetten mit 30-mm-Eckausklinkung | 3 Tafeln, 58 % | 3 Tafeln, 58 % |
+
+Kurz: Je stärker die Teile von der Rechteckform abweichen, desto größer der
+Gewinn. Bei Rechtecken und bei Kassetten mit nur kleinen Eckausklinkungen
+bringt es nichts – dort begrenzt die Tafelbreite, nicht die Teileform.
+
+**So rechnet das Verfahren.** Jede Kontur wird je Drehwinkel in ein Raster
+übersetzt (Scanline-Füllung nach der Even-Odd-Regel, dadurch sind Ausschnitte
+automatisch frei) und um die halbe Schnittfuge aufgeweitet. Anschließend fällt
+jedes Teil an der günstigsten Stelle nach unten und rutscht dabei in vorhandene
+Taschen; bewertet wird nach eingeschlossener Restfläche. Teile, die so nicht
+mehr unterkommen, werden über eine Kreuzkorrelation (FFT) auf der ganzen Tafel
+gesucht – so finden sie auch in Fensterausschnitte hinein.
+
+**Die Schnittfuge ist garantiert.** Gerastert wird nach außen (eine Zelle gilt
+als belegt, sobald die Kontur sie berührt), aufgeweitet wird um die halbe
+Schnittfuge. Überschneidungsfreie Masken bedeuten deshalb zwingend, dass die
+echten Konturen mindestens die volle Schnittfuge auseinanderliegen. Im Zweifel
+steht etwas mehr Abstand, nie weniger. `test_kontur.py` rechnet jeden erzeugten
+Plan exakt nach – Kantenschnitt, Einschluss und kleinster Abstand.
+
+**Einstellungen:**
+
+* **Rasterweite** – 5 mm ist ein guter Kompromiss; 1–2 mm schachtelt dichter,
+  rechnet aber deutlich länger. Bei sehr großen Tafeln vergröbert das Programm
+  automatisch und sagt Bescheid.
+* **Erlaubte Drehung** – 90°-Schritte (Standard), zusätzlich 45°-Schritte, oder
+  keine Drehung. Teile mit Walz- oder Dekorrichtung bleiben über den Haken
+  *Drehbar* ohnehin ungedreht (auch 180° würde die Laufrichtung umkehren).
+* **Ausschnitte und Taschen mitnutzen** – schaltet die Vollsuche zu.
+* **Suchtiefe** – Anzahl durchprobierter Schachtelstrategien (1–5).
+
+**Sicherheitsnetz:** Das Programm rechnet zusätzlich das schnelle
+Außenmaß-Verfahren mit und übernimmt dessen Plan, falls er mit weniger Tafeln
+auskommt (kommt bei reinen Rechteckaufträgen vor). Konturnesting kann dadurch
+nie schlechter ausfallen als *Frei*; der Wechsel wird im Ergebnis angezeigt.
 
 ## DXF-Import (HiCAD / Alucobond)
 
@@ -93,10 +147,14 @@ Programm gelesen hat.
 
 ## Grenzen
 
-* Geschachtelt wird 2D über die **Außenmaße** (Bounding-Box), auch wenn die
-  echte Kontur bekannt ist. Bei Kassetten mit Eckausklinkungen bleibt dadurch
-  Material liegen, das ein echtes Konturnesting noch nutzen könnte. Die Kontur
-  wird in Plan, PDF und DXF-Export trotzdem maßhaltig dargestellt.
-* Gedreht wird um 90°, nicht um beliebige Winkel.
+* Die Schnittarten *Guillotine* und *Frei* schachteln über die **Außenmaße**.
+  Wer die echte Teileform ausnutzen will, nimmt die Schnittart *Kontur*.
+* Das Konturnesting rechnet im Raster: die Teile stehen gelegentlich ein paar
+  Millimeter weiter auseinander als nötig – nie enger als die Schnittfuge.
+* Teile werden von oben eingelegt, nicht seitlich eingeschoben. Eine Tasche,
+  die nur seitlich erreichbar wäre, bleibt frei.
+* Gedreht wird in 90°- oder 45°-Schritten, nicht in beliebigen Winkeln.
 * Die Optimierung ist eine sehr gute Heuristik, kein mathematisches Optimum.
+  Bei gemischten Rechteckaufträgen liegt sie erfahrungsgemäß wenige Prozent
+  über dem theoretischen Bestwert.
 * Der ausgegebene Plan ersetzt die Kontrolle in der Werkstatt nicht.
