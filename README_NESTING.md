@@ -6,13 +6,17 @@ Alucobond-Kassetten).
 
 ## Am eigenen Rechner starten
 
-**Windows:** Doppelklick auf `start_nesting.bat`. Beim ersten Start richtet das
-Skript eine eigene Python-Umgebung ein und lädt die benötigten Pakete – das
-dauert ein paar Minuten, jeder weitere Start geht sofort. Danach öffnet sich
-die Oberfläche im Browser.
+**Windows:** Ordner entpacken (nicht aus der ZIP heraus starten), dann
+Doppelklick auf `start_nesting.bat`. Das Skript
 
-Einzige Voraussetzung: Python 3.10 oder neuer von
-[python.org](https://www.python.org/downloads/), bei der Installation
+1. sucht Python und bietet die Installation über `winget` an, falls es fehlt,
+2. legt beim ersten Start eine eigene Umgebung im Unterordner `.venv` an und
+   lädt die Pakete (dauert ein paar Minuten),
+3. startet die Oberfläche im Browser.
+
+Jeder weitere Start geht sofort. Das schwarze Fenster muss während der Arbeit
+offen bleiben. Ohne `winget` (ältere Windows-Versionen) Python von Hand von
+[python.org](https://www.python.org/downloads/) installieren und dabei
 **„Add Python to PATH"** ankreuzen.
 
 **macOS / Linux:**
