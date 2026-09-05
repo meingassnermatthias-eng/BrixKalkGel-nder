@@ -1,0 +1,56 @@
+NESTING - VERSCHNITTOPTIMIERUNG
+Meingassner Metalltechnik
+===============================================================
+
+SO STARTEST DU DAS PROGRAMM (Windows)
+---------------------------------------------------------------
+
+  1. Diesen Ordner irgendwohin entpacken,
+     zum Beispiel nach C:\Nesting
+     (WICHTIG: nicht direkt aus der ZIP-Datei starten)
+
+  2. Doppelklick auf   start_nesting.bat
+
+  3. Beim allerersten Start:
+     - Fehlt Python, fragt das Fenster, ob es installiert
+       werden soll -> mit J bestaetigen, danach die Datei
+       start_nesting.bat noch einmal doppelklicken.
+     - Danach laedt es die benoetigten Pakete. Das dauert
+       ein paar Minuten. Das schwarze Fenster bitte offen
+       lassen, bis sich der Browser oeffnet.
+
+  Jeder weitere Start geht sofort.
+  Das schwarze Fenster muss waehrend der Arbeit offen bleiben -
+  zum Beenden einfach schliessen.
+
+
+WAS DAS PROGRAMM KANN
+---------------------------------------------------------------
+
+  Reiter "Stangen & Profile (1D)"
+     Zuschnitt von Rohren, Flachstahl, Handlauf.
+     Beruecksichtigt Saegeblattstaerke, Anschnitt und
+     verwertbare Reststuecke.
+
+  Reiter "Bleche & Platten (2D)"
+     Schachtelplan fuer Tafeln. Drei Schnittarten:
+       Guillotine - durchgehende Schnitte (Tafelschere, Saege)
+       Frei       - Rechtecke dicht verschachtelt (Laser, Plasma)
+       Kontur     - echtes Nesting mit der wirklichen Teileform,
+                    Teile greifen ineinander
+
+  Reiter "DXF-Import"
+     Abwicklungen aus HiCAD einlesen (z. B. Alucobond-
+     Kassetten). Erkennt Aussenkontur, Ausschnitte und
+     Fraes-/Falzlinien. Der fertige Plan laesst sich wieder
+     als DXF ausgeben.
+
+  Ausgabe ueberall: PDF fuer die Werkstatt, Excel und CSV
+  fuer die Listen, DXF fuer die Maschine.
+
+
+ALLE MASSE IN MILLIMETER.
+Die Oberflaeche laeuft nur auf diesem Rechner, es gehen
+keine Daten nach aussen.
+
+Ausfuehrliche Beschreibung: README_NESTING.md
