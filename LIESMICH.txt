@@ -24,6 +24,24 @@ SO STARTEST DU DAS PROGRAMM (Windows)
   zum Beenden einfach schliessen.
 
 
+STARTKNOPF AUF DEM DESKTOP
+---------------------------------------------------------------
+
+  Beim ersten Start wird gefragt, ob ein Knopf auf dem Desktop
+  angelegt werden soll -> mit J bestaetigen.
+
+  Nachtraeglich geht das jederzeit mit einem Doppelklick auf
+  Desktop-Verknuepfung.bat
+
+  Danach startet das Programm per Doppelklick auf das Symbol
+  "Nesting - Verschnittoptimierung" auf dem Desktop.
+
+  WICHTIG: Den Programmordner danach nicht mehr verschieben
+  oder umbenennen - sonst findet die Verknuepfung ihr Ziel
+  nicht mehr. Dann einfach Desktop-Verknuepfung.bat erneut
+  doppelklicken.
+
+
 WAS DAS PROGRAMM KANN
 ---------------------------------------------------------------
 

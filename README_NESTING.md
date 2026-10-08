@@ -19,6 +19,12 @@ offen bleiben. Ohne `winget` (ältere Windows-Versionen) Python von Hand von
 [python.org](https://www.python.org/downloads/) installieren und dabei
 **„Add Python to PATH"** ankreuzen.
 
+**Startknopf auf dem Desktop:** Beim ersten Start wird danach gefragt;
+nachträglich jederzeit per Doppelklick auf `Desktop-Verknuepfung.bat`. Die
+Verknüpfung bekommt das Symbol aus `nesting.ico` und zeigt auf
+`start_nesting.bat` im Programmordner — der Ordner darf danach nicht mehr
+verschoben oder umbenannt werden.
+
 **macOS / Linux:**
 
 ```bash
@@ -53,6 +59,9 @@ Daten nach außen.
 | `test_nesting.py` | Tests des Rechenkerns – `python3 test_nesting.py` |
 | `test_dxf.py` | Tests des DXF-Wegs – `python3 test_dxf.py` |
 | `test_kontur.py` | Tests des Konturnestings – `python3 test_kontur.py` |
+| `start_nesting.bat` / `.sh` | Startet das Programm (Windows / macOS, Linux) |
+| `Desktop-Verknuepfung.bat` | Legt den Startknopf auf den Windows-Desktop |
+| `nesting.ico` | Symbol für die Verknüpfung |
 
 Alle Maße in Millimeter.
 

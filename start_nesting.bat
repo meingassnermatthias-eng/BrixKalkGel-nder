@@ -81,6 +81,9 @@ if not exist ".venv\Scripts\python.exe" (
     echo.
     echo   Einrichtung fertig.
     echo.
+    set /p KNOPF="  Startknopf auf dem Desktop anlegen? [J/N] "
+    if /i "!KNOPF!"=="J" call "%~dp0Desktop-Verknuepfung.bat" /still
+    echo.
 )
 
 REM ---------------------------------------------------------------
