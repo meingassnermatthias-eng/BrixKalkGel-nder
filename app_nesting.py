@@ -43,6 +43,13 @@ except Exception as exc:                      # pragma: no cover
     PDF_OK = False
     PDF_FEHLER = str(exc)
 
+try:
+    from plan_editor import kontur_karte, plan_editor, uebernehme, vorrat_fuer
+    EDITOR_OK = True
+except Exception as exc:                      # pragma: no cover
+    EDITOR_OK = False
+    EDITOR_FEHLER = str(exc)
+
 
 # ==========================================================
 # 0. STREAMLIT-KOMPATIBILITAET
@@ -349,7 +356,7 @@ def bestellliste_1d(erg) -> pd.DataFrame:
     return pd.DataFrame(zeilen)
 
 
-def zeige_ergebnis_2d(erg):
+def zeige_ergebnis_2d(erg, farben=None):
     # Bei echten Konturen weicht die Teilefläche von der Bounding-Box ab
     mit_kontur = abs(erg.echte_flaeche - erg.genutzte_flaeche) > 1.0
     k = st.columns(6 if mit_kontur else 5)
@@ -382,7 +389,7 @@ def zeige_ergebnis_2d(erg):
                    "den Tafeln nicht vor (Schreibweise vergleichen oder Materialfeld "
                    "leer lassen).")
 
-    farben = farbkarte(namen_aus_plan(erg))
+    farben = farben or farbkarte(namen_aus_plan(erg))
     st.markdown(legende(farben.keys(), farben), unsafe_allow_html=True)
     st.caption("Rot gestrichelt = Fräs-/Falzlinie aus dem DXF (kein Trennschnitt).")
 
@@ -393,6 +400,57 @@ def zeige_ergebnis_2d(erg):
 
     with st.expander("Teileliste (Tabelle)"):
         st.dataframe(teileliste_2d(erg), **BREITE, hide_index=True)
+
+
+def zeige_editor(erg, farben):
+    """Schachtelplan einer Tafel von Hand nachbessern."""
+    with st.expander("✏️ Plan von Hand anpassen (Teile mit der Maus verschieben)"):
+        st.caption(
+            "Teil anklicken und ziehen. **R** dreht um 90°, **Entf** legt es neben "
+            "die Tafel, die **Pfeiltasten** schieben millimeterweise. Teile fangen "
+            "sich an der Tafelkante und an den Nachbarn im Abstand der Schnittfuge. "
+            "Rot heißt: Überschneidung oder zu nah. Erst **Änderungen übernehmen** "
+            "schreibt den Plan um – PDF, Excel und DXF nutzen danach den "
+            "angepassten Plan.")
+
+        if len(erg.plaene) > 1:
+            nummer = st.selectbox(
+                "Tafel", range(1, len(erg.plaene) + 1),
+                format_func=lambda n: (
+                    f"Tafel {n} – {erg.plaene[n-1].tafel} "
+                    f"({len(erg.plaene[n-1].platzierungen)} Teile, "
+                    f"{erg.plaene[n-1].ausnutzung*100:.0f} % Ausnutzung)"),
+                key="editor_tafel")
+        else:
+            nummer = 1
+
+        plan = erg.plaene[nummer - 1]
+        karte = kontur_karte(erg, st.session_state.get("konturen"))
+        vorrat = vorrat_fuer(erg, plan, karte, farben)
+
+        rueckgabe = plan_editor(
+            plan, nummer, saegeblatt=schnittfuge, besaeumung=besaeumung,
+            farben=farben, vorrat=vorrat, raster=5.0,
+            key=f"plan_editor_{nummer}")
+
+        # Meldung erst nach dem Neuaufbau zeigen - st.rerun() verwirft sie sonst
+        if st.session_state.get("editor_meldung"):
+            art, text = st.session_state.pop("editor_meldung")
+            (st.warning if art == "warnung" else st.success)(text)
+
+        if rueckgabe and rueckgabe.get("stand") != st.session_state.get("editor_stand"):
+            st.session_state.editor_stand = rueckgabe.get("stand")
+            meldungen = uebernehme(erg, nummer - 1, rueckgabe, karte)
+            text = ("Plan aktualisiert: "
+                    + ("; ".join(meldungen) if meldungen else "keine Änderung"))
+            if rueckgabe.get("fehlerhaft"):
+                st.session_state.editor_meldung = (
+                    "warnung",
+                    f"{text}. Achtung: {rueckgabe['fehlerhaft']} Teil(e) liegen falsch "
+                    f"(Überschneidung oder außerhalb der Tafel) – vor dem Zuschnitt prüfen.")
+            else:
+                st.session_state.editor_meldung = ("erfolg", text)
+            st.rerun()
 
 
 def teileliste_2d(erg) -> pd.DataFrame:
@@ -662,7 +720,11 @@ with tab_2d:
     if st.session_state.erg_2d is not None:
         erg = st.session_state.erg_2d
         st.markdown("---")
-        zeige_ergebnis_2d(erg)
+        farben_2d = farbkarte(namen_aus_plan(erg))
+        zeige_ergebnis_2d(erg, farben_2d)
+
+        if EDITOR_OK and erg.plaene:
+            zeige_editor(erg, farben_2d)
 
         st.markdown("#### Ausgabe")
         knoepfe = st.columns(4)
@@ -883,6 +945,14 @@ Stellschrauben:
 * **Ausschnitte und Taschen mitnutzen** &ndash; legt kleine Teile in
   Fensterausschnitte großer Teile.
 * **Suchtiefe** &ndash; probiert mehrere Schachtelstrategien durch.
+
+**Plan von Hand nachbessern.** Unter dem Schachtelplan lässt sich jedes Teil
+mit der Maus auf der Tafel verschieben, drehen, ablegen und wieder einsetzen.
+Die Teile fangen sich dabei an der Tafelkante und an den Nachbarn im Abstand
+der Schnittfuge. Überschneidungen werden rot angezeigt. Erst *Änderungen
+übernehmen* schreibt den Plan um &ndash; PDF, Excel und DXF nutzen danach den
+angepassten Plan. Abgelegte Teile stehen auf jeder Tafel zum Einsetzen bereit,
+so lassen sich Teile zwischen Tafeln umhängen.
 
 **DXF &ndash; HiCAD / Alucobond.** Die Abwicklungen werden eingelesen, die
 Außenkontur und die Ausschnitte werden erkannt, Fräs- und Falzlinien getrennt

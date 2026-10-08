@@ -63,6 +63,14 @@ WAS DAS PROGRAMM KANN
      Fraes-/Falzlinien. Der fertige Plan laesst sich wieder
      als DXF ausgeben.
 
+  Plan von Hand nachbessern
+     Unter dem Schachtelplan: "Plan von Hand anpassen".
+     Teile mit der Maus ziehen, R dreht um 90 Grad,
+     Entf legt ein Teil neben die Tafel, Pfeiltasten
+     schieben millimeterweise. Ueberschneidungen werden
+     rot angezeigt. Erst "Aenderungen uebernehmen"
+     schreibt den Plan um.
+
   Ausgabe ueberall: PDF fuer die Werkstatt, Excel und CSV
   fuer die Listen, DXF fuer die Maschine.
 

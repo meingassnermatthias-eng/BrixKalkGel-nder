@@ -66,6 +66,9 @@ Fehlt die Datei, legt `start_nesting.bat` bzw. `start_nesting.sh` sie an.
 | `test_nesting.py` | Tests des Rechenkerns – `python3 test_nesting.py` |
 | `test_dxf.py` | Tests des DXF-Wegs – `python3 test_dxf.py` |
 | `test_kontur.py` | Tests des Konturnestings – `python3 test_kontur.py` |
+| `plan_editor.py` | Plan von Hand nachbessern (Streamlit-Komponente) |
+| `komponenten/plan_editor/` | Oberfläche des Editors (HTML/SVG) |
+| `test_plan_editor.py` | Tests des Editors – `python3 test_plan_editor.py` |
 | `start_nesting.bat` / `.sh` | Startet das Programm (Windows / macOS, Linux) |
 | `Desktop-Verknuepfung.bat` | Legt den Startknopf auf den Windows-Desktop |
 | `nesting.ico` | Symbol für die Verknüpfung |
@@ -160,6 +163,40 @@ Plan exakt nach – Kantenschnitt, Einschluss und kleinster Abstand.
 Außenmaß-Verfahren mit und übernimmt dessen Plan, falls er mit weniger Tafeln
 auskommt (kommt bei reinen Rechteckaufträgen vor). Konturnesting kann dadurch
 nie schlechter ausfallen als *Frei*; der Wechsel wird im Ergebnis angezeigt.
+
+## Plan von Hand nachbessern
+
+Unter dem Schachtelplan liegt der Bereich **Plan von Hand anpassen**. Dort
+lässt sich jedes Teil mit der Maus auf der Tafel verschieben – für die Fälle,
+in denen der Zuschneider es besser weiß als die Rechnung.
+
+| Bedienung | Wirkung |
+|---|---|
+| Teil anklicken und ziehen | verschieben |
+| **R** oder die Drehknöpfe | 90° drehen (Winkelfeld für beliebige Grad) |
+| Pfeiltasten | 1 mm schieben, mit Umschalt 10 mm |
+| **Entf** oder *Ablegen* | Teil neben die Tafel legen |
+| Knopf in der Ablage | Teil wieder einsetzen |
+| **Strg+Z** / *Zurück* | Schritt zurück |
+| *Verwerfen* | zurück auf den gerechneten Plan |
+
+Beim Ziehen fangen sich die Teile an der Tafelkante und an den Nachbarn –
+genau im Abstand der eingestellten Schnittfuge; zusätzlich greift ein frei
+wählbares Raster (Standard 5 mm). Das Fangen lässt sich abschalten.
+
+Der Editor rechnet laufend mit: Teile, die sich überschneiden, die Schnittfuge
+unterschreiten oder über den Tafelrand ragen, werden rot umrandet und in der
+Statuszeile gezählt. Die Ausnutzung wird live mitgeführt.
+
+Erst **Änderungen übernehmen** schreibt den Plan um. Danach nutzen Teileliste,
+PDF, Excel und DXF-Export den angepassten Plan. Abgelegte Teile wandern in die
+Liste der nicht eingeplanten Teile und können auf einer anderen Tafel wieder
+eingesetzt werden – so lassen sich Teile zwischen Tafeln umhängen.
+
+Wird ein Teil eingesetzt, sucht der Editor selbst einen freien Platz und
+probiert dafür alle vier Drehlagen durch. Findet er keinen, legt er das Teil
+in die linke untere Ecke und sagt es in der Statuszeile – dann hilft nur
+Schieben von Hand oder eine andere Tafel.
 
 ## DXF-Import (HiCAD / Alucobond)
 
