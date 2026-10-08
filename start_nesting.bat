@@ -66,7 +66,21 @@ if not defined PYTHON (
 )
 
 REM ---------------------------------------------------------------
-REM  3. Eigene Umgebung anlegen und Pakete laden
+REM  3. Streamlit-Konfiguration sicherstellen
+REM     Ohne showEmailPrompt bleibt der erste Start bei der
+REM     Begruessung "Email:" stehen und wartet auf eine Eingabe.
+REM ---------------------------------------------------------------
+if not exist ".streamlit\config.toml" (
+    if not exist ".streamlit" mkdir ".streamlit"
+    >  ".streamlit\config.toml" echo [server]
+    >> ".streamlit\config.toml" echo showEmailPrompt = false
+    >> ".streamlit\config.toml" echo.
+    >> ".streamlit\config.toml" echo [browser]
+    >> ".streamlit\config.toml" echo gatherUsageStats = false
+)
+
+REM ---------------------------------------------------------------
+REM  4. Eigene Umgebung anlegen und Pakete laden
 REM ---------------------------------------------------------------
 if not exist ".venv\Scripts\python.exe" (
     echo.
@@ -87,7 +101,7 @@ if not exist ".venv\Scripts\python.exe" (
 )
 
 REM ---------------------------------------------------------------
-REM  4. Starten
+REM  5. Starten
 REM ---------------------------------------------------------------
 echo   Starte die Verschnittoptimierung - der Browser oeffnet sich gleich.
 echo   Zum Beenden dieses Fenster schliessen oder Strg+C druecken.

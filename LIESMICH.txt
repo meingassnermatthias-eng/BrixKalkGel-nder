@@ -67,6 +67,22 @@ WAS DAS PROGRAMM KANN
   fuer die Listen, DXF fuer die Maschine.
 
 
+WENN ETWAS HAKT
+---------------------------------------------------------------
+
+  Das Fenster bleibt stehen bei
+     "Welcome to Streamlit! ... Email:"
+  -> Einfach Enter druecken, das Feld bleibt leer.
+     (Ab dieser Fassung kommt die Frage nicht mehr.)
+
+  Der Browser oeffnet sich nicht
+  -> Im Browser von Hand aufrufen:  http://localhost:8501
+
+  Der Desktop-Knopf findet sein Ziel nicht
+  -> Der Programmordner wurde verschoben. Einmal
+     Desktop-Verknuepfung.bat doppelklicken.
+
+
 ALLE MASSE IN MILLIMETER.
 Die Oberflaeche laeuft nur auf diesem Rechner, es gehen
 keine Daten nach aussen.

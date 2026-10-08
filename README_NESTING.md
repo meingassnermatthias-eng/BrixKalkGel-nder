@@ -46,6 +46,13 @@ streamlit run app_nesting.py
 Die Oberfläche läuft nur auf dem eigenen Rechner (`localhost`) – es gehen keine
 Daten nach außen.
 
+Die mitgelieferte `.streamlit/config.toml` schaltet Streamlits Begrüßung mit
+der E-Mail-Abfrage ab (`showEmailPrompt = false`) und sendet keine
+Nutzungsstatistik. Ohne sie bleibt der erste Start unter Windows und macOS bei
+`Email:` stehen und wartet auf eine Eingabe – unter Linux fällt das nicht auf,
+weil Streamlit dort automatisch im Headless-Modus läuft und gar nicht fragt.
+Fehlt die Datei, legt `start_nesting.bat` bzw. `start_nesting.sh` sie an.
+
 ## Dateien
 
 | Datei | Inhalt |

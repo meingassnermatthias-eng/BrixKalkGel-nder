@@ -11,6 +11,19 @@
 set -e
 cd "$(dirname "$0")"
 
+# Streamlit-Konfiguration sicherstellen: ohne showEmailPrompt bleibt der erste
+# Start (auf dem Mac) bei der Begruessung "Email:" stehen.
+if [ ! -f ".streamlit/config.toml" ]; then
+    mkdir -p .streamlit
+    cat > .streamlit/config.toml <<'KONFIG'
+[server]
+showEmailPrompt = false
+
+[browser]
+gatherUsageStats = false
+KONFIG
+fi
+
 if ! command -v python3 >/dev/null 2>&1; then
     echo "Python 3 wurde nicht gefunden. Bitte Python 3.10 oder neuer installieren."
     exit 1
