@@ -68,8 +68,10 @@ WAS DAS PROGRAMM KANN
      Teile mit der Maus ziehen, R dreht um 90 Grad,
      Entf legt ein Teil neben die Tafel, Pfeiltasten
      schieben millimeterweise. Ueberschneidungen werden
-     rot angezeigt. Erst "Aenderungen uebernehmen"
-     schreibt den Plan um.
+     rot angezeigt. Teile, die rot liegen, ruecken beim
+     Loslassen selbst auf die naechste freie Stelle
+     (abschaltbar ueber "Einruecken"). Erst
+     "Aenderungen uebernehmen" schreibt den Plan um.
 
   Ausgabe ueberall: PDF fuer die Werkstatt, Excel und CSV
   fuer die Listen, DXF fuer die Maschine.

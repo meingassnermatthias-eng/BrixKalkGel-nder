@@ -188,6 +188,15 @@ Der Editor rechnet laufend mit: Teile, die sich überschneiden, die Schnittfuge
 unterschreiten oder über den Tafelrand ragen, werden rot umrandet und in der
 Statuszeile gezählt. Die Ausnutzung wird live mitgeführt.
 
+**Einrücken.** Wird ein Teil auf einem Nachbarn oder über dem Tafelrand
+losgelassen, rückt es von selbst auf die nächste freie Stelle – dasselbe nach
+dem Drehen. Gesucht wird in wachsenden Ringen um die abgelegte Stelle, also mit
+der kürzestmöglichen Verschiebung; die Statuszeile nennt den Weg in Millimetern.
+Reicht die Nachbarschaft nicht, wird die ganze Tafel abgesucht. Findet sich
+nirgends Platz, bleibt das Teil liegen und sagt es. Die Drehung bleibt dabei
+immer so, wie sie eingestellt ist. Wer von Hand exakt setzen will, schaltet
+*Einrücken* in der Werkzeugleiste ab – dann bleibt das Teil rot liegen.
+
 Erst **Änderungen übernehmen** schreibt den Plan um. Danach nutzen Teileliste,
 PDF, Excel und DXF-Export den angepassten Plan. Abgelegte Teile wandern in die
 Liste der nicht eingeplanten Teile und können auf einer anderen Tafel wieder

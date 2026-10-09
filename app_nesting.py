@@ -409,7 +409,8 @@ def zeige_editor(erg, farben):
             "Teil anklicken und ziehen. **R** dreht um 90°, **Entf** legt es neben "
             "die Tafel, die **Pfeiltasten** schieben millimeterweise. Teile fangen "
             "sich an der Tafelkante und an den Nachbarn im Abstand der Schnittfuge. "
-            "Rot heißt: Überschneidung oder zu nah. Erst **Änderungen übernehmen** "
+            "Wer ein Teil rot loslässt, bekommt es automatisch auf die nächste "
+            "freie Stelle gerückt. Erst **Änderungen übernehmen** "
             "schreibt den Plan um – PDF, Excel und DXF nutzen danach den "
             "angepassten Plan.")
 
