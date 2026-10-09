@@ -77,30 +77,38 @@ def _punkte(ringe) -> list:
     return [[[float(x), float(y)] for x, y in ring] for ring in ringe]
 
 
-def daten_fuer(plan, nummer: int, saegeblatt: float, besaeumung: float,
+def daten_fuer(plaene, nummern, saegeblatt: float, besaeumung: float,
                farben: dict, vorrat: list, raster: float = 5.0) -> dict:
-    """Baut die Vorgabe fuer die Oberflaeche."""
-    teile = []
-    for i, p in enumerate(plan.platzierungen):
-        kontur = sichere_kontur(p)
-        teile.append({
-            "id": f"t{i}",
-            "sorte": p.bezeichnung,
-            "x": round(float(p.x), 3),
-            "y": round(float(p.y), 3),
-            "winkel": float(p.winkel or 0.0),
-            "kontur": _punkte(kontur),
-            "stich": _punkte(p.stichlinien or []),
-            "farbe": farben.get(p.bezeichnung, "#1E3A8A"),
-        })
-    return {
-        "tafel": {
-            "nummer": nummer,
+    """
+    Baut die Vorgabe fuer die Oberflaeche.
+
+    plaene/nummern  die gezeigten Tafeln und ihre Nummern im Gesamtplan.
+    Die Teile kommen als eine Liste mit Feld "tafel" (Index innerhalb der
+    gezeigten Tafeln) - so kann die Oberflaeche sie zwischen Tafeln ziehen.
+    """
+    tafeln, teile = [], []
+    for index, (plan, nummer) in enumerate(zip(plaene, nummern)):
+        tafeln.append({
+            "nummer": int(nummer),
             "name": plan.tafel,
             "breite": float(plan.breite),
             "hoehe": float(plan.hoehe),
             "besaeumung": float(besaeumung),
-        },
+        })
+        for i, p in enumerate(plan.platzierungen):
+            teile.append({
+                "id": f"t{index}_{i}",
+                "tafel": index,
+                "sorte": p.bezeichnung,
+                "x": round(float(p.x), 3),
+                "y": round(float(p.y), 3),
+                "winkel": float(p.winkel or 0.0),
+                "kontur": _punkte(sichere_kontur(p)),
+                "stich": _punkte(p.stichlinien or []),
+                "farbe": farben.get(p.bezeichnung, "#1E3A8A"),
+            })
+    return {
+        "tafeln": tafeln,
         "saegeblatt": float(saegeblatt),
         "raster": float(raster),
         "teile": teile,
@@ -128,10 +136,10 @@ def vorrat_fuer(ergebnis, plan, karte: dict, farben: dict) -> list:
     return posten
 
 
-def plan_editor(plan, nummer: int, saegeblatt: float, besaeumung: float,
+def plan_editor(plaene, nummern, saegeblatt: float, besaeumung: float,
                 farben: dict, vorrat: list, raster: float = 5.0, key=None):
     """Zeigt den Editor an. Rueckgabe: None oder die uebernommenen Aenderungen."""
-    daten = daten_fuer(plan, nummer, saegeblatt, besaeumung, farben, vorrat, raster)
+    daten = daten_fuer(plaene, nummern, saegeblatt, besaeumung, farben, vorrat, raster)
     return _komponente(daten=daten, key=key, default=None)
 
 
@@ -140,35 +148,46 @@ def plan_editor(plan, nummer: int, saegeblatt: float, besaeumung: float,
 # ==========================================================
 
 
-def uebernehme(ergebnis, index: int, rueckgabe: dict, karte: dict) -> list[str]:
+def uebernehme(ergebnis, nummern, rueckgabe: dict, karte: dict) -> list[str]:
     """
-    Schreibt die Aenderungen aus dem Editor in den Plan zurueck.
+    Schreibt die Aenderungen aus dem Editor in die gezeigten Tafeln zurueck.
 
-    Entfernte Teile wandern in die Liste der nicht eingeplanten Teile,
-    eingesetzte Teile werden von dort abgezogen.
+    Teile koennen dabei die Tafel gewechselt haben. Entfernte Teile wandern in
+    die Liste der nicht eingeplanten Teile, eingesetzte werden von dort
+    abgezogen.
 
     Rueckgabe: Meldungen fuer die Oberflaeche.
     """
-    plan = ergebnis.plaene[index]
-    alt = list(plan.platzierungen)
-    vorher: dict = {}
-    for p in alt:
-        vorher[p.bezeichnung] = vorher.get(p.bezeichnung, 0) + 1
+    plaene = [ergebnis.plaene[nummer - 1] for nummer in nummern]
+    alt = [list(plan.platzierungen) for plan in plaene]
 
-    neu: list[Platzierung2D] = []
+    vorher: dict = {}
+    for liste in alt:
+        for p in liste:
+            vorher[p.bezeichnung] = vorher.get(p.bezeichnung, 0) + 1
+
+    neu: list[list[Platzierung2D]] = [[] for _ in plaene]
     verschoben = 0
+    gewechselt = 0
+
     for eintrag in rueckgabe.get("teile", []):
+        ziel = int(eintrag.get("tafel", 0))
+        if not 0 <= ziel < len(plaene):
+            continue
         kennung = str(eintrag.get("id", ""))
         bezeichnung = str(eintrag.get("sorte", "Teil"))
         winkel = float(eintrag.get("winkel", 0.0)) % 360.0
+        quelle = _quelle_zu(kennung, alt)
 
-        if kennung.startswith("t") and kennung[1:].isdigit() and int(kennung[1:]) < len(alt):
-            quelle = alt[int(kennung[1:])]
-            kontur, stich = sichere_kontur(quelle), quelle.stichlinien
-            bezeichnung = quelle.bezeichnung
-            if (abs(quelle.x - float(eintrag.get("x", 0.0))) > 0.01
-                    or abs(quelle.y - float(eintrag.get("y", 0.0))) > 0.01
-                    or abs((quelle.winkel or 0.0) - winkel) > 0.01):
+        if quelle is not None:
+            herkunft, p = quelle
+            kontur, stich = sichere_kontur(p), p.stichlinien
+            bezeichnung = p.bezeichnung
+            if herkunft != ziel:
+                gewechselt += 1
+            elif (abs(p.x - float(eintrag.get("x", 0.0))) > 0.01
+                    or abs(p.y - float(eintrag.get("y", 0.0))) > 0.01
+                    or abs((p.winkel or 0.0) - winkel) > 0.01):
                 verschoben += 1
         else:
             kontur, stich = karte.get(bezeichnung, (None, []))
@@ -178,7 +197,7 @@ def uebernehme(ergebnis, index: int, rueckgabe: dict, karte: dict) -> list[str]:
         _, breite, hoehe = drehe_polygone(kontur, winkel)
         if breite <= 0 or hoehe <= 0:
             continue                      # ohne brauchbare Kontur nicht platzierbar
-        neu.append(Platzierung2D(
+        neu[ziel].append(Platzierung2D(
             bezeichnung=bezeichnung,
             x=float(eintrag.get("x", 0.0)),
             y=float(eintrag.get("y", 0.0)),
@@ -189,13 +208,19 @@ def uebernehme(ergebnis, index: int, rueckgabe: dict, karte: dict) -> list[str]:
             versatz=versatz_fuer(kontur, winkel),
         ))
 
-    plan.platzierungen = neu
+    for plan, liste in zip(plaene, neu):
+        plan.platzierungen = liste
 
     nachher: dict = {}
-    for p in neu:
-        nachher[p.bezeichnung] = nachher.get(p.bezeichnung, 0) + 1
+    for liste in neu:
+        for p in liste:
+            nachher[p.bezeichnung] = nachher.get(p.bezeichnung, 0) + 1
 
     meldungen = []
+    if verschoben:
+        meldungen.append(f"{verschoben} Teil(e) verschoben oder gedreht")
+    if gewechselt:
+        meldungen.append(f"{gewechselt} Teil(e) auf eine andere Tafel gelegt")
     for bezeichnung in sorted(set(vorher) | set(nachher)):
         unterschied = nachher.get(bezeichnung, 0) - vorher.get(bezeichnung, 0)
         if unterschied == 0:
@@ -207,10 +232,20 @@ def uebernehme(ergebnis, index: int, rueckgabe: dict, karte: dict) -> list[str]:
             meldungen.append(f"{-unterschied}× {bezeichnung} abgelegt")
         else:
             meldungen.append(f"{unterschied}× {bezeichnung} eingesetzt")
-
-    if verschoben:
-        meldungen.insert(0, f"{verschoben} Teil(e) verschoben oder gedreht")
     return meldungen
+
+
+def _quelle_zu(kennung: str, alt: list):
+    """Findet die urspruengliche Platzierung zu einer Kennung 't<tafel>_<pos>'."""
+    if not kennung.startswith("t") or "_" not in kennung:
+        return None
+    tafel, _, pos = kennung[1:].partition("_")
+    if not tafel.isdigit() or not pos.isdigit():
+        return None
+    tafel, pos = int(tafel), int(pos)
+    if tafel >= len(alt) or pos >= len(alt[tafel]):
+        return None
+    return tafel, alt[tafel][pos]
 
 
 def _fehlende_aendern(ergebnis, bezeichnung: str, anzahl: int, karte: dict) -> None:

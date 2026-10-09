@@ -66,9 +66,10 @@
 </div>
 <div class="vorrat" id="vorrat"></div>
 <div class="zeile hinweis">
-  Ziehen mit der Maus &middot; Pfeiltasten 1&nbsp;mm (mit Umschalt 10&nbsp;mm) &middot;
-  R dreht &middot; Entf legt ab &middot; rot abgelegte Teile r&uuml;cken selbst auf die
-  n&auml;chste freie Stelle (Schalter <em>Einr&uuml;cken</em>)
+  Ziehen mit der Maus, auch von einer Tafel auf die andere &middot;
+  Pfeiltasten 1&nbsp;mm (mit Umschalt 10&nbsp;mm) &middot; R dreht &middot;
+  Entf legt ab &middot; rot abgelegte Teile r&uuml;cken selbst auf die
+  n&auml;chste freie Stelle
 </div>
 
 <script>
@@ -79,6 +80,8 @@
 // setzt die Rahmenhoehe aus der Zeichenhoehe, und die Zeichnung wuerde sich
 // endlos neu aufbauen.
 const MAX_ZEICHENHOEHE = 700;
+const LUECKE = 16;          // Abstand zwischen zwei Tafeln in Pixeln
+const KOPFHOEHE = 17;       // Platz fuer die Beschriftung ueber jeder Tafel
 
 // ==========================================================
 // Verbindung zu Streamlit (Komponenten-Protokoll)
@@ -208,17 +211,21 @@ function flaecheRinge(ringe) {
 // Zustand
 // ==========================================================
 let vorgabe = null;        // Daten aus Python
-let teile = [];            // aktuelle Belegung der Tafel
+let teile = [];            // alle Teile aller gezeigten Tafeln (Feld "tafel")
 let vorrat = [];           // abgelegte und nicht eingeplante Teile
 let gewaehlt = null;       // id des gewaehlten Teils
+let aktiveTafel = 0;       // Ziel fuer das Einsetzen aus der Ablage
 let verlauf = [], zukunft = [];
 let zieht = null;
 let zaehler = 0;
+let aufteilung = [];       // je Tafel {ox, oy, breite, hoehe} in Pixeln
+let massstab = 1;          // Pixel je Millimeter
 
 const svg = document.getElementById("buehne");
 const NS = "http://www.w3.org/2000/svg";
 
 function tiefeKopie(wert) { return JSON.parse(JSON.stringify(wert)); }
+function tafelVon(teil) { return vorgabe.tafeln[teil.tafel] || vorgabe.tafeln[0]; }
 
 function standSichern() {
   verlauf.push({teile: tiefeKopie(teile), vorrat: tiefeKopie(vorrat)});
@@ -244,7 +251,7 @@ function vorgehen() {
   zeichnen();
 }
 
-/** Weltkoordinaten der Kontur eines Teils. */
+/** Weltkoordinaten der Kontur eines Teils (in Millimetern seiner Tafel). */
 function weltRinge(teil) {
   const gedreht = dreheKontur(teil.kontur, teil.winkel);
   return gedreht.ringe.map(r => r.map(p => [p[0] + teil.x, p[1] + teil.y]));
@@ -267,101 +274,176 @@ function masse(teil) {
   return {breite: g.breite, hoehe: g.hoehe};
 }
 
+function teileAuf(nr) { return teile.filter(t => t.tafel === nr); }
+
 // ==========================================================
 // Pruefung
 // ==========================================================
+/** Falsch liegende Teile ueber alle Tafeln; Rueckgabe: Menge von Teil-Ids. */
 function pruefen() {
   const fuge = vorgabe.saegeblatt;
-  const rand = vorgabe.tafel.besaeumung;
-  const ringe = teile.map(weltRinge);
-  const huellen = ringe.map(huelle);
   const fehler = new Set();
+  const ringeJe = new Map();
 
-  for (let i = 0; i < teile.length; i++) {
-    const h = huellen[i];
-    if (h.x0 < rand - 0.01 || h.y0 < rand - 0.01 ||
-        h.x1 > vorgabe.tafel.breite - rand + 0.01 ||
-        h.y1 > vorgabe.tafel.hoehe - rand + 0.01) {
-      fehler.add(i);
-    }
-  }
-  for (let i = 0; i < teile.length; i++) {
-    for (let k = i + 1; k < teile.length; k++) {
-      const a = huellen[i], b = huellen[k];
-      // grobe Vorpruefung ueber die Huellen spart die teure Rechnung
-      if (a.x1 + fuge < b.x0 || b.x1 + fuge < a.x0 ||
-          a.y1 + fuge < b.y0 || b.y1 + fuge < a.y0) continue;
-      if (kleinsterAbstand(ringe[i], ringe[k]) < fuge - 0.01) {
-        fehler.add(i); fehler.add(k);
+  vorgabe.tafeln.forEach((tafel, nr) => {
+    const auswahl = teileAuf(nr);
+    const ringe = auswahl.map(teil => {
+      const r = weltRinge(teil);
+      ringeJe.set(teil.id, r);
+      return r;
+    });
+    const huellen = ringe.map(huelle);
+    const rand = tafel.besaeumung;
+
+    auswahl.forEach((teil, i) => {
+      const h = huellen[i];
+      if (h.x0 < rand - 0.01 || h.y0 < rand - 0.01 ||
+          h.x1 > tafel.breite - rand + 0.01 ||
+          h.y1 > tafel.hoehe - rand + 0.01) fehler.add(teil.id);
+    });
+    for (let i = 0; i < auswahl.length; i++) {
+      for (let k = i + 1; k < auswahl.length; k++) {
+        const a = huellen[i], b = huellen[k];
+        // grobe Vorpruefung ueber die Huellen spart die teure Rechnung
+        if (a.x1 + fuge < b.x0 || b.x1 + fuge < a.x0 ||
+            a.y1 + fuge < b.y0 || b.y1 + fuge < a.y0) continue;
+        if (kleinsterAbstand(ringe[i], ringe[k]) < fuge - 0.01) {
+          fehler.add(auswahl[i].id); fehler.add(auswahl[k].id);
+        }
       }
     }
+  });
+  return {fehler, ringeJe};
+}
+
+// ==========================================================
+// Aufteilung der Zeichenflaeche
+// ==========================================================
+/**
+ * Verteilt die Tafeln auf ein Raster und waehlt den groesstmoeglichen
+ * Massstab. Alle Tafeln werden gleich skaliert, damit sie vergleichbar sind.
+ */
+function aufteilen(breitePx) {
+  const n = vorgabe.tafeln.length;
+  const maxB = Math.max(...vorgabe.tafeln.map(t => t.breite));
+  const maxH = Math.max(...vorgabe.tafeln.map(t => t.hoehe));
+  let beste = null;
+  for (let spalten = 1; spalten <= n; spalten++) {
+    const zeilen = Math.ceil(n / spalten);
+    const zelleB = (breitePx - (spalten + 1) * LUECKE) / spalten;
+    const zelleH = (MAX_ZEICHENHOEHE - zeilen * (LUECKE + KOPFHOEHE)) / zeilen;
+    if (zelleB <= 10 || zelleH <= 10) continue;
+    const skala = Math.min(zelleB / maxB, zelleH / maxH);
+    if (!beste || skala > beste.skala) beste = {spalten, zeilen, skala};
   }
-  return {fehler, ringe};
+  if (!beste) {
+    const spalten = Math.min(n, 4), zeilen = Math.ceil(n / spalten);
+    beste = {spalten, zeilen,
+             skala: (breitePx - (spalten + 1) * LUECKE) / spalten / maxB};
+  }
+
+  massstab = beste.skala;
+  const zelleBreite = (breitePx - (beste.spalten + 1) * LUECKE) / beste.spalten;
+  aufteilung = vorgabe.tafeln.map((tafel, i) => {
+    const spalte = i % beste.spalten, zeile = Math.floor(i / beste.spalten);
+    const breite = tafel.breite * massstab;
+    return {
+      // in der Spalte mittig, sonst klebt die Tafel bei breiten Feldern links
+      ox: LUECKE + spalte * (zelleBreite + LUECKE) + (zelleBreite - breite) / 2,
+      oy: KOPFHOEHE + zeile * (maxH * massstab + LUECKE + KOPFHOEHE),
+      breite: breite,
+      hoehe: tafel.hoehe * massstab,
+    };
+  });
+  return KOPFHOEHE + beste.zeilen * (maxH * massstab + LUECKE + KOPFHOEHE);
+}
+
+function sx(nr, x) { return aufteilung[nr].ox + x * massstab; }
+function sy(nr, y) { return aufteilung[nr].oy + aufteilung[nr].hoehe - y * massstab; }
+
+/** Welche Tafel liegt unter diesem Punkt der Zeichenflaeche? */
+function tafelUnter(px, py) {
+  for (let i = 0; i < aufteilung.length; i++) {
+    const a = aufteilung[i];
+    if (px >= a.ox - LUECKE / 2 && px <= a.ox + a.breite + LUECKE / 2 &&
+        py >= a.oy - KOPFHOEHE && py <= a.oy + a.hoehe + LUECKE / 2) return i;
+  }
+  return -1;
 }
 
 // ==========================================================
 // Zeichnen
 // ==========================================================
+function element(name, eigenschaften) {
+  const e = document.createElementNS(NS, name);
+  for (const schluessel in eigenschaften) e.setAttribute(schluessel, eigenschaften[schluessel]);
+  return e;
+}
+
 function zeichnen() {
-  const t = vorgabe.tafel;
-  const randPx = 14;
   const breite = svg.clientWidth || 700;
-  // Hoehe begrenzen, damit Werkzeugleiste, Zeichnung und Ablage zusammen auf
-  // einen Bildschirm passen - sonst muesste man bei hohen Tafeln scrollen.
-  const skala = Math.min((breite - 2 * randPx) / t.breite,
-                         (MAX_ZEICHENHOEHE - 2 * randPx) / t.hoehe);
-  const hoehe = t.hoehe * skala + 2 * randPx;
-  const versatzX = (breite - t.breite * skala) / 2;
+  const hoehe = aufteilen(breite);
   svg.setAttribute("height", hoehe);
   svg.setAttribute("viewBox", `0 0 ${breite} ${hoehe}`);
-  const sx = x => versatzX + x * skala;
-  const sy = y => hoehe - randPx - y * skala;
-
-  const {fehler, ringe} = pruefen();
   while (svg.firstChild) svg.removeChild(svg.firstChild);
 
-  const element = (name, eigenschaften) => {
-    const e = document.createElementNS(NS, name);
-    for (const schluessel in eigenschaften)
-      e.setAttribute(schluessel, eigenschaften[schluessel]);
-    return e;
-  };
+  const {fehler} = pruefen();
 
-  svg.appendChild(element("rect", {
-    x: sx(0), y: sy(t.hoehe), width: t.breite * skala, height: t.hoehe * skala,
-    fill: "#FFFFFF", stroke: "#374151", "stroke-width": 1.5}));
-  if (t.besaeumung > 0) {
+  vorgabe.tafeln.forEach((tafel, nr) => {
+    const a = aufteilung[nr];
+    const auswahl = teileAuf(nr);
+    const genutzt = auswahl.reduce((summe, teil) => summe + flaecheRinge(weltRinge(teil)), 0);
+    const anteil = 100 * genutzt / (tafel.breite * tafel.hoehe);
+
+    const beschriftung = element("text", {
+      x: a.ox, y: a.oy - 5, "font-size": 11.5, "font-weight": 600,
+      fill: nr === aktiveTafel && vorgabe.tafeln.length > 1 ? "#1E3A8A" : "#374151"});
+    beschriftung.textContent =
+      `Tafel ${tafel.nummer} \u00B7 ${tafel.name} \u00B7 ${auswahl.length} Teile `
+      + `\u00B7 ${anteil.toFixed(1)} %`;
+    svg.appendChild(beschriftung);
+
     svg.appendChild(element("rect", {
-      x: sx(t.besaeumung), y: sy(t.hoehe - t.besaeumung),
-      width: (t.breite - 2 * t.besaeumung) * skala,
-      height: (t.hoehe - 2 * t.besaeumung) * skala,
-      fill: "none", stroke: "#9CA3AF", "stroke-width": 1,
-      "stroke-dasharray": "5 4"}));
-  }
+      x: a.ox, y: a.oy, width: a.breite, height: a.hoehe,
+      fill: "#FFFFFF",
+      stroke: nr === aktiveTafel && vorgabe.tafeln.length > 1 ? "#1E3A8A" : "#374151",
+      "stroke-width": nr === aktiveTafel && vorgabe.tafeln.length > 1 ? 2.2 : 1.5}));
+    if (tafel.besaeumung > 0) {
+      svg.appendChild(element("rect", {
+        x: sx(nr, tafel.besaeumung), y: sy(nr, tafel.hoehe - tafel.besaeumung),
+        width: (tafel.breite - 2 * tafel.besaeumung) * massstab,
+        height: (tafel.hoehe - 2 * tafel.besaeumung) * massstab,
+        fill: "none", stroke: "#9CA3AF", "stroke-width": 1, "stroke-dasharray": "5 4"}));
+    }
+  });
 
-  teile.forEach((teil, i) => {
+  teile.forEach(teil => {
+    const nr = teil.tafel;
+    if (!aufteilung[nr]) return;
     const gruppe = element("g", {class: "teil" + (teil.id === gewaehlt ? " gewaehlt" : "")});
     gruppe.dataset.id = teil.id;
-    const schlecht = fehler.has(i);
-    ringe[i].forEach((ring, k) => {
-      const punkte = ring.map(p => `${sx(p[0]).toFixed(2)},${sy(p[1]).toFixed(2)}`).join(" ");
+    const schlecht = fehler.has(teil.id);
+    weltRinge(teil).forEach((ring, k) => {
+      const punkte = ring.map(p => `${sx(nr, p[0]).toFixed(2)},${sy(nr, p[1]).toFixed(2)}`)
+                         .join(" ");
       gruppe.appendChild(element("polygon", {
         points: punkte,
         fill: k === 0 ? teil.farbe : "#FFFFFF",
         "fill-opacity": k === 0 ? (schlecht ? 0.55 : 0.85) : 1,
         stroke: schlecht ? "#DC2626" : (teil.id === gewaehlt ? "#111827" : "#1F2937"),
-        "stroke-width": schlecht ? 2.4 : (teil.id === gewaehlt ? 2.4 : 0.9)}));
+        "stroke-width": schlecht || teil.id === gewaehlt ? 2.2 : 0.9}));
     });
     weltStich(teil).forEach(linie => {
-      const punkte = linie.map(p => `${sx(p[0]).toFixed(2)},${sy(p[1]).toFixed(2)}`).join(" ");
+      const punkte = linie.map(p => `${sx(nr, p[0]).toFixed(2)},${sy(nr, p[1]).toFixed(2)}`)
+                          .join(" ");
       gruppe.appendChild(element("polyline", {
         points: punkte, fill: "none", stroke: "#DC2626",
         "stroke-width": 1, "stroke-dasharray": "4 3"}));
     });
 
     const m = masse(teil);
-    if (m.breite * skala > 46 && m.hoehe * skala > 24) {
-      const mx = sx(teil.x + m.breite / 2), my = sy(teil.y + m.hoehe / 2);
+    if (m.breite * massstab > 46 && m.hoehe * massstab > 24) {
+      const mx = sx(nr, teil.x + m.breite / 2), my = sy(nr, teil.y + m.hoehe / 2);
       const kopf = element("text", {
         x: mx, y: my - 2, "text-anchor": "middle", "font-size": 11,
         "font-weight": 700, fill: "#FFFFFF", "pointer-events": "none"});
@@ -371,25 +453,25 @@ function zeichnen() {
         x: mx, y: my + 11, "text-anchor": "middle", "font-size": 9.5,
         fill: "#F9FAFB", "pointer-events": "none"});
       fuss.textContent = `${Math.round(m.breite)} x ${Math.round(m.hoehe)}`
-                         + (teil.winkel ? `  ${Math.round(teil.winkel)}°` : "");
+                         + (teil.winkel ? `  ${Math.round(teil.winkel)}\u00B0` : "");
       gruppe.appendChild(fuss);
     }
     svg.appendChild(gruppe);
   });
 
-  // Statuszeile
   const marke = document.getElementById("status");
   if (fehler.size) {
     marke.className = "marke schlecht";
     marke.textContent = fehler.size + " Teil(e) liegen falsch";
   } else {
     marke.className = "marke gut";
-    marke.textContent = "Alles frei – Schnittfuge eingehalten";
+    marke.textContent = "Alles frei \u2013 Schnittfuge eingehalten";
   }
   const genutzt = teile.reduce((summe, teil) => summe + flaecheRinge(weltRinge(teil)), 0);
-  const gesamt = vorgabe.tafel.breite * vorgabe.tafel.hoehe;
+  const gesamt = vorgabe.tafeln.reduce((summe, t) => summe + t.breite * t.hoehe, 0);
   document.getElementById("angaben").textContent =
-    `${teile.length} Teile · Ausnutzung ${(100 * genutzt / gesamt).toFixed(1)} % · `
+    `${vorgabe.tafeln.length} Tafel(n) \u00B7 ${teile.length} Teile \u00B7 `
+    + `Ausnutzung ${(100 * genutzt / gesamt).toFixed(1)} % \u00B7 `
     + `Schnittfuge ${vorgabe.saegeblatt} mm`;
 
   const teil = teile.find(t => t.id === gewaehlt);
@@ -406,7 +488,13 @@ function zeichnen() {
 function vorratZeichnen() {
   const behaelter = document.getElementById("vorrat");
   behaelter.innerHTML = "";
-  document.getElementById("vorratZeile").style.display = vorrat.length ? "" : "none";
+  const zeile = document.getElementById("vorratZeile");
+  zeile.style.display = vorrat.length ? "" : "none";
+  if (vorrat.length && vorgabe.tafeln.length > 1) {
+    zeile.querySelector("span").textContent =
+      `Abgelegt / nicht eingeplant \u2013 Anklicken setzt auf Tafel `
+      + `${vorgabe.tafeln[aktiveTafel].nummer} (Tafel vorher anklicken):`;
+  }
   vorrat.forEach((posten, i) => {
     const knopf = document.createElement("button");
     const punkt = document.createElement("span");
@@ -415,62 +503,27 @@ function vorratZeichnen() {
     knopf.appendChild(punkt);
     const g = dreheKontur(posten.kontur, 0);
     knopf.appendChild(document.createTextNode(
-      `${posten.sorte}  ${Math.round(g.breite)}×${Math.round(g.hoehe)}`
-      + (posten.anzahl > 1 ? `  (${posten.anzahl}×)` : "")));
-    knopf.title = "Auf die Tafel setzen";
+      `${posten.sorte}  ${Math.round(g.breite)}\u00D7${Math.round(g.hoehe)}`
+      + (posten.anzahl > 1 ? `  (${posten.anzahl}\u00D7)` : "")));
+    knopf.title = "Auf die gewaehlte Tafel setzen";
     knopf.onclick = () => einsetzen(i);
     behaelter.appendChild(knopf);
   });
 }
 
 // ==========================================================
-// Bearbeiten
+// Freie Plaetze suchen
 // ==========================================================
-function freierPlatz(kontur, winkel, ausserId) {
-  const g = dreheKontur(kontur, winkel);
-  const t = vorgabe.tafel;
-  const rand = t.besaeumung;
-  const fuge = vorgabe.saegeblatt;
-  if (g.breite > t.breite - 2 * rand || g.hoehe > t.hoehe - 2 * rand) return null;
-
-  // Huellen der liegenden Teile einmal vorberechnen - die genaue
-  // Abstandsrechnung ist teuer und lohnt nur bei moeglicher Beruehrung.
-  const nachbarn = teile.filter(teil => teil.id !== ausserId).map(teil => {
-    const ringe = weltRinge(teil);
-    return {ringe, h: huelle(ringe)};
-  });
-  const schritt = Math.max(vorgabe.raster || 5, 10);
-  const probe = {id: "probe", sorte: "", kontur: kontur, winkel: winkel, x: 0, y: 0};
-
-  for (let y = rand; y + g.hoehe <= t.hoehe - rand + 0.01; y += schritt) {
-    for (let x = rand; x + g.breite <= t.breite - rand + 0.01; x += schritt) {
-      const h = {x0: x, y0: y, x1: x + g.breite, y1: y + g.hoehe};
-      let frei = true;
-      let ringe = null;
-      for (const nachbar of nachbarn) {
-        const n = nachbar.h;
-        if (h.x1 + fuge < n.x0 || n.x1 + fuge < h.x0 ||
-            h.y1 + fuge < n.y0 || n.y1 + fuge < h.y0) continue;
-        if (ringe === null) { probe.x = x; probe.y = y; ringe = weltRinge(probe); }
-        if (kleinsterAbstand(ringe, nachbar.ringe) < fuge - 0.01) { frei = false; break; }
-      }
-      if (frei) return {x, y};
-    }
-  }
-  return null;
-}
-
-/** Huellen aller anderen Teile - fuer die Lagepruefung vorberechnet. */
-function nachbarnAusser(teil) {
-  return teile.filter(anderes => anderes.id !== teil.id).map(anderes => {
-    const ringe = weltRinge(anderes);
-    return {ringe, h: huelle(ringe)};
-  });
+/** Huellen aller anderen Teile derselben Tafel - fuer die Lagepruefung. */
+function nachbarnAusser(teil, nr) {
+  const tafelNr = nr === undefined ? teil.tafel : nr;
+  return teile.filter(a => a.tafel === tafelNr && a.id !== (teil ? teil.id : null))
+              .map(a => { const ringe = weltRinge(a); return {ringe, h: huelle(ringe)}; });
 }
 
 /** Liegt das Teil an dieser Stelle frei (Tafelrand und Schnittfuge eingehalten)? */
-function lageFrei(teil, x, y, nachbarn) {
-  const t = vorgabe.tafel;
+function lageFrei(teil, x, y, nachbarn, tafel) {
+  const t = tafel || tafelVon(teil);
   const rand = t.besaeumung;
   const fuge = vorgabe.saegeblatt;
   const m = masse(teil);
@@ -492,8 +545,39 @@ function lageFrei(teil, x, y, nachbarn) {
   return true;
 }
 
-/** Sucht ringfoermig um einen Punkt; innerhalb eines Rings gewinnt die kuerzeste Strecke. */
-function ringSuche(teil, startX, startY, nachbarn, schritt, maxRing, budget) {
+/** Vollstaendige Suche von links unten auf einer Tafel. */
+function freierPlatz(kontur, winkel, ausserId, tafelNr) {
+  const t = vorgabe.tafeln[tafelNr];
+  const g = dreheKontur(kontur, winkel);
+  const rand = t.besaeumung;
+  const fuge = vorgabe.saegeblatt;
+  if (g.breite > t.breite - 2 * rand || g.hoehe > t.hoehe - 2 * rand) return null;
+
+  const nachbarn = teile.filter(teil => teil.tafel === tafelNr && teil.id !== ausserId)
+                        .map(teil => { const ringe = weltRinge(teil);
+                                       return {ringe, h: huelle(ringe)}; });
+  const schritt = Math.max(vorgabe.raster || 5, 10);
+  const probe = {kontur: kontur, winkel: winkel, x: 0, y: 0};
+
+  for (let y = rand; y + g.hoehe <= t.hoehe - rand + 0.01; y += schritt) {
+    for (let x = rand; x + g.breite <= t.breite - rand + 0.01; x += schritt) {
+      const h = {x0: x, y0: y, x1: x + g.breite, y1: y + g.hoehe};
+      let frei = true, ringe = null;
+      for (const nachbar of nachbarn) {
+        const n = nachbar.h;
+        if (h.x1 + fuge < n.x0 || n.x1 + fuge < h.x0 ||
+            h.y1 + fuge < n.y0 || n.y1 + fuge < h.y0) continue;
+        if (ringe === null) { probe.x = x; probe.y = y; ringe = weltRinge(probe); }
+        if (kleinsterAbstand(ringe, nachbar.ringe) < fuge - 0.01) { frei = false; break; }
+      }
+      if (frei) return {x, y};
+    }
+  }
+  return null;
+}
+
+/** Ringfoermige Suche um einen Punkt; kuerzeste Verschiebung gewinnt. */
+function ringSuche(teil, startX, startY, nachbarn, schritt, maxRing, budget, tafel) {
   for (let ring = 1; ring <= maxRing && budget > 0; ring++) {
     const kandidaten = [];
     for (let i = -ring; i <= ring; i++) {
@@ -509,24 +593,20 @@ function ringSuche(teil, startX, startY, nachbarn, schritt, maxRing, budget) {
       - ((b[0] - startX) ** 2 + (b[1] - startY) ** 2));
     for (const [x, y] of kandidaten) {
       if (budget-- <= 0) break;
-      if (lageFrei(teil, x, y, nachbarn)) return {x, y};
+      if (lageFrei(teil, x, y, nachbarn, tafel)) return {x, y};
     }
   }
   return null;
 }
 
 /**
- * Naechste freie Lage fuer ein Teil, das rot liegt.
- *
- * In drei Stufen, damit das Teil so wenig wie moeglich wandert und trotzdem
- * immer ein Platz gefunden wird, solange es einen gibt:
- *   1. feine Ringsuche in der unmittelbaren Nachbarschaft
- *   2. grobe Ringsuche ueber die ganze Tafel
- *   3. vollstaendige Suche von links unten
- * Die Drehung bleibt dabei, wie der Benutzer sie gewaehlt hat.
+ * Naechste freie Lage fuer ein Teil, das rot liegt - in drei Stufen, damit es
+ * so wenig wie moeglich wandert und trotzdem ein Platz gefunden wird:
+ * feine Ringsuche, grobe Ringsuche, vollstaendige Suche von links unten.
+ * Die Drehung bleibt, wie der Benutzer sie gewaehlt hat.
  */
 function naechsteFreieLage(teil) {
-  const t = vorgabe.tafel;
+  const t = tafelVon(teil);
   const rand = t.besaeumung;
   const m = masse(teil);
   if (m.breite > t.breite - 2 * rand + 0.01 ||
@@ -534,67 +614,60 @@ function naechsteFreieLage(teil) {
 
   const nachbarn = nachbarnAusser(teil);
   const schritt = Math.max(vorgabe.raster || 5, 5);
-  // Ausgangspunkt in die Tafel ziehen, falls das Teil ueber den Rand ragt
   const startX = Math.min(Math.max(teil.x, rand), t.breite - rand - m.breite);
   const startY = Math.min(Math.max(teil.y, rand), t.hoehe - rand - m.hoehe);
-  if (lageFrei(teil, startX, startY, nachbarn)) return {x: startX, y: startY};
+  if (lageFrei(teil, startX, startY, nachbarn, t)) return {x: startX, y: startY};
 
-  const nah = ringSuche(teil, startX, startY, nachbarn, schritt, 24, 4000);
+  const nah = ringSuche(teil, startX, startY, nachbarn, schritt, 24, 4000, t);
   if (nah) return nah;
-
   const grob = Math.max(schritt * 4, 20);
   const weit = ringSuche(teil, startX, startY, nachbarn, grob,
-                         Math.ceil(Math.max(t.breite, t.hoehe) / grob), 9000);
+                         Math.ceil(Math.max(t.breite, t.hoehe) / grob), 9000, t);
   if (weit) return weit;
-
-  return freierPlatz(teil.kontur, teil.winkel, teil.id);
+  return freierPlatz(teil.kontur, teil.winkel, teil.id, teil.tafel);
 }
 
-/**
- * Rueckt ein Teil auf die naechste freie Stelle, wenn es rot liegt.
- * Rueckgabe: null (lag schon frei), die Verschiebung in mm, oder "kein".
- */
+/** Rueckt ein Teil auf die naechste freie Stelle, wenn es rot liegt. */
 function einruecken(teil) {
   if (!teil || !document.getElementById("einruecken").checked) return null;
-  if (lageFrei(teil, teil.x, teil.y, nachbarnAusser(teil))) return null;
+  if (lageFrei(teil, teil.x, teil.y, nachbarnAusser(teil), tafelVon(teil))) return null;
   const ziel = naechsteFreieLage(teil);
   if (!ziel) return "kein";
   const weg = Math.hypot(ziel.x - teil.x, ziel.y - teil.y);
-  teil.x = ziel.x;
-  teil.y = ziel.y;
+  teil.x = ziel.x; teil.y = ziel.y;
   return weg;
 }
 
-/** Meldet das Ergebnis des Einrueckens in der Statuszeile. */
 function einrueckenMelden(ergebnis) {
   if (ergebnis === null) return;
   const marke = document.getElementById("status");
   if (ergebnis === "kein") {
     marke.className = "marke schlecht";
     marke.textContent = "Keine freie Stelle auf dieser Tafel - Teil ablegen oder "
-                        + "andere Teile schieben";
+                        + "auf eine andere Tafel ziehen";
   } else {
     marke.textContent = `Auf die n\u00E4chste freie Stelle ger\u00FCckt `
                         + `(${Math.round(ergebnis)} mm)`;
   }
 }
 
+// ==========================================================
+// Bearbeiten
+// ==========================================================
 function einsetzen(index) {
   const posten = vorrat[index];
-  // alle erlaubten Drehungen durchprobieren, nicht nur die ursprungliche Lage
+  const nr = aktiveTafel;
   let platz = null, winkel = 0;
   for (const grad of [0, 90, 180, 270]) {
-    platz = freierPlatz(posten.kontur, grad, null);
+    platz = freierPlatz(posten.kontur, grad, null, nr);
     if (platz) { winkel = grad; break; }
   }
   const passt = platz !== null;
-  if (!passt) {
-    platz = {x: vorgabe.tafel.besaeumung, y: vorgabe.tafel.besaeumung};
-  }
+  if (!passt) platz = {x: vorgabe.tafeln[nr].besaeumung, y: vorgabe.tafeln[nr].besaeumung};
 
   standSichern();
   teile.push({
-    id: "neu" + (++zaehler), sorte: posten.sorte, kontur: posten.kontur,
+    id: "neu" + (++zaehler), tafel: nr, sorte: posten.sorte, kontur: posten.kontur,
     stich: posten.stich || [], farbe: posten.farbe,
     x: platz.x, y: platz.y, winkel: winkel,
   });
@@ -604,8 +677,8 @@ function einsetzen(index) {
   zeichnen();
   if (!passt) {
     document.getElementById("status").textContent =
-      "Kein freier Platz gefunden - Teil liegt vorerst uebereinander, bitte von "
-      + "Hand schieben";
+      `Kein freier Platz auf Tafel ${vorgabe.tafeln[nr].nummer} - Teil liegt vorerst `
+      + `uebereinander, bitte von Hand schieben`;
   }
 }
 
@@ -641,15 +714,16 @@ function drehen(grad) {
 /** Fangpunkte: Tafelrand und Kanten der Nachbarn (im Abstand der Schnittfuge). */
 function fangen(teil, x, y) {
   if (!document.getElementById("fangen").checked) return {x, y};
+  const t = tafelVon(teil);
   const m = masse(teil);
   const fuge = vorgabe.saegeblatt;
-  const rand = vorgabe.tafel.besaeumung;
-  const schwelle = Math.max(6, vorgabe.tafel.breite / 110);
+  const rand = t.besaeumung;
+  const schwelle = Math.max(6, t.breite / 110);
 
-  const xZiele = [rand, vorgabe.tafel.breite - rand - m.breite];
-  const yZiele = [rand, vorgabe.tafel.hoehe - rand - m.hoehe];
+  const xZiele = [rand, t.breite - rand - m.breite];
+  const yZiele = [rand, t.hoehe - rand - m.hoehe];
   teile.forEach(anderes => {
-    if (anderes.id === teil.id) return;
+    if (anderes.id === teil.id || anderes.tafel !== teil.tafel) return;
     const a = masse(anderes);
     xZiele.push(anderes.x + a.breite + fuge, anderes.x - m.breite - fuge, anderes.x,
                 anderes.x + a.breite - m.breite);
@@ -686,27 +760,33 @@ function schieben(dx, dy) {
 // ==========================================================
 // Maus
 // ==========================================================
-function mausNachMm(ereignis) {
+/** Punkt der Zeichenflaeche in Pixeln. */
+function mausPixel(ereignis) {
   const kasten = svg.getBoundingClientRect();
-  const randPx = 14;
-  const t = vorgabe.tafel;
-  const skala = Math.min((kasten.width - 2 * randPx) / t.breite,
-                         (MAX_ZEICHENHOEHE - 2 * randPx) / t.hoehe);
-  const hoehe = t.hoehe * skala + 2 * randPx;
-  const versatzX = (kasten.width - t.breite * skala) / 2;
-  return {
-    x: (ereignis.clientX - kasten.left - versatzX) / skala,
-    y: (hoehe - (ereignis.clientY - kasten.top) - randPx) / skala,
-  };
+  const breite = svg.clientWidth || kasten.width;
+  return {x: (ereignis.clientX - kasten.left) * (breite / kasten.width),
+          y: (ereignis.clientY - kasten.top) * (breite / kasten.width)};
+}
+
+/** Punkt in Millimetern einer bestimmten Tafel. */
+function mausMm(ereignis, nr) {
+  const p = mausPixel(ereignis);
+  const a = aufteilung[nr];
+  return {x: (p.x - a.ox) / massstab, y: (a.oy + a.hoehe - p.y) / massstab};
 }
 
 svg.addEventListener("pointerdown", ereignis => {
+  const p = mausPixel(ereignis);
+  const unter = tafelUnter(p.x, p.y);
+  if (unter >= 0) aktiveTafel = unter;
+
   const gruppe = ereignis.target.closest(".teil");
   if (!gruppe) { gewaehlt = null; zeichnen(); return; }
   const teil = teile.find(t => t.id === gruppe.dataset.id);
   if (!teil) return;
   gewaehlt = teil.id;
-  const punkt = mausNachMm(ereignis);
+  aktiveTafel = teil.tafel;
+  const punkt = mausMm(ereignis, teil.tafel);
   standSichern();
   zieht = {id: teil.id, dx: punkt.x - teil.x, dy: punkt.y - teil.y, bewegt: false};
   svg.setPointerCapture(ereignis.pointerId);
@@ -717,7 +797,13 @@ svg.addEventListener("pointermove", ereignis => {
   if (!zieht) return;
   const teil = teile.find(t => t.id === zieht.id);
   if (!teil) return;
-  const punkt = mausNachMm(ereignis);
+  const p = mausPixel(ereignis);
+  const unter = tafelUnter(p.x, p.y);
+  if (unter >= 0 && unter !== teil.tafel) {
+    teil.tafel = unter;          // Teil wandert auf eine andere Tafel
+    aktiveTafel = unter;
+  }
+  const punkt = mausMm(ereignis, teil.tafel);
   const ziel = fangen(teil, punkt.x - zieht.dx, punkt.y - zieht.dy);
   teil.x = ziel.x; teil.y = ziel.y;
   zieht.bewegt = true;
@@ -778,7 +864,9 @@ document.getElementById("winkelFeld").onchange = ereignis => {
   const nachher = masse(teil);
   teil.x += (vorher.breite - nachher.breite) / 2;
   teil.y += (vorher.hoehe - nachher.hoehe) / 2;
+  const ergebnis = einruecken(teil);
   zeichnen();
+  einrueckenMelden(ergebnis);
 };
 document.getElementById("fangen").onchange = zeichnen;
 document.getElementById("verwerfen").onclick = () => {
@@ -794,9 +882,10 @@ document.getElementById("uebernehmen").onclick = () => {
       fehler.size + " Teil(e) liegen falsch (Ueberschneidung oder ausserhalb der "
       + "Tafel). Trotzdem uebernehmen?")) return;
   wertSetzen({
-    tafel: vorgabe.tafel.nummer,
     stand: Date.now(),
-    teile: teile.map(t => ({id: t.id, sorte: t.sorte, x: t.x, y: t.y, winkel: t.winkel})),
+    tafeln: vorgabe.tafeln.map(t => t.nummer),
+    teile: teile.map(t => ({id: t.id, tafel: t.tafel, sorte: t.sorte,
+                            x: t.x, y: t.y, winkel: t.winkel})),
     fehlerhaft: fehler.size,
   });
 };
@@ -813,7 +902,7 @@ window.addEventListener("message", ereignis => {
   if (!gleich) {
     teile = tiefeKopie(neu.teile);
     vorrat = tiefeKopie(neu.vorrat || []);
-    verlauf = []; zukunft = []; gewaehlt = null;
+    verlauf = []; zukunft = []; gewaehlt = null; aktiveTafel = 0;
     document.getElementById("rasterFeld").value = neu.raster || 5;
   }
   zeichnen();

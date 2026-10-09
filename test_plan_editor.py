@@ -38,11 +38,13 @@ def test_vorgabe():
     erg = beispiel()
     plan = erg.plaene[0]
     farben = {"Blende": "#111111", "Winkel": "#222222"}
-    daten = daten_fuer(plan, 1, saegeblatt=5, besaeumung=10, farben=farben, vorrat=[])
+    daten = daten_fuer([plan], [1], saegeblatt=5, besaeumung=10, farben=farben,
+                       vorrat=[])
 
-    pruefe(daten["tafel"]["breite"] == 1500 and daten["tafel"]["hoehe"] == 3000,
+    pruefe(len(daten["tafeln"]) == 1, "eine Tafel uebergeben")
+    pruefe(daten["tafeln"][0]["breite"] == 1500 and daten["tafeln"][0]["hoehe"] == 3000,
            "Tafelmasse uebergeben")
-    pruefe(daten["saegeblatt"] == 5 and daten["tafel"]["besaeumung"] == 10,
+    pruefe(daten["saegeblatt"] == 5 and daten["tafeln"][0]["besaeumung"] == 10,
            "Schnittfuge und Besaeumung uebergeben")
     pruefe(len(daten["teile"]) == len(plan.platzierungen),
            f"{len(daten['teile'])} Teile uebergeben")
@@ -64,10 +66,10 @@ def test_verschieben():
     vorher = [(p.x, p.y) for p in plan.platzierungen]
 
     rueckgabe = {"teile": [
-        {"id": f"t{i}", "sorte": p.bezeichnung, "x": p.x + 25, "y": p.y + 40,
-         "winkel": p.winkel}
+        {"id": f"t0_{i}", "tafel": 0, "sorte": p.bezeichnung,
+         "x": p.x + 25, "y": p.y + 40, "winkel": p.winkel}
         for i, p in enumerate(plan.platzierungen)]}
-    meldungen = uebernehme(erg, 0, rueckgabe, karte)
+    meldungen = uebernehme(erg, [1], rueckgabe, karte)
 
     pruefe(len(plan.platzierungen) == len(vorher), "Teilezahl unveraendert")
     for (x, y), p in zip(vorher, plan.platzierungen):
@@ -87,10 +89,10 @@ def test_rechteck_ohne_kontur():
     masse_vorher = {i: (p.breite, p.hoehe) for i, p in ohne}
 
     rueckgabe = {"teile": [
-        {"id": f"t{i}", "sorte": p.bezeichnung, "x": p.x + 10, "y": p.y,
-         "winkel": p.winkel}
+        {"id": f"t0_{i}", "tafel": 0, "sorte": p.bezeichnung, "x": p.x + 10,
+         "y": p.y, "winkel": p.winkel}
         for i, p in enumerate(plan.platzierungen)]}
-    uebernehme(erg, 0, rueckgabe, karte)
+    uebernehme(erg, [1], rueckgabe, karte)
 
     pruefe(len(plan.platzierungen) == len(rueckgabe["teile"]),
            f"kein Teil verloren ({len(plan.platzierungen)})")
@@ -105,10 +107,10 @@ def test_rechteck_ohne_kontur():
 
     # und nach dem Drehen passt die Bounding-Box weiterhin
     rueckgabe = {"teile": [
-        {"id": f"t{i}", "sorte": p.bezeichnung, "x": p.x, "y": p.y,
+        {"id": f"t0_{i}", "tafel": 0, "sorte": p.bezeichnung, "x": p.x, "y": p.y,
          "winkel": 90.0 if p.bezeichnung == "Blende" else p.winkel}
         for i, p in enumerate(plan.platzierungen)]}
-    uebernehme(erg, 0, rueckgabe, karte)
+    uebernehme(erg, [1], rueckgabe, karte)
     for i, _ in ohne:
         p = plan.platzierungen[i]
         breite, hoehe = masse_vorher[i]
@@ -132,7 +134,7 @@ def test_drehen():
         rueckgabe["teile"].append({
             "id": f"t{i}", "sorte": p.bezeichnung, "x": 100.0, "y": 200.0,
             "winkel": 37.0 if i == winkel_teil else p.winkel})
-    uebernehme(erg, 0, rueckgabe, karte)
+    uebernehme(erg, [1], rueckgabe, karte)
 
     p = plan.platzierungen[winkel_teil]
     pruefe(abs(p.winkel - 37.0) < 1e-9, f"Winkel {p.winkel}")
@@ -159,9 +161,10 @@ def test_ablegen_und_einsetzen():
 
     # erstes Teil ablegen
     rueckgabe = {"teile": [
-        {"id": f"t{i}", "sorte": p.bezeichnung, "x": p.x, "y": p.y, "winkel": p.winkel}
+        {"id": f"t0_{i}", "tafel": 0, "sorte": p.bezeichnung, "x": p.x, "y": p.y,
+         "winkel": p.winkel}
         for i, p in enumerate(plan.platzierungen) if i != 0]}
-    meldungen = uebernehme(erg, 0, rueckgabe, karte)
+    meldungen = uebernehme(erg, [1], rueckgabe, karte)
 
     pruefe(len(plan.platzierungen) == anzahl - 1, "ein Teil weniger auf der Tafel")
     offen = sum(a for b, _, _, a in erg.fehlende if b == sorte)
@@ -170,11 +173,12 @@ def test_ablegen_und_einsetzen():
 
     # dasselbe Teil wieder einsetzen
     rueckgabe = {"teile": [
-        {"id": f"t{i}", "sorte": p.bezeichnung, "x": p.x, "y": p.y, "winkel": p.winkel}
+        {"id": f"t0_{i}", "tafel": 0, "sorte": p.bezeichnung, "x": p.x, "y": p.y,
+         "winkel": p.winkel}
         for i, p in enumerate(plan.platzierungen)]}
-    rueckgabe["teile"].append({"id": "neu1", "sorte": sorte, "x": 50.0, "y": 60.0,
-                               "winkel": 90.0})
-    meldungen = uebernehme(erg, 0, rueckgabe, karte)
+    rueckgabe["teile"].append({"id": "neu1", "tafel": 0, "sorte": sorte,
+                               "x": 50.0, "y": 60.0, "winkel": 90.0})
+    meldungen = uebernehme(erg, [1], rueckgabe, karte)
 
     pruefe(len(plan.platzierungen) == anzahl, "Teil wieder auf der Tafel")
     offen = sum(a for b, _, _, a in erg.fehlende if b == sorte)
@@ -195,12 +199,55 @@ def test_unbekanntes_teil():
     plan = erg.plaene[0]
     anzahl = len(plan.platzierungen)
     rueckgabe = {"teile": [
-        {"id": f"t{i}", "sorte": p.bezeichnung, "x": p.x, "y": p.y, "winkel": p.winkel}
+        {"id": f"t0_{i}", "tafel": 0, "sorte": p.bezeichnung, "x": p.x, "y": p.y,
+         "winkel": p.winkel}
         for i, p in enumerate(plan.platzierungen)]}
-    rueckgabe["teile"].append({"id": "neu9", "sorte": "Gibt es nicht",
+    rueckgabe["teile"].append({"id": "neu9", "tafel": 0, "sorte": "Gibt es nicht",
                                "x": 10.0, "y": 10.0, "winkel": 0.0})
-    uebernehme(erg, 0, rueckgabe, kontur_karte(erg))
+    uebernehme(erg, [1], rueckgabe, kontur_karte(erg))
     pruefe(len(plan.platzierungen) == anzahl, "Plan bleibt unveraendert gross")
+
+
+def test_tafelwechsel():
+    print("Editor: Teil von einer Tafel auf die andere")
+    teile = [Zuschnitt2D(600, 400, 9, "Blende", "Stahl"),
+             Zuschnitt2D(900, 900, 4, "Winkel", "Stahl", kontur=l_form(900, 900, 350))]
+    erg = optimize_2d(teile, [Tafel(1250, 2500, None, "Blech", "Stahl")],
+                      saegeblatt=5, besaeumung=10, modus="frei")
+    pruefe(erg.anzahl_tafeln >= 2, f"Beispiel hat {erg.anzahl_tafeln} Tafeln")
+    karte = kontur_karte(erg)
+    eins, zwei = erg.plaene[0], erg.plaene[1]
+    anzahl_eins, anzahl_zwei = len(eins.platzierungen), len(zwei.platzierungen)
+    wanderer = eins.platzierungen[0].bezeichnung
+
+    # alle Teile melden, das erste aber mit Tafel 1 (Index) statt 0
+    rueckgabe = {"teile": []}
+    for nr, plan in enumerate((eins, zwei)):
+        for i, p in enumerate(plan.platzierungen):
+            rueckgabe["teile"].append({
+                "id": f"t{nr}_{i}", "tafel": 1 if (nr == 0 and i == 0) else nr,
+                "sorte": p.bezeichnung,
+                "x": 40.0 if (nr == 0 and i == 0) else p.x,
+                "y": 60.0 if (nr == 0 and i == 0) else p.y,
+                "winkel": p.winkel})
+    meldungen = uebernehme(erg, [1, 2], rueckgabe, karte)
+
+    pruefe(len(eins.platzierungen) == anzahl_eins - 1,
+           f"Tafel 1 hat ein Teil weniger ({len(eins.platzierungen)})")
+    pruefe(len(zwei.platzierungen) == anzahl_zwei + 1,
+           f"Tafel 2 hat ein Teil mehr ({len(zwei.platzierungen)})")
+    # Die Reihenfolge folgt der Meldung des Editors, nicht der alten Liste -
+    # das umgehaengte Teil wird darum ueber seine Lage gesucht.
+    neu = [p for p in zwei.platzierungen
+           if abs(p.x - 40) < 1e-6 and abs(p.y - 60) < 1e-6]
+    pruefe(len(neu) == 1, f"umgehaengtes Teil auf Tafel 2 gefunden ({len(neu)})")
+    if neu:
+        pruefe(neu[0].bezeichnung == wanderer,
+               f"richtige Sorte: {neu[0].bezeichnung} (erwartet {wanderer})")
+        pruefe(neu[0].breite > 0 and neu[0].hoehe > 0,
+               f"Masse erhalten ({neu[0].breite:.0f} x {neu[0].hoehe:.0f})")
+    pruefe(any("andere Tafel" in m for m in meldungen), f"Meldung: {meldungen}")
+    pruefe(not erg.fehlende, f"nichts faelschlich als offen gebucht: {erg.fehlende}")
 
 
 def test_vorrat():
@@ -225,9 +272,10 @@ def test_flaeche_nach_aenderung():
     vorher = plan.ausnutzung
     karte = kontur_karte(erg)
     rueckgabe = {"teile": [
-        {"id": f"t{i}", "sorte": p.bezeichnung, "x": p.x, "y": p.y, "winkel": p.winkel}
+        {"id": f"t0_{i}", "tafel": 0, "sorte": p.bezeichnung, "x": p.x, "y": p.y,
+         "winkel": p.winkel}
         for i, p in enumerate(plan.platzierungen) if i > 0]}
-    uebernehme(erg, 0, rueckgabe, karte)
+    uebernehme(erg, [1], rueckgabe, karte)
     pruefe(plan.ausnutzung < vorher, f"Ausnutzung faellt von {vorher*100:.1f} % "
                                      f"auf {plan.ausnutzung*100:.1f} %")
     pruefe(0 <= plan.ausnutzung <= 1, "Ausnutzung bleibt plausibel")
@@ -236,7 +284,8 @@ def test_flaeche_nach_aenderung():
 if __name__ == "__main__":
     for fn in [test_vorgabe, test_verschieben, test_rechteck_ohne_kontur,
                test_drehen, test_ablegen_und_einsetzen,
-               test_unbekanntes_teil, test_vorrat, test_flaeche_nach_aenderung]:
+               test_unbekanntes_teil, test_tafelwechsel, test_vorrat,
+               test_flaeche_nach_aenderung]:
         fn()
     print()
     if fehler:

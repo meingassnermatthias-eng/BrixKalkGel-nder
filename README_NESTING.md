@@ -170,13 +170,21 @@ Unter dem Schachtelplan liegt der Bereich **Plan von Hand anpassen**. Dort
 lässt sich jedes Teil mit der Maus auf der Tafel verschieben – für die Fälle,
 in denen der Zuschneider es besser weiß als die Rechnung.
 
+**Wie viele Tafeln gleichzeitig?** Über *Tafeln gleichzeitig anzeigen* wählt
+man 1, 2, 4, 6, 10, 15 oder **Alle**. Bei mehreren Tafeln werden sie
+nebeneinander in ein Raster gelegt und gemeinsam skaliert, sodass sie
+vergleichbar bleiben; bei einer Auswahl unter „Alle" bestimmt der Regler
+*ab Tafel*, wo die Anzeige beginnt. Liegen mehrere Tafeln nebeneinander, lässt
+sich ein Teil **direkt von einer Tafel auf die andere ziehen** – es sucht sich
+dort selbst einen freien Platz.
+
 | Bedienung | Wirkung |
 |---|---|
-| Teil anklicken und ziehen | verschieben |
+| Teil anklicken und ziehen | verschieben, auch auf eine andere Tafel |
 | **R** oder die Drehknöpfe | 90° drehen (Winkelfeld für beliebige Grad) |
 | Pfeiltasten | 1 mm schieben, mit Umschalt 10 mm |
 | **Entf** oder *Ablegen* | Teil neben die Tafel legen |
-| Knopf in der Ablage | Teil wieder einsetzen |
+| Knopf in der Ablage | Teil auf die zuletzt angeklickte Tafel einsetzen |
 | **Strg+Z** / *Zurück* | Schritt zurück |
 | *Verwerfen* | zurück auf den gerechneten Plan |
 

@@ -403,45 +403,58 @@ def zeige_ergebnis_2d(erg, farben=None):
 
 
 def zeige_editor(erg, farben):
-    """Schachtelplan einer Tafel von Hand nachbessern."""
+    """Schachtelplan von Hand nachbessern - eine, mehrere oder alle Tafeln."""
     with st.expander("✏️ Plan von Hand anpassen (Teile mit der Maus verschieben)"):
         st.caption(
-            "Teil anklicken und ziehen. **R** dreht um 90°, **Entf** legt es neben "
-            "die Tafel, die **Pfeiltasten** schieben millimeterweise. Teile fangen "
-            "sich an der Tafelkante und an den Nachbarn im Abstand der Schnittfuge. "
-            "Wer ein Teil rot loslässt, bekommt es automatisch auf die nächste "
-            "freie Stelle gerückt. Erst **Änderungen übernehmen** "
-            "schreibt den Plan um – PDF, Excel und DXF nutzen danach den "
-            "angepassten Plan.")
+            "Teil anklicken und ziehen – auch von einer Tafel auf die andere. "
+            "**R** dreht um 90°, **Entf** legt es neben die Tafel, die "
+            "**Pfeiltasten** schieben millimeterweise. Teile fangen sich an der "
+            "Tafelkante und an den Nachbarn im Abstand der Schnittfuge. Wer ein "
+            "Teil rot loslässt, bekommt es automatisch auf die nächste freie "
+            "Stelle gerückt. Erst **Änderungen übernehmen** schreibt den Plan um – "
+            "PDF, Excel und DXF nutzen danach den angepassten Plan.")
 
-        if len(erg.plaene) > 1:
-            nummer = st.selectbox(
-                "Tafel", range(1, len(erg.plaene) + 1),
-                format_func=lambda n: (
-                    f"Tafel {n} – {erg.plaene[n-1].tafel} "
-                    f"({len(erg.plaene[n-1].platzierungen)} Teile, "
-                    f"{erg.plaene[n-1].ausnutzung*100:.0f} % Ausnutzung)"),
-                key="editor_tafel")
-        else:
-            nummer = 1
+        gesamt = len(erg.plaene)
+        nummern = [1]
+        if gesamt > 1:
+            stufen = [z for z in (1, 2, 4, 6, 10, 15) if z < gesamt]
+            optionen = stufen + ["Alle"]
+            vorgabe = "Alle" if gesamt <= 6 else 6
+            wahl = st.selectbox(
+                "Tafeln gleichzeitig anzeigen", optionen,
+                index=optionen.index(vorgabe) if vorgabe in optionen else len(optionen) - 1,
+                key="editor_anzahl",
+                help="Mehrere Tafeln nebeneinander: dann lassen sich Teile auch "
+                     "zwischen den Tafeln hin- und herziehen.")
+            if wahl == "Alle":
+                nummern = list(range(1, gesamt + 1))
+            else:
+                hoechste = gesamt - wahl + 1
+                ab = 1 if hoechste <= 1 else st.slider(
+                    "ab Tafel", 1, hoechste, 1, key="editor_ab")
+                nummern = list(range(ab, ab + wahl))
 
-        plan = erg.plaene[nummer - 1]
+        plaene = [erg.plaene[nummer - 1] for nummer in nummern]
         karte = kontur_karte(erg, st.session_state.get("konturen"))
-        vorrat = vorrat_fuer(erg, plan, karte, farben)
+        vorrat = vorrat_fuer(erg, plaene[0], karte, farben)
 
         rueckgabe = plan_editor(
-            plan, nummer, saegeblatt=schnittfuge, besaeumung=besaeumung,
+            plaene, nummern, saegeblatt=schnittfuge, besaeumung=besaeumung,
             farben=farben, vorrat=vorrat, raster=5.0,
-            key=f"plan_editor_{nummer}")
+            key=f"plan_editor_{nummern[0]}_{len(nummern)}")
 
         # Meldung erst nach dem Neuaufbau zeigen - st.rerun() verwirft sie sonst
         if st.session_state.get("editor_meldung"):
             art, text = st.session_state.pop("editor_meldung")
             (st.warning if art == "warnung" else st.success)(text)
 
-        if rueckgabe and rueckgabe.get("stand") != st.session_state.get("editor_stand"):
-            st.session_state.editor_stand = rueckgabe.get("stand")
-            meldungen = uebernehme(erg, nummer - 1, rueckgabe, karte)
+        # Jeden Stand nur einmal anwenden; beim Umschalten der Ansicht liefert
+        # die Komponente sonst einen aelteren Stand erneut.
+        angewandt = st.session_state.setdefault("editor_staende", set())
+        stand = rueckgabe.get("stand") if rueckgabe else None
+        if stand is not None and stand not in angewandt:
+            angewandt.add(stand)
+            meldungen = uebernehme(erg, nummern, rueckgabe, karte)
             text = ("Plan aktualisiert: "
                     + ("; ".join(meldungen) if meldungen else "keine Änderung"))
             if rueckgabe.get("fehlerhaft"):
@@ -949,6 +962,9 @@ Stellschrauben:
 
 **Plan von Hand nachbessern.** Unter dem Schachtelplan lässt sich jedes Teil
 mit der Maus auf der Tafel verschieben, drehen, ablegen und wieder einsetzen.
+Wählbar ist, wie viele Tafeln gleichzeitig zu sehen sind (1 bis alle) &ndash;
+liegen mehrere nebeneinander, kann man Teile von einer Tafel auf die andere
+ziehen.
 Die Teile fangen sich dabei an der Tafelkante und an den Nachbarn im Abstand
 der Schnittfuge. Überschneidungen werden rot angezeigt. Erst *Änderungen
 übernehmen* schreibt den Plan um &ndash; PDF, Excel und DXF nutzen danach den

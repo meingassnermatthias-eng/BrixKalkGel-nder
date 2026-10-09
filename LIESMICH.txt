@@ -65,6 +65,10 @@ WAS DAS PROGRAMM KANN
 
   Plan von Hand nachbessern
      Unter dem Schachtelplan: "Plan von Hand anpassen".
+     Oben waehlbar, wie viele Tafeln gleichzeitig zu sehen
+     sind (1, 2, 4, 6, 10, 15 oder Alle). Liegen mehrere
+     nebeneinander, kann man Teile von einer Tafel auf die
+     andere ziehen.
      Teile mit der Maus ziehen, R dreht um 90 Grad,
      Entf legt ein Teil neben die Tafel, Pfeiltasten
      schieben millimeterweise. Ueberschneidungen werden
