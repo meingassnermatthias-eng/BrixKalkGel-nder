@@ -173,8 +173,9 @@ function zeichnen() {
        fill="${farbe}" fill-opacity="${z.aus ? 0.5 : 0.85}"
        stroke="#111827" stroke-width="1.1"/>`);
     if (z.aus) {
-      teile.push(`<polygon class="feld" data-name="${f.name}" points="${punkte}"
-         fill="url(#schraeg)" fill-opacity="0.5" stroke="none"/>`);
+      // Schraffur liegt nur obenauf - Klicks sollen das Feld darunter treffen
+      teile.push(`<polygon points="${punkte}" fill="url(#schraeg)"
+         fill-opacity="0.5" stroke="none" pointer-events="none"/>`);
     }
     const bb = huelle(f.polygon);
     const bpx = bb.b * skala, hpx = bb.h * skala;
