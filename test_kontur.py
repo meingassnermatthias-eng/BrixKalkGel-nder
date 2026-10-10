@@ -223,10 +223,12 @@ def test_ausschnitt_wird_genutzt():
              Zuschnitt2D(700, 700, 2, "Einleger")]
     tafeln = [Tafel(1250, 2600, None, "Tafel")]
 
+    # Ohne Nachverdichtung UND ohne Nachruecken: beide Wege koennen das Teil
+    # in den Ausschnitt legen, darum muessen fuer den Vergleich beide aus sein.
     ohne = optimize_2d_kontur(teile, tafeln, saegeblatt=4, besaeumung=10, raster=5,
-                              nachverdichten=False)
+                              nachverdichten=False, verdichten=False)
     mit = optimize_2d_kontur(teile, tafeln, saegeblatt=4, besaeumung=10, raster=5,
-                             nachverdichten=True)
+                             nachverdichten=True, verdichten=False)
     pruefe(stueckzahl(mit) == 4, f"alle 4 Teile platziert ({stueckzahl(mit)})")
     pruefe(mit.anzahl_tafeln < ohne.anzahl_tafeln or
            mit.plaene[0].ausnutzung > ohne.plaene[0].ausnutzung + 0.05,
@@ -479,10 +481,12 @@ def test_eigenwinkel():
 
     teile = [Zuschnitt2D(1400, 1100, 10, "Diagonale", "Alu", True, kontur=streifen)]
     tafeln = [Tafel(1500, 3000, None, "Tafel", "Alu")]
+    # Hier geht es allein um die Drehwinkel - das Nachruecken wuerde den
+    # Unterschied verwischen, weil es den festen Winkeln ebenfalls hilft.
     fest = optimize_2d_kontur(teile, tafeln, saegeblatt=5, besaeumung=0, raster=5,
-                              winkel=kn.STANDARD_WINKEL, versuche=4)
+                              winkel=kn.STANDARD_WINKEL, versuche=4, verdichten=False)
     frei = optimize_2d_kontur(teile, tafeln, saegeblatt=5, besaeumung=0, raster=5,
-                              winkel=kn.FREIE_WINKEL, versuche=4)
+                              winkel=kn.FREIE_WINKEL, versuche=4, verdichten=False)
     print(f"       -> 90-Schritte: {fest.anzahl_tafeln} Tafeln "
           f"({fest.ausnutzung_echt_prozent:.1f} %), Eigenwinkel: "
           f"{frei.anzahl_tafeln} Tafeln ({frei.ausnutzung_echt_prozent:.1f} %)")
@@ -513,13 +517,114 @@ def test_eigenwinkel():
            f"Laufrichtung schlaegt die Eigenwinkel ({gedreht})")
 
 
+def test_nachruecken():
+    """Die Rasterluft wird weggenommen - aber nie die Schnittfuge."""
+    print("\n15. Nachruecken mit der echten Geometrie")
+    FUGE, RAND = 5.0, 10.0
+
+    def abstaende(ergebnis):
+        raus = []
+        for plan in ergebnis.plaene:
+            ringe = [p.welt_kontur() for p in plan.platzierungen]
+            seg = [kn._segmente_von(r) for r in ringe]
+            for i in range(len(ringe)):
+                for k in range(i + 1, len(ringe)):
+                    d = kn._teile_abstand(ringe[i], ringe[k], seg[i], seg[k])
+                    if d < 100:
+                        raus.append(d)
+        return sorted(raus)
+
+    teile = [Zuschnitt2D(1000, 600, 14, "A", "Alu", True,
+                         kontur=[[(0, 0), (1000, 0), (1000, 600), (0, 600)]]),
+             Zuschnitt2D(800, 1200, 8, "B", "Alu", True,
+                         kontur=[[(0, 0), (800, 0), (800, 1200), (0, 1200)]]),
+             Zuschnitt2D(600, 500, 10, "C", "Alu", True)]
+    tafeln = [Tafel(1500, 3200, None, "Tafel", "Alu")]
+
+    ohne = optimize_2d_kontur(teile, tafeln, saegeblatt=FUGE, besaeumung=RAND,
+                              raster=5, versuche=4, verdichten=False)
+    mit = optimize_2d_kontur(teile, tafeln, saegeblatt=FUGE, besaeumung=RAND,
+                             raster=5, versuche=4, verdichten=True)
+    a_ohne, a_mit = abstaende(ohne), abstaende(mit)
+    print(f"       -> ohne Nachruecken: kleinster Abstand {a_ohne[0]:.2f} mm, "
+          f"Median {a_ohne[len(a_ohne)//2]:.2f} mm")
+    print(f"       -> mit  Nachruecken: kleinster Abstand {a_mit[0]:.2f} mm, "
+          f"Median {a_mit[len(a_mit)//2]:.2f} mm")
+
+    pruefe(a_mit[0] >= FUGE - 0.01,
+           f"Schnittfuge bleibt gewahrt ({a_mit[0]:.2f} mm bei {FUGE} mm Fuge)")
+    pruefe(a_mit[0] < a_ohne[0] - 0.5 or
+           a_mit[len(a_mit)//2] < a_ohne[len(a_ohne)//2] - 0.5,
+           "die Teile ruecken naeher zusammen")
+    pruefe(stueckzahl(mit) >= stueckzahl(ohne),
+           f"es gehen nicht weniger Teile auf ({stueckzahl(mit)} statt "
+           f"{stueckzahl(ohne)})")
+    pruefe(mit.anzahl_tafeln <= ohne.anzahl_tafeln,
+           f"nie mehr Tafeln als ohne ({mit.anzahl_tafeln} statt "
+           f"{ohne.anzahl_tafeln})")
+    pruefe_plan(mit, tafeln, FUGE, RAND, 5, "Nachruecken")
+
+    # Teile im Ausschnitt duerfen nicht herausgeschoben werden
+    rahmen = [[(0.0, 0.0), (1200.0, 0.0), (1200.0, 1200.0), (0.0, 1200.0)],
+              [(200.0, 200.0), (1000.0, 200.0), (1000.0, 1000.0), (200.0, 1000.0)]]
+    teile2 = [Zuschnitt2D(1200, 1200, 2, "Rahmen", "Alu", True, kontur=rahmen),
+              Zuschnitt2D(700, 700, 2, "Einleger", "Alu", True)]
+    e2 = optimize_2d_kontur(teile2, [Tafel(1250, 2600, None, "T", "Alu")],
+                            saegeblatt=4, besaeumung=10, raster=5, versuche=4)
+    pruefe(stueckzahl(e2) == 4, f"Rahmen und Einleger platziert ({stueckzahl(e2)})")
+    pruefe_plan(e2, [Tafel(1250, 2600, None, "T", "Alu")], 4, 10, 5,
+                "Nachruecken mit Ausschnitt")
+
+    # Diagonalstreifen: hier spart das Nachruecken eine ganze Tafel
+    streifen = [[(0.0, 0.0), (200.0, 0.0), (1400.0, 1100.0), (1200.0, 1100.0)]]
+    teile3 = [Zuschnitt2D(1400, 1100, 10, "Diagonale", "Alu", True, kontur=streifen)]
+    tafeln3 = [Tafel(1500, 3000, None, "Tafel", "Alu")]
+    o3 = optimize_2d_kontur(teile3, tafeln3, saegeblatt=5, besaeumung=0, raster=5,
+                            winkel=kn.STANDARD_WINKEL, versuche=4, verdichten=False)
+    m3 = optimize_2d_kontur(teile3, tafeln3, saegeblatt=5, besaeumung=0, raster=5,
+                            winkel=kn.STANDARD_WINKEL, versuche=4, verdichten=True)
+    print(f"       -> Diagonalstreifen ohne {o3.anzahl_tafeln} Tafeln "
+          f"({o3.ausnutzung_echt_prozent:.1f} %), mit {m3.anzahl_tafeln} Tafeln "
+          f"({m3.ausnutzung_echt_prozent:.1f} %)")
+    pruefe(m3.anzahl_tafeln < o3.anzahl_tafeln,
+           f"Nachruecken spart hier eine Tafel ({m3.anzahl_tafeln} statt "
+           f"{o3.anzahl_tafeln})")
+    pruefe_plan(m3, tafeln3, 5, 0, 5, "Diagonalstreifen")
+
+
+def test_kreuzende_kanten():
+    """Der Abstand zweier Teile muss auch bei sich kreuzenden Kanten stimmen."""
+    print("\n16. Abstandsmessung")
+    import numpy as np
+    waagrecht = (np.array([-10.0]), np.array([0.0]), np.array([10.0]), np.array([0.0]))
+    senkrecht = (np.array([0.0]), np.array([-10.0]), np.array([0.0]), np.array([10.0]))
+    pruefe(kn._kantenabstand(waagrecht, senkrecht) == 0.0,
+           "sich kreuzende Kanten haben Abstand 0")
+    entfernt = (np.array([0.0]), np.array([20.0]), np.array([0.0]), np.array([30.0]))
+    pruefe(abs(kn._kantenabstand(waagrecht, entfernt) - 20.0) < 1e-9,
+           "getrennte Kanten: richtiger Abstand")
+
+    # Ein Teil ganz im Ausschnitt eines anderen liegt nicht "weit weg"
+    rahmen = [[(0.0, 0.0), (1000.0, 0.0), (1000.0, 1000.0), (0.0, 1000.0)],
+              [(100.0, 100.0), (900.0, 100.0), (900.0, 900.0), (100.0, 900.0)]]
+    klein = [[(400.0, 400.0), (600.0, 400.0), (600.0, 600.0), (400.0, 600.0)]]
+    pruefe(kn._teile_abstand(klein, rahmen, kn._segmente_von(klein),
+                             kn._segmente_von(rahmen)) > 100.0,
+           "Teil im Ausschnitt: Abstand zur Lochkante")
+    ueberlappend = [[(500.0, 500.0), (1500.0, 500.0), (1500.0, 1500.0),
+                     (500.0, 1500.0)]]
+    pruefe(kn._teile_abstand(ueberlappend, rahmen, kn._segmente_von(ueberlappend),
+                             kn._segmente_von(rahmen)) == 0.0,
+           "ueberlappende Teile: Abstand 0")
+
+
 if __name__ == "__main__":
     for fn in [test_rasterung, test_dreiecke_greifen_ineinander, test_l_formen,
                test_ausschnitt_wird_genutzt, test_kassetten_alucobond,
                test_laufrichtung, test_rechtecke_ohne_kontur, test_zu_grosses_teil,
                test_schnittfuge_wirkt, test_bbox_sicherheitsnetz, test_feine_winkel,
                test_rastergrenze, test_ohne_tafeln, test_ausgabe_pdf_und_dxf,
-               test_eigenwinkel,
+               test_eigenwinkel, test_nachruecken, test_kreuzende_kanten,
                test_laufzeit]:
         fn()
     print()

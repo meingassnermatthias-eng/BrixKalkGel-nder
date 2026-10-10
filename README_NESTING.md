@@ -185,10 +185,45 @@ schnelle Verfahren mit und übernimmt automatisch den besseren Plan.
 **So rechnet es:** Jede Kontur wird je Drehwinkel gerastert (Scanline,
 Even-Odd-Regel, dadurch sind Ausschnitte automatisch frei) und um die halbe
 Schnittfuge aufgeweitet. Jedes Teil fällt an der günstigsten Stelle nach unten
-und rutscht in vorhandene Taschen; Teile, die so nicht unterkommen, werden über
-eine Kreuzkorrelation (FFT) auf der ganzen Tafel gesucht. Weil nach außen
-gerundet wird, ist die eingestellte **Schnittfuge garantiert** eingehalten – im
-Zweifel steht etwas mehr Abstand, nie weniger.
+und rutscht in vorhandene Taschen; Teile, die so nicht unterkommen, werden auf
+der ganzen Tafel gesucht (Summentafel als Vorauswahl, bei vielen Kandidaten
+eine Kreuzkorrelation über FFT). Weil nach außen gerundet wird, ist die
+eingestellte **Schnittfuge garantiert** eingehalten – im Zweifel steht etwas
+mehr Abstand, nie weniger.
+
+#### Teile nachrücken
+
+Das Raster kostet Platz: jedes Teil steht bis zu eine Rasterzelle weiter vom
+Nachbarn weg als nötig. Nach jeder Tafel schiebt das Programm die Teile deshalb
+mit der **echten Kontur** zusammen, bis genau die Schnittfuge bleibt, und
+bietet den gewonnenen Platz gleich noch einmal an.
+
+| | ohne Nachrücken | mit Nachrücken |
+|---|---|---|
+| Abstand der Teile (Fuge 5 mm) | 10 mm | **5 mm** |
+| frei gewordene Tafelhöhe | – | 55 bis 290 mm je Tafel |
+| 10 Diagonalstreifen, 90°-Schritte | 2 Tafeln, 24 % | **1 Tafel, 49 %** |
+
+Gemessen wird dabei der echte Abstand zweier Polygone – samt sich kreuzender
+Kanten und Teilen, die in einem Ausschnitt liegen. Die Schnittfuge wird nie
+unterschritten; `test_kontur.py` prüft das für jeden Plan exakt nach.
+
+#### Rechenzeit
+
+| Auftrag | früher | jetzt |
+|---|---|---|
+| Fassade aus DXF, 15 Positionen, beliebige Drehung | 55 s | **6,7 s** |
+| 32 Kassetten auf 6 Tafeln | 1,6 s | **0,6 s** |
+
+Der Gewinn steckt vor allem in der Positionssuche: Die Masken werden nur noch
+einmal transformiert statt nach jedem Teil neu, eine Absage gilt dauerhaft (auf
+der Tafel kommt ja nur etwas hinzu), eine Summentafel wählt die möglichen Lagen
+vor, und die Prüfung „liegt hier schon etwas?" läuft als bitweises UND statt
+über eine Kopie – das allein ist dreißigmal schneller.
+
+**Rasterweite:** 5 mm ist der richtige Wert. Feiner (3 oder 2 mm) kam in allen
+Messungen auf dieselbe Tafelzahl, brauchte aber das Vier- bis Zehnfache an
+Rechenzeit. Gröber (10 mm) kostet dagegen Material.
 
 #### Erlaubte Drehung
 
@@ -209,9 +244,8 @@ Vierteldrehungen. Bei reinen Rechtecken kommt dabei nichts Neues heraus – dort
 kostet es nur Rechenzeit, und die 90°-Schritte genügen. Teile mit *Drehbar =
 aus* (Walz- oder Dekorrichtung) bleiben in jedem Fall stehen.
 
-Stellschrauben: Rasterweite (5 mm ist ein guter Kompromiss), erlaubte Drehung,
-Ausschnitte mitnutzen, Suchtiefe (1–6 Bewertungsstrategien; mehr ist genauer
-und langsamer).
+Stellschrauben: Rasterweite (5 mm ist der richtige Wert), erlaubte Drehung,
+Ausschnitte mitnutzen, Teile nachrücken, Suchtiefe (1–6 Bewertungsstrategien).
 
 ## Schritt ④ – Plan & Ausgabe
 

@@ -75,6 +75,11 @@ DER ABLAUF - VIER SCHRITTE
         Kontur     - echte Teileform, Teile greifen ineinander
      Dann "Nesting starten".
 
+     Die Teile werden danach mit der echten Kontur
+     zusammengeschoben, bis genau die Schnittfuge bleibt
+     ("Teile nachruecken"). Das spart Material und macht
+     den Plan massgenau.
+
      Bei schiefen Teilen (Parallelogramm, Trapez, Dreieck,
      Diagonalstreifen) steht unter "Einstellungen
      Konturnesting" die erlaubte Drehung auf

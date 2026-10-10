@@ -1151,8 +1151,8 @@ with schritt2:
         modus = ("guillotine" if modus_text.startswith("Guillotine")
                  else "frei" if modus_text.startswith("Frei") else "kontur")
 
-        raster, winkel, nachverdichten, versuche = (
-            5.0, FREIE_WINKEL if KONTUR_OK else (), True, 4)
+        raster, winkel, nachverdichten, versuche, verdichten = (
+            5.0, FREIE_WINKEL if KONTUR_OK else (), True, 4, True)
         if modus == "kontur":
             with st.expander("Einstellungen Konturnesting"):
                 raster = st.select_slider(
@@ -1174,6 +1174,12 @@ with schritt2:
                           "auch 45°-Schritte": FEINE_WINKEL,
                           "keine Drehung": (0.0,)}[drehung]
                 nachverdichten = st.checkbox("Ausschnitte und Taschen mitnutzen", True)
+                verdichten = st.checkbox(
+                    "Teile nachrücken", True,
+                    help="Nach jeder Tafel werden die Teile mit der echten "
+                         "Kontur zusammengeschoben, bis genau die Schnittfuge "
+                         "bleibt – die Rasterluft fällt weg. Der gewonnene "
+                         "Platz wird gleich noch einmal angeboten.")
                 versuche = st.slider(
                     "Suchtiefe", 1, 6, 4,
                     help="Mehr Bewertungsstrategien durchrechnen – genauer, "
@@ -1196,7 +1202,7 @@ with schritt2:
                         teile, tafeln, saegeblatt=st.session_state.schnittfuge,
                         besaeumung=st.session_state.besaeumung, raster=raster,
                         winkel=winkel, versuche=versuche,
-                        nachverdichten=nachverdichten)
+                        nachverdichten=nachverdichten, verdichten=verdichten)
                 else:
                     st.session_state.ergebnis = optimize_2d(
                         teile, tafeln, saegeblatt=st.session_state.schnittfuge,
@@ -1455,6 +1461,25 @@ verschenken Platz:
 Bei Rechteckteilen ändert sich nichts – dort kostet es nur Rechenzeit, dann
 genügen die 90°-Schritte. Teile mit Walz- oder Dekorrichtung bekommen in der
 Teileliste *Drehbar = aus* und bleiben in jedem Fall stehen.
+
+**Teile nachrücken.** Das Schachteln rechnet in einem Raster (5 mm). Dadurch
+steht jedes Teil bis zu eine Rasterzelle weiter vom Nachbarn weg als nötig.
+Nach jeder Tafel schiebt das Programm die Teile deshalb mit der **echten
+Kontur** zusammen, bis genau die Schnittfuge bleibt, und bietet den
+gewonnenen Platz gleich noch einmal an:
+
+| | ohne Nachrücken | mit Nachrücken |
+|---|---|---|
+| Abstand der Teile (Fuge 5 mm) | 10 mm | **5 mm** |
+| frei gewordene Tafelhöhe | – | 55 bis 290 mm je Tafel |
+| 10 Diagonalstreifen, 90°-Schritte | 2 Tafeln, 24 % | **1 Tafel, 49 %** |
+
+Die Schnittfuge wird dabei nie unterschritten – das prüfen die Tests für
+jeden Plan exakt nach.
+
+**Rasterweite.** 5 mm ist der richtige Wert. Feiner gerechnet (3 oder 2 mm)
+kam in allen Messungen auf dieselbe Tafelzahl, brauchte aber das Vier- bis
+Zehnfache an Rechenzeit. Gröber (10 mm) kostet dagegen Material.
     """)
 
     st.markdown("#### Schritt ④ – Plan & Ausgabe")

@@ -267,6 +267,7 @@ def _varianten(teil: Zuschnitt2D, raster: float, aufweitung: int, winkel: tuple)
             # Huellflaeche dieser Drehlage in Rasterzellen - Mass dafuer, wie
             # sparsam das Teil in dieser Lage auf der Tafel liegt
             "huelle": int(maske.shape[0]) * int(maske.shape[1]),
+            "zellen": int(maske.sum()),       # belegte Zellen (fuer Vorpruefungen)
             "rand": aufweitung,
             "unten": unten,
             "oben": oben,
@@ -289,6 +290,11 @@ def _varianten(teil: Zuschnitt2D, raster: float, aufweitung: int, winkel: tuple)
 # darum nur fuer die uebrig gebliebenen Teile.
 
 
+# Soviele Lagen werden hoechstens einzeln genau geprueft, bevor sich die
+# Faltung ueber die ganze Tafel lohnt.
+KANDIDATEN_GENAU = 1500
+
+
 def _gute_laenge(n: int) -> int:
     """Naechste FFT-freundliche Laenge (nur Faktoren 2, 3, 5)."""
     while True:
@@ -307,7 +313,64 @@ def _fft_form(gitter_form: tuple, masken_form: tuple) -> tuple:
             _gute_laenge(gitter_form[1] + masken_form[1] - 1))
 
 
-def _freier_platz(gitter: np.ndarray, variante: dict, zwischenspeicher: dict):
+class _Suchspeicher:
+    """
+    Haelt die Transformationen fuer die Positionssuche.
+
+    Die Masken aendern sich nie - ihre Transformation wird einmal berechnet und
+    bleibt. Nur das Gitter aendert sich mit jedem gesetzten Teil; dafuer genuegt
+    eine Transformation je Stand. Beides zusammen in einem Speicher, der nach
+    jedem Teil geleert wird, war der groesste Zeitfresser: dann wurden auch die
+    teuren Maskentransformationen jedes Mal neu gerechnet.
+
+    Alle Masken benutzen dieselbe Transformationsgroesse (nach der groessten
+    Maske bemessen) - sonst braeuchte jede Maskengroesse ihre eigene
+    Gittertransformation.
+    """
+
+    __slots__ = ("form", "masken", "gitter_fft", "stand", "summen", "summen_stand")
+
+    def __init__(self, gitter_form: tuple, groesste_maske: tuple):
+        self.form = _fft_form(gitter_form, groesste_maske)
+        self.masken: dict = {}
+        self.gitter_fft = None
+        self.stand = -1
+        self.summen = None
+        self.summen_stand = -1
+
+    def fuer_gitter(self, gitter: np.ndarray, stand: int):
+        if self.stand != stand:
+            self.gitter_fft = np.fft.rfft2(gitter.astype(np.float64), s=self.form)
+            self.stand = stand
+        return self.gitter_fft
+
+    def summentafel(self, gitter: np.ndarray, stand: int):
+        """
+        Summentafel der belegten Zellen (Integralbild).
+
+        Damit ist in einem Schritt fuer jede Lage ablesbar, wieviel im
+        Huellrechteck des Teils belegt ist - viel billiger als eine
+        Faltung und genau genug als Vorauswahl.
+        """
+        if self.summen_stand != stand:
+            summen = np.zeros((gitter.shape[0] + 1, gitter.shape[1] + 1),
+                              dtype=np.int32)
+            np.cumsum(np.cumsum(gitter, axis=0, dtype=np.int32), axis=1,
+                      out=summen[1:, 1:])
+            self.summen = summen
+            self.summen_stand = stand
+        return self.summen
+
+    def fuer_maske(self, maske: np.ndarray):
+        schluessel = id(maske)
+        if schluessel not in self.masken:
+            self.masken[schluessel] = np.fft.rfft2(
+                maske[::-1, ::-1].astype(np.float64), s=self.form)
+        return self.masken[schluessel]
+
+
+def _freier_platz(gitter: np.ndarray, variante: dict, speicher: "_Suchspeicher",
+                  stand: int = 0, freie_zellen: int = -1):
     """
     Sucht die unterste, linkeste freie Position fuer eine Maske - ueberall auf
     der Tafel, auch innerhalb von Ausschnitten. Rueckgabe (zeile, spalte) oder None.
@@ -317,18 +380,35 @@ def _freier_platz(gitter: np.ndarray, variante: dict, zwischenspeicher: dict):
     g_zeilen, g_spalten = gitter.shape
     if m_zeilen > g_zeilen or m_spalten > g_spalten:
         return None
+    # Billige Vorpruefung: passt die Teileflaeche ueberhaupt noch?
+    if 0 <= freie_zellen < int(variante.get("zellen", 0)):
+        return None
 
-    form = _fft_form(gitter.shape, maske.shape)
-    schluessel = ("gitter", form)
-    if schluessel not in zwischenspeicher:
-        zwischenspeicher[schluessel] = np.fft.rfft2(gitter.astype(np.float64), s=form)
-    gitter_fft = zwischenspeicher[schluessel]
+    # 1. Grobfilter: Im Huellrechteck des Teils duerfen hoechstens so viele
+    #    Zellen belegt sein, dass die Zellen des Teils noch frei bleiben
+    #    koennen. Wo das nicht gilt, ist eine Ueberschneidung sicher.
+    summen = speicher.summentafel(gitter, stand)
+    belegt = (summen[m_zeilen:, m_spalten:] - summen[:-m_zeilen, m_spalten:]
+              - summen[m_zeilen:, :-m_spalten] + summen[:-m_zeilen, :-m_spalten])
+    moeglich = belegt <= (m_zeilen * m_spalten - int(variante["zellen"]))
+    anzahl = int(moeglich.sum())
+    if anzahl == 0:
+        return None
 
-    masken_schluessel = ("maske", id(maske), form)
-    if masken_schluessel not in zwischenspeicher:
-        zwischenspeicher[masken_schluessel] = np.fft.rfft2(
-            maske[::-1, ::-1].astype(np.float64), s=form)
-    masken_fft = zwischenspeicher[masken_schluessel]
+    # 2. Die Kandidaten von unten links her genau pruefen
+    if anzahl <= KANDIDATEN_GENAU:
+        zeilen, spalten = np.nonzero(moeglich)
+        for i in np.lexsort((spalten, zeilen)):
+            zeile, spalte = int(zeilen[i]), int(spalten[i])
+            if not (gitter[zeile:zeile + m_zeilen,
+                           spalte:spalte + m_spalten] & maske).any():
+                return zeile, spalte
+        return None                   # alle Kandidaten geprueft: kein Platz
+
+    # 3. Zu viele Kandidaten - dann lohnt die Faltung ueber die ganze Tafel
+    form = speicher.form
+    gitter_fft = speicher.fuer_gitter(gitter, stand)
+    masken_fft = speicher.fuer_maske(maske)
 
     korrelation = np.fft.irfft2(gitter_fft * masken_fft, s=form)
     bereich = korrelation[m_zeilen - 1:g_zeilen, m_spalten - 1:g_spalten]
@@ -341,7 +421,8 @@ def _freier_platz(gitter: np.ndarray, variante: dict, zwischenspeicher: dict):
     for i in reihenfolge[:40]:
         zeile, spalte = int(zeilen[i]), int(spalten[i])
         # Gegenprobe am echten Gitter (die FFT rechnet mit Gleitkommazahlen)
-        if not gitter[zeile:zeile + m_zeilen, spalte:spalte + m_spalten][maske].any():
+        if not (gitter[zeile:zeile + m_zeilen,
+                       spalte:spalte + m_spalten] & maske).any():
             return zeile, spalte
     return None
 
@@ -349,6 +430,14 @@ def _freier_platz(gitter: np.ndarray, variante: dict, zwischenspeicher: dict):
 # ==========================================================
 # 3. EINE TAFEL FUELLEN
 # ==========================================================
+
+
+# Hinweis zur Pruefung "liegt hier schon etwas?": Der Ausdruck
+#   (gitter[ausschnitt] & maske).any()
+# ist rund dreissigmal schneller als gitter[ausschnitt][maske].any() - die
+# Form mit eckigen Klammern baut erst eine Kopie aller Maskenzellen auf. Da
+# diese Pruefung der haeufigste Schritt im ganzen Verfahren ist, lohnt der
+# Unterschied sehr.
 
 
 def _bester_platz(gitter: np.ndarray, hoehenlinie: np.ndarray, variante: dict,
@@ -382,11 +471,12 @@ def _bester_platz(gitter: np.ndarray, hoehenlinie: np.ndarray, variante: dict,
     for spalte in reihenfolge:
         spalte = int(spalte)
         zeile = int(tiefste[spalte])
-        if gitter[zeile:zeile + m_zeilen, spalte:spalte + m_spalten][maske].any():
+        if (gitter[zeile:zeile + m_zeilen, spalte:spalte + m_spalten] & maske).any():
             continue                  # sollte nicht vorkommen, aber sicher ist sicher
         while zeile > 0:
             probe = zeile - 1
-            if gitter[probe:probe + m_zeilen, spalte:spalte + m_spalten][maske].any():
+            if (gitter[probe:probe + m_zeilen,
+                       spalte:spalte + m_spalten] & maske).any():
                 break
             zeile = probe
         verlust = float(np.sum(zeile + variante["unten"][belegt]
@@ -508,8 +598,19 @@ def _nachverdichten(gitter, hoehenlinie, rest, gesetzt) -> None:
     freie Stellen auf der ganzen Tafel, also auch in Ausschnitten und unter
     Ueberhaengen.
     """
-    zwischenspeicher: dict = {}
-    ohne_chance: set = set()          # Varianten, die auf dem aktuellen Gitter scheitern
+    varianten = [v for typ in rest if typ["offen"] > 0 for v in typ["varianten"]]
+    if not varianten:
+        return
+    groesste = (max(v["maske"].shape[0] for v in varianten),
+                max(v["maske"].shape[1] for v in varianten))
+    speicher = _Suchspeicher(gitter.shape, groesste)
+    # Auf dem Gitter kommt nur etwas hinzu, nie etwas weg: was einmal keinen
+    # Platz mehr findet, findet auch spaeter keinen. Diese Absagen gelten
+    # darum dauerhaft - frueher wurden sie nach jedem Teil verworfen und
+    # dieselbe teure Suche wieder und wieder gerechnet.
+    ohne_chance: set = set()
+    stand = 0
+    freie_zellen = int(gitter.size - gitter.sum())
 
     weiter = True
     while weiter:
@@ -521,7 +622,8 @@ def _nachverdichten(gitter, hoehenlinie, rest, gesetzt) -> None:
                 for variante in typ["varianten"]:
                     if id(variante) in ohne_chance:
                         continue
-                    platz = _freier_platz(gitter, variante, zwischenspeicher)
+                    platz = _freier_platz(gitter, variante, speicher, stand,
+                                          freie_zellen)
                     if platz is None:
                         ohne_chance.add(id(variante))
                         continue
@@ -533,8 +635,8 @@ def _nachverdichten(gitter, hoehenlinie, rest, gesetzt) -> None:
                 _setze(gitter, hoehenlinie, gewaehlt, zeile, spalte)
                 gesetzt.append((typ["index"], gewaehlt, zeile, spalte))
                 typ["offen"] -= 1
-                zwischenspeicher.clear()      # Gitter hat sich geaendert
-                ohne_chance.clear()
+                stand += 1                    # Gitter hat sich geaendert
+                freie_zellen -= int(gewaehlt["zellen"])
                 weiter = True
 
 
@@ -553,6 +655,7 @@ def optimize_2d_kontur(
     versuche: int = 3,
     nachverdichten: bool = True,
     mindestens_bbox: bool = True,
+    verdichten: bool = True,
 ) -> Ergebnis2D:
     """
     Konturnesting: schachtelt Teile anhand ihrer echten Kontur.
@@ -565,6 +668,9 @@ def optimize_2d_kontur(
     versuche    Anzahl durchprobierter Bewertungsstrategien (1 bis 5)
     nachverdichten  zweiter Durchgang, der Ausschnitte und Taschen unter
                 Ueberhaengen mitbenutzt (etwas langsamer)
+    verdichten  nach jeder Tafel die Teile mit der echten Geometrie
+                nachruecken (die Rasterluft wegnehmen) und den gewonnenen
+                Platz noch einmal anbieten
     mindestens_bbox  zusaetzlich das schnelle Bounding-Box-Nesting rechnen und
                 dessen Ergebnis nehmen, falls es weniger Tafeln braucht. Damit
                 ist das Konturnesting nie schlechter als das einfache Verfahren.
@@ -617,14 +723,14 @@ def optimize_2d_kontur(
 
         _nest_material(material, m_teile, m_tafeln, raster, aufweitung, besaeumung,
                        winkel, versuche, nachverdichten, mindestens_bbox,
-                       saegeblatt, ergebnis)
+                       saegeblatt, ergebnis, verdichten)
 
     return ergebnis
 
 
 def _nest_material(material, m_teile, m_tafeln, raster, aufweitung, besaeumung,
                    winkel, versuche, nachverdichten, mindestens_bbox, saegeblatt,
-                   ergebnis: Ergebnis2D) -> None:
+                   ergebnis: Ergebnis2D, verdichten: bool = True) -> None:
     """Nestet ein einzelnes Material (Hilfsfunktion von optimize_2d_kontur)."""
     typen = []
     for nr, teil in enumerate(m_teile):
@@ -644,7 +750,9 @@ def _nest_material(material, m_teile, m_tafeln, raster, aufweitung, besaeumung,
     bestes_ergebnis = None
     for strategie in STRATEGIEN[:max(1, min(int(versuche), len(STRATEGIEN)))]:
         plaene, offen = _laufe_durch(typen, m_tafeln, raster, besaeumung, material,
-                                     strategie, nachverdichten)
+                                     strategie, nachverdichten,
+                                     saegeblatt=saegeblatt, aufweitung=aufweitung,
+                                     verdichten=verdichten)
         # Reihenfolge der Kriterien: erst moeglichst alles unterbringen,
         # dann moeglichst wenige Tafeln, dann die vollere Tafel.
         bewertung = (sum(offen.values()), len(plaene),
@@ -695,7 +803,8 @@ def _ergaenze_kontur(platzierung: Platzierung2D) -> None:
 
 
 def _laufe_durch(typen, m_tafeln, raster, besaeumung, material, strategie,
-                 nachverdichten=True):
+                 nachverdichten=True, saegeblatt: float = 0.0,
+                 aufweitung: int = 0, verdichten: bool = True):
     """Fuellt so lange Tafeln, bis nichts mehr platzierbar ist."""
     lager = [{"tafel": t, "offen": t.anzahl} for t in m_tafeln]
     lager.sort(key=lambda l: l["tafel"].breite * l["tafel"].hoehe)
@@ -755,9 +864,376 @@ def _laufe_durch(typen, m_tafeln, raster, besaeumung, material, strategie,
                 versatz=variante["versatz"],
             ))
 
-        plaene.append(plan)
+        # Rasterluft wegnehmen - und den gewonnenen Platz gleich noch einmal
+        # anbieten. Oft geht dadurch noch ein Teil mit auf die Tafel.
         offen = dict(verbleibend)
+        if verdichten:
+            _verdichte_tafel(plan, nach_index, offen, raster, aufweitung,
+                             besaeumung, saegeblatt)
+
+        plaene.append(plan)
         if pos["offen"] is not None:
             pos["offen"] -= 1
 
     return plaene, offen
+
+
+# ==========================================================
+# 6. NACHRUECKEN: DIE RASTERLUFT WEGNEHMEN
+# ==========================================================
+# Das Schachteln rechnet im Raster. Dadurch steht jedes Teil bis zu eine
+# Rasterzelle weiter vom Nachbarn weg als noetig - bei 5 mm Raster also bis zu
+# 5 mm je Seite, bei schiefen Kanten noch mehr. Hier wird jedes Teil mit der
+# echten Geometrie so weit nachgerueckt, bis es genau die Schnittfuge zum
+# Nachbarn einhaelt. Das macht den Plan dichter und das Restblech groesser.
+
+NACHRUECK_SCHRITTE = (16.0, 8.0, 4.0, 2.0, 1.0, 0.5)
+
+
+def _segmente_von(ringe: list) -> tuple:
+    """Alle Kanten eines Teils als Felder (ax, ay, bx, by)."""
+    ax, ay, bx, by = [], [], [], []
+    for ring in ringe:
+        n = len(ring)
+        for i in range(n):
+            a, b = ring[i], ring[(i + 1) % n]
+            ax.append(a[0]); ay.append(a[1]); bx.append(b[0]); by.append(b[1])
+    return (np.array(ax), np.array(ay), np.array(bx), np.array(by))
+
+
+def _punkt_in_ringen(punkt, ringe: list) -> bool:
+    """Even-odd-Regel ueber alle Ringe - Ausschnitte zaehlen als aussen."""
+    x, y = punkt
+    drin = False
+    for ring in ringe:
+        n = len(ring)
+        for i in range(n):
+            x1, y1 = ring[i]
+            x2, y2 = ring[(i + 1) % n]
+            if (y1 > y) != (y2 > y):
+                if x < x1 + (y - y1) * (x2 - x1) / (y2 - y1):
+                    drin = not drin
+    return drin
+
+
+def _kantenabstand(sa: tuple, sb: tuple) -> float:
+    """
+    Kleinster Abstand zwischen zwei Kantenmengen (alle Paare auf einmal).
+
+    Achtung: Der Abstand ueber die vier Endpunkte allein genuegt nicht - zwei
+    sich kreuzende Kanten (wie ein Pluszeichen) haben Abstand 0, obwohl kein
+    Endpunkt nahe der anderen Kante liegt. Darum wird zuerst auf Kreuzung
+    geprueft.
+    """
+    a1x, a1y, a2x, a2y = (v[:, None] for v in sa)
+    b1x, b1y, b2x, b2y = (v[None, :] for v in sb)
+
+    def seite(px, py, qx, qy, rx, ry):
+        return (qx - px) * (ry - py) - (qy - py) * (rx - px)
+
+    d1 = seite(b1x, b1y, b2x, b2y, a1x, a1y)
+    d2 = seite(b1x, b1y, b2x, b2y, a2x, a2y)
+    d3 = seite(a1x, a1y, a2x, a2y, b1x, b1y)
+    d4 = seite(a1x, a1y, a2x, a2y, b2x, b2y)
+    if np.any((d1 * d2 < 0) & (d3 * d4 < 0)):
+        return 0.0
+
+    def punkt_zu_strecke(px, py, qx, qy, rx, ry):
+        dx, dy = rx - qx, ry - qy
+        laenge2 = dx * dx + dy * dy
+        with np.errstate(invalid="ignore", divide="ignore"):
+            t = np.where(laenge2 > 1e-12,
+                         ((px - qx) * dx + (py - qy) * dy) / np.where(laenge2 > 1e-12,
+                                                                      laenge2, 1.0),
+                         0.0)
+        t = np.clip(t, 0.0, 1.0)
+        return np.hypot(px - (qx + t * dx), py - (qy + t * dy))
+
+    abstand = np.minimum(
+        np.minimum(punkt_zu_strecke(a1x, a1y, b1x, b1y, b2x, b2y),
+                   punkt_zu_strecke(a2x, a2y, b1x, b1y, b2x, b2y)),
+        np.minimum(punkt_zu_strecke(b1x, b1y, a1x, a1y, a2x, a2y),
+                   punkt_zu_strecke(b2x, b2y, a1x, a1y, a2x, a2y)))
+    return float(abstand.min()) if abstand.size else float("inf")
+
+
+def _zu_nah(ringe_a: list, ringe_b: list, sa: tuple, sb: tuple,
+            mindest: float) -> bool:
+    """
+    Liegen zwei Teile naeher beieinander als 'mindest'?
+
+    Schneller als der genaue Abstand, weil nur die Frage zaehlt: Zuerst werden
+    die Kantenpaare ueber ihre Huellen vorsortiert - nur die wenigen, die
+    ueberhaupt nahe genug liegen koennen, werden genau gerechnet. Beim
+    Nachruecken ist das der haeufigste Schritt ueberhaupt.
+    """
+    if _punkt_in_ringen(ringe_a[0][0], ringe_b) or _punkt_in_ringen(ringe_b[0][0],
+                                                                    ringe_a):
+        return True
+
+    a1x, a1y, a2x, a2y = (v[:, None] for v in sa)
+    b1x, b1y, b2x, b2y = (v[None, :] for v in sb)
+
+    # Kreuzen sich zwei Kanten, liegt der Abstand bei 0
+    def seite(px, py, qx, qy, rx, ry):
+        return (qx - px) * (ry - py) - (qy - py) * (rx - px)
+
+    d1 = seite(b1x, b1y, b2x, b2y, a1x, a1y)
+    d2 = seite(b1x, b1y, b2x, b2y, a2x, a2y)
+    d3 = seite(a1x, a1y, a2x, a2y, b1x, b1y)
+    d4 = seite(a1x, a1y, a2x, a2y, b2x, b2y)
+    if np.any((d1 * d2 < 0) & (d3 * d4 < 0)):
+        return True
+
+    # Vorauswahl ueber die Huellen der Kanten
+    axmin = np.minimum(a1x, a2x); axmax = np.maximum(a1x, a2x)
+    aymin = np.minimum(a1y, a2y); aymax = np.maximum(a1y, a2y)
+    bxmin = np.minimum(b1x, b2x); bxmax = np.maximum(b1x, b2x)
+    bymin = np.minimum(b1y, b2y); bymax = np.maximum(b1y, b2y)
+    dx = np.maximum(0.0, np.maximum(axmin - bxmax, bxmin - axmax))
+    dy = np.maximum(0.0, np.maximum(aymin - bymax, bymin - aymax))
+    nah = (dx * dx + dy * dy) < mindest * mindest
+    if not nah.any():
+        return False
+
+    i, k = np.nonzero(nah)
+    av = tuple(v[i] for v in sa)
+    bv = tuple(v[k] for v in sb)
+    return _abstand_paare(av, bv) < mindest
+
+
+def _abstand_paare(sa: tuple, sb: tuple) -> float:
+    """Kleinster Abstand einander zugeordneter Kantenpaare."""
+    a1x, a1y, a2x, a2y = sa
+    b1x, b1y, b2x, b2y = sb
+
+    def punkt_zu_strecke(px, py, qx, qy, rx, ry):
+        dx, dy = rx - qx, ry - qy
+        laenge2 = dx * dx + dy * dy
+        sicher = np.where(laenge2 > 1e-12, laenge2, 1.0)
+        t = np.clip(((px - qx) * dx + (py - qy) * dy) / sicher, 0.0, 1.0)
+        return np.hypot(px - (qx + t * dx), py - (qy + t * dy))
+
+    werte = np.minimum(
+        np.minimum(punkt_zu_strecke(a1x, a1y, b1x, b1y, b2x, b2y),
+                   punkt_zu_strecke(a2x, a2y, b1x, b1y, b2x, b2y)),
+        np.minimum(punkt_zu_strecke(b1x, b1y, a1x, a1y, a2x, a2y),
+                   punkt_zu_strecke(b2x, b2y, a1x, a1y, a2x, a2y)))
+    return float(werte.min()) if werte.size else float("inf")
+
+
+def _teile_abstand(ringe_a: list, ringe_b: list, sa: tuple, sb: tuple) -> float:
+    """
+    Abstand zweier Teile - 0, wenn sie sich ueberschneiden oder eines im
+    anderen liegt.
+    """
+    if _punkt_in_ringen(ringe_a[0][0], ringe_b) or _punkt_in_ringen(ringe_b[0][0],
+                                                                    ringe_a):
+        return 0.0
+    return _kantenabstand(sa, sb)
+
+
+def _huelle_von(ringe: list) -> tuple:
+    xs = [p[0] for ring in ringe for p in ring]
+    ys = [p[1] for ring in ringe for p in ring]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _gitter_aus_plan(plan, raster: float, besaeumung: float,
+                    aufweitung: int) -> np.ndarray:
+    """
+    Baut das Rastergitter einer Tafel aus den tatsaechlichen Lagen der Teile.
+
+    Nach dem Nachruecken liegen die Teile nicht mehr auf Rasterpunkten. Darum
+    wird jedes Teil an seiner echten Stelle neu gerastert - der Versatz
+    innerhalb der Zelle geht dabei mit ein, damit die Maske das Teil wie
+    gewohnt vollstaendig ueberdeckt.
+    """
+    g_spalten = int(math.floor((plan.breite - 2 * besaeumung) / raster + 1e-9))
+    g_zeilen = int(math.floor((plan.hoehe - 2 * besaeumung) / raster + 1e-9))
+    gitter = np.zeros((max(g_zeilen, 1), max(g_spalten, 1)), dtype=bool)
+
+    for p in plan.platzierungen:
+        ringe = p.welt_kontur()
+        if not ringe:
+            continue
+        x0 = min(x for ring in ringe for x, _ in ring) - besaeumung
+        y0 = min(y for ring in ringe for _, y in ring) - besaeumung
+        spalte0 = int(math.floor(x0 / raster))
+        zeile0 = int(math.floor(y0 / raster))
+        dx, dy = x0 - spalte0 * raster, y0 - zeile0 * raster
+        lokal = [[(x - besaeumung - x0 + dx, y - besaeumung - y0 + dy)
+                  for x, y in ring] for ring in ringe]
+        maske = weite_auf(rastere_kontur(lokal, raster, rand=aufweitung), aufweitung)
+        z = zeile0 - aufweitung
+        s = spalte0 - aufweitung
+        # Ueberstand an den Raendern abschneiden
+        mz0 = max(0, -z)
+        ms0 = max(0, -s)
+        mz1 = min(maske.shape[0], gitter.shape[0] - z)
+        ms1 = min(maske.shape[1], gitter.shape[1] - s)
+        if mz1 <= mz0 or ms1 <= ms0:
+            continue
+        gitter[z + mz0:z + mz1, s + ms0:s + ms1] |= maske[mz0:mz1, ms0:ms1]
+    return gitter
+
+
+def _verdichte_tafel(plan, nach_index: dict, offen: dict, raster: float,
+                     aufweitung: int, besaeumung: float, saegeblatt: float,
+                     runden: int = 2) -> int:
+    """
+    Nachruecken und den gewonnenen Platz gleich noch einmal anbieten.
+
+    Rueckgabe: Anzahl der Teile, die dadurch zusaetzlich auf die Tafel passen.
+    """
+    zusaetzlich = 0
+    for _ in range(max(runden, 1)):
+        bewegt = nachruecken(plan, saegeblatt, besaeumung)
+        if not any(offen.values()):
+            break
+        if bewegt < 0.5 and zusaetzlich == 0 and _ > 0:
+            break
+
+        gitter = _gitter_aus_plan(plan, raster, besaeumung, aufweitung)
+        varianten = [v for index, menge in offen.items() if menge > 0
+                     for v in nach_index[index]["varianten"]]
+        if not varianten:
+            break
+        groesste = (max(v["maske"].shape[0] for v in varianten),
+                    max(v["maske"].shape[1] for v in varianten))
+        speicher = _Suchspeicher(gitter.shape, groesste)
+        stand = 0
+        ohne_chance: set = set()
+        neu = 0
+
+        weiter = True
+        while weiter:
+            weiter = False
+            for index in list(offen):
+                while offen[index] > 0:
+                    gewaehlt = platz = None
+                    for variante in nach_index[index]["varianten"]:
+                        if id(variante) in ohne_chance:
+                            continue
+                        platz = _freier_platz(gitter, variante, speicher, stand)
+                        if platz is None:
+                            ohne_chance.add(id(variante))
+                            continue
+                        gewaehlt = variante
+                        break
+                    if platz is None:
+                        break
+                    zeile, spalte = platz
+                    _setze_maske(gitter, gewaehlt["maske"], zeile, spalte)
+                    stand += 1
+                    teil = nach_index[index]["teil"]
+                    rand = int(gewaehlt.get("rand", 0))
+                    plan.platzierungen.append(Platzierung2D(
+                        bezeichnung=teil.bezeichnung,
+                        x=besaeumung + (spalte + rand) * raster,
+                        y=besaeumung + (zeile + rand) * raster,
+                        breite=gewaehlt["breite"], hoehe=gewaehlt["hoehe"],
+                        gedreht=abs(gewaehlt["winkel"] - 90.0) < 1e-9,
+                        kontur=_kontur_von(teil), stichlinien=teil.stichlinien,
+                        winkel=gewaehlt["winkel"], versatz=gewaehlt["versatz"]))
+                    offen[index] -= 1
+                    neu += 1
+                    weiter = True
+        zusaetzlich += neu
+        if neu == 0:
+            break
+    return zusaetzlich
+
+
+def _setze_maske(gitter: np.ndarray, maske: np.ndarray, zeile: int,
+                 spalte: int) -> None:
+    gitter[zeile:zeile + maske.shape[0],
+           spalte:spalte + maske.shape[1]] |= maske
+
+
+def nachruecken(plan, saegeblatt: float, besaeumung: float = 0.0,
+                runden: int = 2) -> float:
+    """
+    Rueckt alle Teile einer Tafel so dicht zusammen, wie die Schnittfuge es
+    zulaesst - erst nach unten, dann nach links.
+
+    Gerechnet wird mit der echten Kontur, nicht im Raster: der Abstand zum
+    Nachbarn wird exakt gemessen und nie kleiner als 'saegeblatt'. Das Teil
+    wird nur verschoben, nie gedreht; die Plaene bleiben also gueltig.
+
+    Rueckgabe: wie weit insgesamt nachgerueckt wurde (mm).
+    """
+    teile = list(plan.platzierungen)
+    if not teile:
+        return 0.0
+
+    # Je Teil einmal die Grundgeometrie (ohne Tafelposition) aufbauen. Beim
+    # Probieren wird davon nur noch der Versatz addiert - das ist um ein
+    # Vielfaches billiger, als die Punktlisten jedes Mal neu zu bauen.
+    grund_ringe, grund_segmente, grund_huelle = [], [], []
+    for p in teile:
+        ringe = [[(x - p.x, y - p.y) for x, y in ring] for ring in p.welt_kontur()]
+        if not ringe:
+            ringe = [[(0.0, 0.0)]]
+        grund_ringe.append(ringe)
+        grund_segmente.append(_segmente_von(ringe))
+        grund_huelle.append(_huelle_von(ringe))
+
+    lage = [(p.x, p.y) for p in teile]
+
+    def huelle_bei(i, x, y):
+        x0, y0, x1, y1 = grund_huelle[i]
+        return x0 + x, y0 + y, x1 + x, y1 + y
+
+    def segmente_bei(i, x, y):
+        ax, ay, bx, by = grund_segmente[i]
+        return ax + x, ay + y, bx + x, by + y
+
+    def ringe_bei(i, x, y):
+        return [[(px + x, py + y) for px, py in ring] for ring in grund_ringe[i]]
+
+    gewonnen = 0.0
+
+    def frei(i, x, y) -> bool:
+        x0, y0, x1, y1 = huelle_bei(i, x, y)
+        if (x0 < besaeumung - 1e-6 or y0 < besaeumung - 1e-6
+                or x1 > plan.breite - besaeumung + 1e-6
+                or y1 > plan.hoehe - besaeumung + 1e-6):
+            return False
+        meine_segmente = None
+        meine_ringe = None
+        for k in range(len(teile)):
+            if k == i:
+                continue
+            kx0, ky0, kx1, ky1 = huelle_bei(k, *lage[k])
+            if (x0 > kx1 + saegeblatt or kx0 > x1 + saegeblatt
+                    or y0 > ky1 + saegeblatt or ky0 > y1 + saegeblatt):
+                continue                      # weit genug weg, nicht rechnen
+            if meine_segmente is None:
+                meine_segmente = segmente_bei(i, x, y)
+                meine_ringe = ringe_bei(i, x, y)
+            if _zu_nah(meine_ringe, ringe_bei(k, *lage[k]), meine_segmente,
+                       segmente_bei(k, *lage[k]), saegeblatt - 1e-6):
+                return False
+        return True
+
+    for _ in range(max(runden, 1)):
+        bewegt = 0.0
+        # von unten links her, damit die Luecken nach unten durchgereicht werden
+        for i in sorted(range(len(teile)), key=lambda k: (lage[k][1], lage[k][0])):
+            for richtung in ((0.0, -1.0), (-1.0, 0.0)):
+                for schritt in NACHRUECK_SCHRITTE:
+                    while True:
+                        x = lage[i][0] + richtung[0] * schritt
+                        y = lage[i][1] + richtung[1] * schritt
+                        if not frei(i, x, y):
+                            break
+                        lage[i] = (x, y)
+                        bewegt += schritt
+        gewonnen += bewegt
+        if bewegt < 0.5:
+            break
+
+    for p, (x, y) in zip(teile, lage):
+        p.x, p.y = x, y
+    return gewonnen
