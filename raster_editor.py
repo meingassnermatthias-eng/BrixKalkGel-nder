@@ -36,8 +36,12 @@ def typenliste(eintraege) -> list:
             name = str(eintrag.get("name", "")).strip()
             farbe_name = str(eintrag.get("farbe_name", "")).strip()
             material = str(eintrag.get("material", "")).strip()
+            tafel_breite = _zahl(eintrag.get("tafel_breite"))
+            tafel_hoehe = _zahl(eintrag.get("tafel_hoehe"))
+            preis = _zahl(eintrag.get("preis"))
         else:
             name, farbe_name, material = str(eintrag).strip(), "", ""
+            tafel_breite = tafel_hoehe = preis = 0.0
         if not name or name in gesehen:
             continue
         gesehen.add(name)
@@ -46,11 +50,24 @@ def typenliste(eintraege) -> list:
             "farbe": farbe_nach_name(farbe_name, FARBEN[len(typen) % len(FARBEN)]),
             "farbe_name": farbe_name,
             "material": material,
+            "tafel_breite": tafel_breite,
+            "tafel_hoehe": tafel_hoehe,
+            "preis": preis,
         })
     if not typen:
-        typen = [{"name": STANDARDTYP, "farbe": FARBEN[0],
-                  "farbe_name": "", "material": ""}]
+        typen = [{"name": STANDARDTYP, "farbe": FARBEN[0], "farbe_name": "",
+                  "material": "", "tafel_breite": 0.0, "tafel_hoehe": 0.0,
+                  "preis": 0.0}]
     return typen
+
+
+def _zahl(wert) -> float:
+    """Zahl aus der Tabelle; leer oder unbrauchbar ergibt 0."""
+    try:
+        zahl = float(wert)
+    except (TypeError, ValueError):
+        return 0.0
+    return 0.0 if zahl != zahl or zahl < 0 else zahl      # zahl != zahl = NaN
 
 
 def daten_fuer(felder: list, typen: list) -> dict:

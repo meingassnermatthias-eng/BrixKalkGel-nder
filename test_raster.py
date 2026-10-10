@@ -411,10 +411,15 @@ pruefe(sum(p.anzahl for p in anthrazit) == 3 and sum(p.anzahl for p in silber) =
        f"3 anthrazit, 2 silber (hier {sum(p.anzahl for p in anthrazit)}/"
        f"{sum(p.anzahl for p in silber)})")
 
-typen = [{"name": "Anthrazit", "farbe_name": "Schwarz", "material": "Alucobond anthrazit"},
+typen = [{"name": "Anthrazit", "farbe_name": "Schwarz",
+          "material": "Alucobond anthrazit",
+          "tafel_breite": 1500.0, "tafel_hoehe": 3200.0},
          {"name": "Silber", "farbe_name": "Grau", "material": "Alucobond silber"}]
 uebersicht = r.typ_uebersicht(positionen_typ, typen)
 pruefe(len(uebersicht) == 2, "Uebersicht hat eine Zeile je Typ")
+pruefe(uebersicht[0]["Tafel"] == "1500 x 3200",
+       f"das Tafelformat des Typs steht in der Uebersicht ({uebersicht[0]['Tafel']})")
+pruefe(uebersicht[1]["Tafel"] == "", "ohne eigenes Tafelmass bleibt die Spalte leer")
 pruefe({z["Plattentyp"]: z["Platten"] for z in uebersicht}
        == {"Anthrazit": 3, "Silber": 2}, "Stueckzahlen je Typ stimmen")
 pruefe(uebersicht[0]["Material"] == "Alucobond anthrazit",

@@ -1159,10 +1159,13 @@ def typ_uebersicht(positionen: list, typen: list | None = None) -> list:
     zeilen = []
     for typ in sorted(zusammen, key=lambda t: -zusammen[t]["flaeche"]):
         angabe = angaben.get(typ, {})
+        breite = float(angabe.get("tafel_breite") or 0)
+        hoehe = float(angabe.get("tafel_hoehe") or 0)
         zeilen.append({
             "Plattentyp": typ,
             "Farbe": angabe.get("farbe_name", ""),
             "Material": angabe.get("material", ""),
+            "Tafel": f"{breite:.0f} x {hoehe:.0f}" if breite and hoehe else "",
             "Positionen": zusammen[typ]["positionen"],
             "Platten": zusammen[typ]["stueck"],
             "Fläche (m²)": round(zusammen[typ]["flaeche"] / 1e6, 2),

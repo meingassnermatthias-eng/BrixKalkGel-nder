@@ -78,9 +78,20 @@ Fensteröffnung hin bleibt die Fuge erhalten. Die **Zugabe je Seite** schlägt
 danach wieder auf – zum Beispiel die Aufkantung einer Kassette:
 Sichtmaß + 2 × Zugabe = Zuschnitt.
 
-**Plattentypen.** Eine Tabelle mit einer Zeile je Plattenart – meist je Farbe:
-*Plattentyp* (Name, z. B. „RAL 7016 anthrazit“), *Farbe im Plan* (nur die
-Darstellung) und *Material* (kommt in die Teileliste).
+**Plattentypen und ihre Tafeln.** Eine Tabelle mit einer Zeile je Plattenart –
+meist je Farbe:
+
+| Spalte | Bedeutung |
+|---|---|
+| Plattentyp | Name, z. B. „RAL 7016 anthrazit“ |
+| Farbe im Plan | nur die Darstellung in Ansicht, Montageplan und DXF |
+| Material | kommt in die Teileliste; leer = der Typname gilt als Material |
+| Tafel Breite / Höhe | aus welcher Rohtafel dieser Typ geschnitten wird |
+| Preis/Tafel | netto je Rohtafel |
+
+Beim Übernehmen legt das Programm zu jedem Typ genau diese Tafel an; bleibt
+das Maß leer, gilt das Format der ersten Tafel aus Schritt ③. So bekommt jede
+Farbe ihr eigenes Format – anthrazit 1500 × 3200, silber 2000 × 4000.
 
 **Felder zuordnen.** Jedes Feld bekommt mit dem Pinsel einen dieser Typen oder
 wird als **Öffnung** weggeklickt. Anklicken oder mit gedrückter Maustaste über

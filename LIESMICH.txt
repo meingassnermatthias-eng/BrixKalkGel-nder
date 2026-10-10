@@ -46,9 +46,11 @@ DER ABLAUF - VIER SCHRITTE
      und Zeilenmasse eintippen) oder aus einer DXF-Ansicht
      holen. Dann in der Ansicht die Felder anklicken:
      Plattentyp vergeben oder Fenster wegklicken.
-     In der Tabelle "Plattentypen" steht eine Zeile je
-     Plattenart - meist je Farbe - mit eigener Farbe im
-     Plan und eigenem Material. Gleich grosse Platten
+     In der Tabelle "Plattentypen und ihre Tafeln" steht
+     eine Zeile je Plattenart - meist je Farbe - mit
+     eigener Farbe im Plan, eigenem Material, eigenem
+     Tafelformat und Preis je Tafel. Diese Tafel legt das
+     Programm beim Uebernehmen gleich mit an. Gleich grosse Platten
      verschiedener Farbe bleiben getrennte Positionen und
      landen nie auf derselben Tafel - das Programm legt
      dafuer zu jeder Farbe eine Tafel an.

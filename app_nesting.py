@@ -149,10 +149,13 @@ SPALTEN_TEILE = ["Bezeichnung", "Breite (mm)", "Höhe (mm)", "Anzahl", "Material
                  "Drehbar", "Kontur"]
 SPALTEN_TAFELN = ["Bezeichnung", "Breite (mm)", "Höhe (mm)", "Anzahl", "Material",
                   "Preis (€)"]
-SPALTEN_TYPEN = ["Plattentyp", "Farbe im Plan", "Material"]
+SPALTEN_TYPEN = ["Plattentyp", "Farbe im Plan", "Material",
+                 "Tafel Breite (mm)", "Tafel Höhe (mm)", "Preis/Tafel (€)"]
 
 BEISPIEL_TYPEN = pd.DataFrame(
-    [{"Plattentyp": "Standard", "Farbe im Plan": "Blau", "Material": ""}],
+    [{"Plattentyp": "Standard", "Farbe im Plan": "Blau", "Material": "",
+      "Tafel Breite (mm)": float("nan"), "Tafel Höhe (mm)": float("nan"),
+      "Preis/Tafel (€)": float("nan")}],
     columns=SPALTEN_TYPEN)
 
 BEISPIEL_TEILE = pd.DataFrame([
@@ -609,53 +612,73 @@ with schritt_raster:
                 help="Aus: am Außenrand geht die Platte bis zur Rasterlinie. "
                      "Ein: auch dort die halbe Fuge abziehen.")
 
-            t1, t2 = st.columns([3, 2])
-            with t1:
-                st.markdown("**Plattentypen**")
-                st.caption("Eine Zeile je Plattenart – zum Beispiel je Farbe. "
-                           "Jeder Typ bekommt sein eigenes Material und wird "
-                           "im Plan eigens eingefärbt. Zeile anhängen: in die "
-                           "letzte, leere Zeile schreiben.")
-                tabelle("raster_typen", num_rows="dynamic", hide_index=True,
-                        **BREITE,
-                        column_config={
-                            "Plattentyp": st.column_config.TextColumn(
-                                width="medium",
-                                help="z. B. „RAL 7016 anthrazit“ oder „Lochblech“"),
-                            "Farbe im Plan": st.column_config.SelectboxColumn(
-                                options=list(FARBNAMEN), width="small",
-                                help="Nur die Darstellung in Ansicht, "
-                                     "Montageplan und DXF"),
-                            "Material": st.column_config.TextColumn(
-                                width="medium",
-                                help="Wird beim Übernehmen in die Teileliste "
-                                     "eingetragen, z. B. „Alucobond 4 mm“"),
-                        })
-            with t2:
-                modus = st.selectbox(
-                    "Gleichteile erkennen", list(raster.MODI),
-                    format_func=lambda m: raster.MODI[m], key="raster_modus",
-                    help="Gedreht und gespiegelt nur, wenn Sichtseite und "
-                         "Walzrichtung es zulassen.")
-                faerbung = st.radio(
-                    "Ansicht einfärben nach", ["Position", "Plattentyp"],
-                    key="raster_faerbung",
-                    help="Nach Position zeigt die Ansicht die Gleichteile, "
-                         "nach Plattentyp die Farbaufteilung der Fassade.")
-                if st.button("Typ auf alle Felder", key="btn_typ_alle", **BREITE,
-                             help="Setzt den ersten Plattentyp auf alle Felder "
-                                  "(Öffnungen bleiben Öffnungen)"):
-                    st.session_state.raster_typ_auf_alle = True
-                    st.rerun()
+            st.markdown("**Plattentypen und ihre Tafeln**")
+            st.caption("Eine Zeile je Plattenart – meist je Farbe. Hier steht "
+                       "auch, **aus welcher Tafel** dieser Typ geschnitten wird; "
+                       "beim Übernehmen legt das Programm diese Tafel an. "
+                       "Tafelmaß leer = es gelten die Tafeln aus Schritt ③. "
+                       "Zeile anhängen: in die letzte, leere Zeile schreiben.")
+            tabelle("raster_typen", num_rows="dynamic", hide_index=True,
+                    **BREITE,
+                    column_config={
+                        "Plattentyp": st.column_config.TextColumn(
+                            width="medium",
+                            help="z. B. „RAL 7016 anthrazit“ oder „Lochblech“"),
+                        "Farbe im Plan": st.column_config.SelectboxColumn(
+                            options=list(FARBNAMEN), width="small",
+                            help="Nur die Darstellung in Ansicht, Montageplan "
+                                 "und DXF"),
+                        "Material": st.column_config.TextColumn(
+                            width="medium",
+                            help="Wird beim Übernehmen in die Teileliste "
+                                 "eingetragen, z. B. „Alucobond 4 mm“. "
+                                 "Leer = der Typname gilt als Material."),
+                        "Tafel Breite (mm)": st.column_config.NumberColumn(
+                            min_value=0.0, step=10.0, format="%.0f",
+                            width="small",
+                            help="Rohtafel für diesen Typ, z. B. 1500"),
+                        "Tafel Höhe (mm)": st.column_config.NumberColumn(
+                            min_value=0.0, step=10.0, format="%.0f",
+                            width="small", help="z. B. 3200"),
+                        "Preis/Tafel (€)": st.column_config.NumberColumn(
+                            min_value=0.0, step=1.0, format="%.2f",
+                            width="small",
+                            help="Netto je Rohtafel – für die Kosten im Plan"),
+                    })
+            st.caption("Übliche Formate: "
+                       + " · ".join(f"{b:.0f} × {h:.0f}"
+                                    for b, h in dict.fromkeys(TAFEL_VORLAGEN.values())))
+
+            t1, t2, t3 = st.columns([2, 2, 1])
+            modus = t1.selectbox(
+                "Gleichteile erkennen", list(raster.MODI),
+                format_func=lambda m: raster.MODI[m], key="raster_modus",
+                help="Gedreht und gespiegelt nur, wenn Sichtseite und "
+                     "Walzrichtung es zulassen.")
+            faerbung = t2.radio(
+                "Ansicht einfärben nach", ["Position", "Plattentyp"],
+                horizontal=True, key="raster_faerbung",
+                help="Nach Position zeigt die Ansicht die Gleichteile, nach "
+                     "Plattentyp die Farbaufteilung der Fassade.")
+            t3.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            if t3.button("Typ auf alle Felder", key="btn_typ_alle", **BREITE,
+                         help="Setzt den ersten Plattentyp auf alle Felder "
+                              "(Öffnungen bleiben Öffnungen)"):
+                st.session_state.raster_typ_auf_alle = True
+                st.rerun()
 
             typen = raster_editor.typenliste([
                 {"name": z["Plattentyp"], "farbe_name": z["Farbe im Plan"],
-                 "material": z["Material"]}
-                for _, z in stand("raster_typen").fillna("").iterrows()
-                if str(z["Plattentyp"]).strip()])
+                 "material": z["Material"],
+                 "tafel_breite": zahl(z.get("Tafel Breite (mm)")),
+                 "tafel_hoehe": zahl(z.get("Tafel Höhe (mm)")),
+                 "preis": zahl(z.get("Preis/Tafel (€)"))}
+                for _, z in stand("raster_typen").iterrows()
+                if str(z["Plattentyp"] or "").strip()])
+            typ_tafel = {t["name"]: (t["tafel_breite"], t["tafel_hoehe"], t["preis"])
+                         for t in typen}
             typ_farbe = {t["name"]: t["farbe"] for t in typen}
             typ_farbname = {t["name"]: t["farbe_name"] for t in typen}
-            typ_material = {t["name"]: t["material"] for t in typen}
 
             if st.session_state.pop("raster_typ_auf_alle", False):
                 for feld_eintrag in felder:
@@ -735,16 +758,21 @@ with schritt_raster:
             # ohne eigenes Material bekommt darum seinen Namen als Material -
             # sonst laegen zwei Farben auf derselben Tafel.
             material = raster.material_je_typ(typen)
-            ohne_material = sorted(typ for typ, wert in typ_material.items()
-                                   if not wert.strip()
-                                   and typ in {p.typ for p in positionen})
+            benutzte_typen = {p.typ for p in positionen}
+            ohne_material = sorted(t["name"] for t in typen
+                                   if not t["material"].strip()
+                                   and t["name"] in benutzte_typen)
             if ohne_material and len(material) > 1:
                 st.caption("Ohne Materialangabe tragen diese Typen ihren Namen "
                            "als Material ein: " + ", ".join(ohne_material)
-                           + ". So landen zwei Farben nie auf derselben Tafel – "
-                             "in Schritt ③ bei den Tafeln dasselbe Material "
-                             "eintragen oder das Materialfeld der Tafel leer "
-                             "lassen.")
+                           + ". So landen zwei Farben nie auf derselben Tafel.")
+            ohne_tafel = sorted(t["name"] for t in typen
+                                if t["name"] in benutzte_typen
+                                and not (t["tafel_breite"] > 0 and t["tafel_hoehe"] > 0))
+            if ohne_tafel:
+                st.caption("Ohne eigenes Tafelmaß: " + ", ".join(ohne_tafel)
+                           + " – diese Typen übernehmen das Format der ersten "
+                             "Tafel aus Schritt ③.")
 
             u1, u2, u3 = st.columns([3, 2, 2])
             ersetzen = u2.checkbox("Teileliste vorher leeren", True,
@@ -789,35 +817,42 @@ with schritt_raster:
 
                 # Zu jedem Material eine Tafel: ohne passende Tafel bliebe die
                 # Platte in Schritt 3 unter "Nicht eingeplant" stehen.
+                # Zu jedem Plattentyp seine Tafel: steht in der Typentabelle
+                # ein Tafelmass, wird genau dieses angelegt - sonst das Format
+                # der ersten vorhandenen Tafel.
                 neue_tafeln = []
                 if tafeln_anlegen:
                     tafeln_jetzt = stand("tafeln")
                     vorhanden = {str(z.get("Material") or "")
                                  for _, z in tafeln_jetzt.iterrows()}
-                    if "" not in vorhanden:         # leeres Material passt ohnehin
-                        vorlage = (tafeln_jetzt.iloc[0] if len(tafeln_jetzt)
-                                   else pd.Series({"Bezeichnung": "Tafel",
-                                                   "Breite (mm)": 1500.0,
-                                                   "Höhe (mm)": 3200.0,
-                                                   "Anzahl": float("nan"),
-                                                   "Preis (€)": 0.0}))
-                        for wert in dict.fromkeys(material.get(p.typ, "")
-                                                  for p in positionen):
-                            if not wert or wert in vorhanden:
-                                continue
-                            neue_tafeln.append({
-                                "Bezeichnung": f"{zahl(vorlage['Breite (mm)']):.0f} x "
-                                               f"{zahl(vorlage['Höhe (mm)']):.0f} – {wert}",
-                                "Breite (mm)": zahl(vorlage["Breite (mm)"], 1500.0),
-                                "Höhe (mm)": zahl(vorlage["Höhe (mm)"], 3200.0),
-                                "Anzahl": float("nan"),
-                                "Material": wert,
-                                "Preis (€)": zahl(vorlage.get("Preis (€)"))})
-                        if neue_tafeln:
-                            setze_tabelle("tafeln", pd.concat(
-                                [tafeln_jetzt,
-                                 pd.DataFrame(neue_tafeln, columns=SPALTEN_TAFELN)],
-                                ignore_index=True))
+                    vorlage = (tafeln_jetzt.iloc[0] if len(tafeln_jetzt)
+                               else pd.Series({"Breite (mm)": 1500.0,
+                                               "Höhe (mm)": 3200.0,
+                                               "Preis (€)": 0.0}))
+                    for typ in sorted(benutzte_typen):
+                        wert = material.get(typ, "")
+                        breite, hoehe, preis = typ_tafel.get(typ, (0.0, 0.0, 0.0))
+                        eigenes_mass = breite > 0 and hoehe > 0
+                        # Ohne eigenes Mass genuegt eine Tafel ohne Material
+                        if not eigenes_mass and ("" in vorhanden or wert in vorhanden):
+                            continue
+                        if eigenes_mass and wert in vorhanden:
+                            continue
+                        if not eigenes_mass:
+                            breite = zahl(vorlage["Breite (mm)"], 1500.0)
+                            hoehe = zahl(vorlage["Höhe (mm)"], 3200.0)
+                            preis = zahl(vorlage.get("Preis (€)"))
+                        vorhanden.add(wert)
+                        neue_tafeln.append({
+                            "Bezeichnung": f"{typ} {breite:.0f} x {hoehe:.0f}",
+                            "Breite (mm)": breite, "Höhe (mm)": hoehe,
+                            "Anzahl": float("nan"), "Material": wert,
+                            "Preis (€)": preis})
+                    if neue_tafeln:
+                        setze_tabelle("tafeln", pd.concat(
+                            [tafeln_jetzt,
+                             pd.DataFrame(neue_tafeln, columns=SPALTEN_TAFELN)],
+                            ignore_index=True))
                 # Die Meldung steht beim Knopf, nicht oben am Seitenanfang:
                 # nach dem Neuaufbau bleibt die Seite stehen, wo sie war.
                 st.session_state.raster_uebergabe = (
@@ -1303,14 +1338,21 @@ Rand* umstellen. Zur Fensteröffnung hin bleibt die Fuge erhalten. Die
 **Zugabe** schlägt danach wieder auf, z. B. die Aufkantung einer Kassette:
 Sichtmaß + 2 × Zugabe = Zuschnitt.
 
-**Plattentypen.** In der Tabelle *Plattentypen* steht eine Zeile je Plattenart
-– meist je Farbe:
+**Plattentypen und ihre Tafeln.** In der Tabelle steht eine Zeile je
+Plattenart – meist je Farbe:
 
 | Spalte | Bedeutung |
 |---|---|
 | Plattentyp | der Name, z. B. „RAL 7016 anthrazit“ oder „Lochblech“ |
 | Farbe im Plan | nur die Darstellung in Ansicht, Montageplan und DXF |
-| Material | kommt beim Übernehmen in die Teileliste, z. B. „Alucobond 4 mm“ |
+| Material | kommt beim Übernehmen in die Teileliste, z. B. „Alucobond 4 mm“; leer = der Typname gilt als Material |
+| Tafel Breite / Höhe | aus welcher **Rohtafel** dieser Typ geschnitten wird |
+| Preis/Tafel | netto je Rohtafel – damit stimmen die Kosten im Plan |
+
+Beim Übernehmen legt das Programm zu jedem Typ genau diese Tafel an. Bleibt
+das Tafelmaß leer, gilt das Format der ersten Tafel aus Schritt ③. So kann
+jede Farbe ihr eigenes Format haben – anthrazit 1500 × 3200, silber
+2000 × 4000.
 
 **Felder zuordnen.** Jedes Feld bekommt mit dem Pinsel einen dieser Typen oder
 wird als **Öffnung** weggeklickt. Anklicken oder mit gedrückter Maustaste über
