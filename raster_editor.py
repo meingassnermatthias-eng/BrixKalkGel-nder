@@ -14,7 +14,7 @@ import os
 import streamlit.components.v1 as components
 
 from raster import STANDARDTYP
-from zeichnung import FARBEN
+from zeichnung import FARBEN, farbe_nach_name
 
 _ORDNER = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                        "komponenten", "raster_editor")
@@ -22,16 +22,35 @@ _ORDNER = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 _komponente = components.declare_component("nesting_raster_editor", path=_ORDNER)
 
 
-def typenliste(namen) -> list:
-    """Plattentypen mit Farbe, in der Reihenfolge ihrer Nennung."""
+def typenliste(eintraege) -> list:
+    """
+    Plattentypen mit Farbe, in der Reihenfolge ihrer Nennung.
+
+    'eintraege' sind entweder Namen oder Angaben der Form
+    {"name", "farbe_name", "material"}. Fehlt eine Farbe, wird eine aus der
+    Palette vergeben.
+    """
     typen, gesehen = [], set()
-    for name in list(namen) or [STANDARDTYP]:
-        name = str(name).strip()
+    for eintrag in list(eintraege) or [STANDARDTYP]:
+        if isinstance(eintrag, dict):
+            name = str(eintrag.get("name", "")).strip()
+            farbe_name = str(eintrag.get("farbe_name", "")).strip()
+            material = str(eintrag.get("material", "")).strip()
+        else:
+            name, farbe_name, material = str(eintrag).strip(), "", ""
         if not name or name in gesehen:
             continue
         gesehen.add(name)
-        typen.append({"name": name, "farbe": FARBEN[(len(typen)) % len(FARBEN)]})
-    return typen or [{"name": STANDARDTYP, "farbe": FARBEN[0]}]
+        typen.append({
+            "name": name,
+            "farbe": farbe_nach_name(farbe_name, FARBEN[len(typen) % len(FARBEN)]),
+            "farbe_name": farbe_name,
+            "material": material,
+        })
+    if not typen:
+        typen = [{"name": STANDARDTYP, "farbe": FARBEN[0],
+                  "farbe_name": "", "material": ""}]
+    return typen
 
 
 def daten_fuer(felder: list, typen: list) -> dict:

@@ -21,7 +21,8 @@ import pandas as pd
 import streamlit as st
 
 from nesting import Tafel, Zuschnitt2D, optimize_2d, parse_2d_eingabe
-from zeichnung import farbkarte, legende, namen_aus_plan, svg_fassade, svg_tafel, svg_teil
+from zeichnung import (FARBNAMEN, farbkarte, legende, namen_aus_plan,
+                       svg_fassade, svg_tafel, svg_teil)
 import hilfe_bilder
 
 try:
@@ -148,6 +149,11 @@ SPALTEN_TEILE = ["Bezeichnung", "Breite (mm)", "Höhe (mm)", "Anzahl", "Material
                  "Drehbar", "Kontur"]
 SPALTEN_TAFELN = ["Bezeichnung", "Breite (mm)", "Höhe (mm)", "Anzahl", "Material",
                   "Preis (€)"]
+SPALTEN_TYPEN = ["Plattentyp", "Farbe im Plan", "Material"]
+
+BEISPIEL_TYPEN = pd.DataFrame(
+    [{"Plattentyp": "Standard", "Farbe im Plan": "Blau", "Material": ""}],
+    columns=SPALTEN_TYPEN)
 
 BEISPIEL_TEILE = pd.DataFrame([
     {"Bezeichnung": "Wange", "Breite (mm)": 1200.0, "Höhe (mm)": 300.0, "Anzahl": 4,
@@ -179,7 +185,8 @@ def init():
         "raster_texte": [],
         "raster_hinweise": [],
         "raster_quelle": "",
-        "raster_material": {},
+        "raster_typen": BEISPIEL_TYPEN.copy(),
+        "raster_typen_version": 0,
     }
     for schluessel, wert in vorgaben.items():
         if schluessel not in st.session_state:
@@ -598,20 +605,56 @@ with schritt_raster:
                      "Ein: auch dort die halbe Fuge abziehen.")
 
             t1, t2 = st.columns([3, 2])
-            typ_text = t1.text_input(
-                "Plattentypen (durch Komma getrennt)",
-                st.session_state.get("raster_typ_text", "Standard"),
-                key="raster_typ_text",
-                help="Je Typ eine Farbe und ein eigenes Material, z. B. "
-                     "`Anthrazit, Silber`. Gleich große Platten verschiedener "
-                     "Typen bleiben getrennte Positionen.")
-            modus = t2.selectbox(
-                "Gleichteile erkennen", list(raster.MODI),
-                format_func=lambda m: raster.MODI[m], key="raster_modus",
-                help="Gedreht und gespiegelt nur, wenn Sichtseite und "
-                     "Walzrichtung es zulassen.")
-            typen = raster_editor.typenliste(
-                [t.strip() for t in typ_text.split(",") if t.strip()])
+            with t1:
+                st.markdown("**Plattentypen**")
+                st.caption("Eine Zeile je Plattenart – zum Beispiel je Farbe. "
+                           "Jeder Typ bekommt sein eigenes Material und wird "
+                           "im Plan eigens eingefärbt. Zeile anhängen: in die "
+                           "letzte, leere Zeile schreiben.")
+                tabelle("raster_typen", num_rows="dynamic", hide_index=True,
+                        **BREITE,
+                        column_config={
+                            "Plattentyp": st.column_config.TextColumn(
+                                width="medium",
+                                help="z. B. „RAL 7016 anthrazit“ oder „Lochblech“"),
+                            "Farbe im Plan": st.column_config.SelectboxColumn(
+                                options=list(FARBNAMEN), width="small",
+                                help="Nur die Darstellung in Ansicht, "
+                                     "Montageplan und DXF"),
+                            "Material": st.column_config.TextColumn(
+                                width="medium",
+                                help="Wird beim Übernehmen in die Teileliste "
+                                     "eingetragen, z. B. „Alucobond 4 mm“"),
+                        })
+            with t2:
+                modus = st.selectbox(
+                    "Gleichteile erkennen", list(raster.MODI),
+                    format_func=lambda m: raster.MODI[m], key="raster_modus",
+                    help="Gedreht und gespiegelt nur, wenn Sichtseite und "
+                         "Walzrichtung es zulassen.")
+                faerbung = st.radio(
+                    "Ansicht einfärben nach", ["Position", "Plattentyp"],
+                    key="raster_faerbung",
+                    help="Nach Position zeigt die Ansicht die Gleichteile, "
+                         "nach Plattentyp die Farbaufteilung der Fassade.")
+                if st.button("Typ auf alle Felder", key="btn_typ_alle", **BREITE,
+                             help="Setzt den ersten Plattentyp auf alle Felder "
+                                  "(Öffnungen bleiben Öffnungen)"):
+                    st.session_state.raster_typ_auf_alle = True
+                    st.rerun()
+
+            typen = raster_editor.typenliste([
+                {"name": z["Plattentyp"], "farbe_name": z["Farbe im Plan"],
+                 "material": z["Material"]}
+                for _, z in stand("raster_typen").fillna("").iterrows()
+                if str(z["Plattentyp"]).strip()])
+            typ_farbe = {t["name"]: t["farbe"] for t in typen}
+            typ_farbname = {t["name"]: t["farbe_name"] for t in typen}
+            typ_material = {t["name"]: t["material"] for t in typen}
+
+            if st.session_state.pop("raster_typ_auf_alle", False):
+                for feld_eintrag in felder:
+                    feld_eintrag.typ = typen[0]["name"]
             # Wer die Typen umbenennt, soll nicht mit Feldern dastehen, die auf
             # einen Typ zeigen, den es nicht mehr gibt: die bekommen den ersten.
             bekannt = {t["name"] for t in typen}
@@ -656,16 +699,26 @@ with schritt_raster:
 
             nummern = raster.position_je_feld(positionen)
             farben_pos = farbkarte([p.nummer for p in positionen])
+            nach_typ = faerbung == "Plattentyp"
+            farbe_je_feld = ({f.name: typ_farbe.get(f.typ, "#1E3A8A") for f in felder}
+                             if nach_typ else None)
             ansicht, liste = st.columns([3, 2])
             with ansicht:
                 st.markdown(svg_fassade(
-                    felder, nummern, farben_pos,
+                    felder, nummern, farben_pos, farbe_je_feld=farbe_je_feld,
                     titel=f"Fassadenansicht – {st.session_state.raster_quelle}"),
                     unsafe_allow_html=True)
+                if nach_typ:
+                    st.markdown(legende(typ_farbe.keys(), typ_farbe),
+                                unsafe_allow_html=True)
             with liste:
                 st.markdown("**Positionen**")
                 st.dataframe(pd.DataFrame(raster.positionsliste(positionen)),
                              hide_index=True, **BREITE)
+                uebersicht = raster.typ_uebersicht(positionen, typen)
+                if len(uebersicht) > 1 or any(z["Material"] for z in uebersicht):
+                    st.markdown("**Je Plattentyp**")
+                    st.dataframe(pd.DataFrame(uebersicht), hide_index=True, **BREITE)
 
             with st.expander("Feldliste (welches Feld bekommt welche Position?)"):
                 st.dataframe(pd.DataFrame(raster.feldliste(positionen)),
@@ -673,14 +726,16 @@ with schritt_raster:
 
             # ---------------- Uebergabe und Ausgabe ----------------
             st.markdown("##### Positionen ins Nesting übernehmen")
-            vorhandene = {p.typ for p in positionen}
-            material = dict(st.session_state.get("raster_material", {}))
-            spalten_material = st.columns(max(len(vorhandene), 1))
-            for i, typ in enumerate(sorted(vorhandene)):
-                material[typ] = spalten_material[i].text_input(
-                    f"Material für {typ}", material.get(typ, ""),
-                    key=f"raster_mat_{typ}", placeholder="z. B. Alucobond 4 mm")
-            st.session_state.raster_material = material
+            ohne_material = sorted({p.typ for p in positionen}
+                                   if not typ_material else
+                                   {p.typ for p in positionen
+                                    if not typ_material.get(p.typ)})
+            if ohne_material:
+                st.caption("Ohne Material in der Typentabelle: "
+                           + ", ".join(ohne_material)
+                           + " – diese Positionen kommen ohne Material in die "
+                             "Teileliste und passen dann auf jede Tafel.")
+            material = typ_material
 
             u1, u2, u3 = st.columns([3, 2, 2])
             ersetzen = u2.checkbox("Teileliste vorher leeren", True,
@@ -694,12 +749,18 @@ with schritt_raster:
             if u1.button("➡️ Positionen in die Teileliste", type="primary",
                          key="btn_raster_uebernehmen", disabled=not positionen):
                 zeilen, konturen = [], dict(st.session_state.konturen)
+                mehrere_typen = len({p.typ for p in positionen}) > 1
                 for position in positionen:
                     kontur = [[(float(x), float(y))
                                for x, y in raster.in_nullpunkt(position.polygon)]]
-                    konturen[position.nummer] = {"kontur": kontur, "stichlinien": []}
+                    # Bei mehreren Plattentypen steht der Typ im Namen - sonst
+                    # liessen sich im Schachtelplan zwei gleich grosse Platten
+                    # verschiedener Farbe nicht auseinanderhalten.
+                    name = (f"{position.nummer} {position.typ}" if mehrere_typen
+                            else position.nummer)
+                    konturen[name] = {"kontur": kontur, "stichlinien": []}
                     zeilen.append({
-                        "Bezeichnung": position.nummer,
+                        "Bezeichnung": name,
                         "Breite (mm)": round(position.breite, 1),
                         "Höhe (mm)": round(position.hoehe, 1),
                         "Anzahl": position.anzahl,
@@ -725,7 +786,8 @@ with schritt_raster:
             a1, a2, a3 = st.columns(3)
             daten_excel = excel_bytes({
                 "Positionen": pd.DataFrame(raster.positionsliste(positionen)),
-                "Felder": pd.DataFrame(raster.feldliste(positionen))})
+                "Felder": pd.DataFrame(raster.feldliste(positionen)),
+                "Plattentypen": pd.DataFrame(raster.typ_uebersicht(positionen, typen))})
             if daten_excel:
                 a1.download_button("📊 Positionsliste als Excel", daten_excel,
                                    dateiname("Positionsliste", "xlsx"),
@@ -734,8 +796,12 @@ with schritt_raster:
             if DXF_OK:
                 a2.download_button(
                     "📐 Montageplan als DXF",
-                    raster.montageplan_als_dxf(felder, positionen).encode("utf-8"),
-                    dateiname("Montageplan", "dxf"), "image/vnd.dxf", **BREITE)
+                    raster.montageplan_als_dxf(
+                        felder, positionen,
+                        farben=typ_farbname).encode("utf-8"),
+                    dateiname("Montageplan", "dxf"), "image/vnd.dxf", **BREITE,
+                    help="Rasterfelder, Plattenkonturen und Positionsnummern; "
+                         "jeder Plattentyp auf eigenem Layer")
                 a3.download_button(
                     "📐 Positionen als DXF",
                     raster.positionen_als_dxf(positionen).encode("utf-8"),
@@ -1189,10 +1255,33 @@ Rand* umstellen. Zur Fensteröffnung hin bleibt die Fuge erhalten. Die
 **Zugabe** schlägt danach wieder auf, z. B. die Aufkantung einer Kassette:
 Sichtmaß + 2 × Zugabe = Zuschnitt.
 
-**Felder zuordnen.** Jedes Feld bekommt mit dem Pinsel einen Plattentyp
-(= Farbe und Material) oder wird als **Öffnung** weggeklickt. Anklicken oder
-mit gedrückter Maustaste über mehrere Felder ziehen; die Zifferntasten wählen
-den Pinsel, Strg+Z nimmt zurück.
+**Plattentypen.** In der Tabelle *Plattentypen* steht eine Zeile je Plattenart
+– meist je Farbe:
+
+| Spalte | Bedeutung |
+|---|---|
+| Plattentyp | der Name, z. B. „RAL 7016 anthrazit“ oder „Lochblech“ |
+| Farbe im Plan | nur die Darstellung in Ansicht, Montageplan und DXF |
+| Material | kommt beim Übernehmen in die Teileliste, z. B. „Alucobond 4 mm“ |
+
+**Felder zuordnen.** Jedes Feld bekommt mit dem Pinsel einen dieser Typen oder
+wird als **Öffnung** weggeklickt. Anklicken oder mit gedrückter Maustaste über
+mehrere Felder ziehen; die Zifferntasten wählen den Pinsel, Strg+Z nimmt
+zurück. So lassen sich auch einzelne Platten umfärben, wenn sich auf der
+Baustelle etwas ändert.
+
+Was jeder Typ bewirkt:
+
+* Gleich große Platten **verschiedener Typen werden nie zusammengefasst** –
+  sie bleiben getrennte Positionen, auch wenn sie millimetergenau gleich sind.
+* Die Position heißt dann z. B. `P03 RAL 9006 silber` und bekommt das Material
+  des Typs; im Schachtelplan sind die Farben damit auseinanderzuhalten.
+* Mit *Ansicht einfärben nach: Plattentyp* zeigt die Fassadenansicht die
+  Farbaufteilung statt der Gleichteile.
+* Der **Montageplan als DXF** legt jeden Typ auf einen eigenen Layer
+  (`TYP_...`) in seiner Farbe – in CAD einzeln ein- und ausblendbar.
+* Die **Positionsliste als Excel** bekommt ein Blatt *Plattentypen* mit Stück
+  und m² je Farbe – die Liste zum Bestellen.
     """)
     st.markdown(hilfe_bilder.bild_felder(), unsafe_allow_html=True)
     st.markdown("""

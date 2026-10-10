@@ -45,8 +45,12 @@ DER ABLAUF - VIER SCHRITTE
      Fuer eine Fassade: das Plattenraster zeichnen (Spalten-
      und Zeilenmasse eintippen) oder aus einer DXF-Ansicht
      holen. Dann in der Ansicht die Felder anklicken:
-     Plattentyp vergeben oder Fenster wegklicken. Das
-     Programm zieht die Fuge ab, schlaegt die Zugabe auf,
+     Plattentyp vergeben oder Fenster wegklicken.
+     In der Tabelle "Plattentypen" steht eine Zeile je
+     Plattenart - meist je Farbe - mit eigener Farbe im
+     Plan und eigenem Material. Gleich grosse Platten
+     verschiedener Farbe bleiben getrennte Positionen.
+     Das Programm zieht die Fuge ab, schlaegt die Zugabe auf,
      sucht die Gleichteile und legt die Positionen
      (P01, P02 ...) in die Teileliste.
      Dazu gibt es die Positionsliste als Excel und den

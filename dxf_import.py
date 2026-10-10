@@ -546,17 +546,28 @@ _LAYER_FARBEN = {
 }
 
 
-def _dxf_kopf() -> list[str]:
+def _dxf_kopf(zusatz_layer=None) -> list[str]:
+    layer = dict(_LAYER_FARBEN)
+    for name, farbe in (zusatz_layer or {}).items():
+        layer[_layername(name)] = int(farbe)
     zeilen = ["0", "SECTION", "2", "HEADER",
               "9", "$ACADVER", "1", "AC1009",
               "9", "$INSUNITS", "70", "4",       # 4 = Millimeter
               "0", "ENDSEC",
               "0", "SECTION", "2", "TABLES",
-              "0", "TABLE", "2", "LAYER", "70", str(len(_LAYER_FARBEN))]
-    for name, farbe in _LAYER_FARBEN.items():
+              "0", "TABLE", "2", "LAYER", "70", str(len(layer))]
+    for name, farbe in layer.items():
         zeilen += ["0", "LAYER", "2", name, "70", "0", "62", str(farbe), "6", "CONTINUOUS"]
     zeilen += ["0", "ENDTAB", "0", "ENDSEC", "0", "SECTION", "2", "ENTITIES"]
     return zeilen
+
+
+def _layername(name: str) -> str:
+    """Macht aus einem Plattentyp einen gueltigen DXF-Layernamen."""
+    sauber = "".join(c if (c.isalnum() or c in "_-") else "_"
+                     for c in str(name).strip().upper())
+    sauber = sauber.replace("Ä", "AE").replace("Ö", "OE").replace("Ü", "UE")
+    return (sauber or "TYP")[:31]
 
 
 def _dxf_polylinie(punkte: list, layer: str, geschlossen: bool = True) -> list[str]:
@@ -578,17 +589,20 @@ def _dxf_text(inhalt: str, x: float, y: float, hoehe: float, layer: str) -> list
             "40", f"{hoehe:.4f}", "1", sauber]
 
 
-def zeichnung_als_dxf(polylinien, texte=()) -> str:
+def zeichnung_als_dxf(polylinien, texte=(), zusatz_layer=None) -> str:
     """
     Schreibt eine einfache DXF-Zeichnung (R12).
 
-    polylinien  [(punkte, layer, geschlossen), ...]
-    texte       [(inhalt, x, y, hoehe, layer), ...]
+    polylinien    [(punkte, layer, geschlossen), ...]
+    texte         [(inhalt, x, y, hoehe, layer), ...]
+    zusatz_layer  {Layername: AutoCAD-Farbnummer} - weitere Layer, z. B. einer
+                  je Plattentyp, damit sich die Typen in CAD ein- und
+                  ausblenden lassen
 
     Damit lassen sich auch Zeichnungen ausgeben, die nicht aus dem Nesting
     kommen - zum Beispiel der Montageplan einer Fassade.
     """
-    zeilen = _dxf_kopf()
+    zeilen = _dxf_kopf(zusatz_layer)
     for eintrag in polylinien:
         punkte, layer = eintrag[0], eintrag[1]
         geschlossen = eintrag[2] if len(eintrag) > 2 else True

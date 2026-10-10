@@ -393,6 +393,68 @@ pruefe(felder_zeilen[0]["Zeile"] == 1, "Feldliste beginnt oben")
 
 
 # ==========================================================
+print("\n8b. Verschiedene Plattentypen (Farben) je Feld")
+# ==========================================================
+
+felder_typ = r.felder_aus_raster([1200, 1200, 1200], [1000, 1000])
+for feld_eintrag in felder_typ:                      # obere Zeile anthrazit
+    feld_eintrag.typ = "Anthrazit" if feld_eintrag.zeile == 1 else "Silber"
+felder_typ[4].aus = True                             # Fenster in der Mitte unten
+platten_typ, _ = r.platten_aus_feldern(felder_typ, fuge=20.0)
+positionen_typ = r.gleichteile(platten_typ, "gleich")
+
+pruefe(all(len({pl.typ for pl in p.platten}) == 1 for p in positionen_typ),
+       "jede Position hat genau einen Plattentyp")
+anthrazit = [p for p in positionen_typ if p.typ == "Anthrazit"]
+silber = [p for p in positionen_typ if p.typ == "Silber"]
+pruefe(sum(p.anzahl for p in anthrazit) == 3 and sum(p.anzahl for p in silber) == 2,
+       f"3 anthrazit, 2 silber (hier {sum(p.anzahl for p in anthrazit)}/"
+       f"{sum(p.anzahl for p in silber)})")
+
+typen = [{"name": "Anthrazit", "farbe_name": "Schwarz", "material": "Alucobond anthrazit"},
+         {"name": "Silber", "farbe_name": "Grau", "material": "Alucobond silber"}]
+uebersicht = r.typ_uebersicht(positionen_typ, typen)
+pruefe(len(uebersicht) == 2, "Uebersicht hat eine Zeile je Typ")
+pruefe({z["Plattentyp"]: z["Platten"] for z in uebersicht}
+       == {"Anthrazit": 3, "Silber": 2}, "Stueckzahlen je Typ stimmen")
+pruefe(uebersicht[0]["Material"] == "Alucobond anthrazit",
+       "Material aus der Typentabelle steht in der Uebersicht")
+pruefe(nahe(sum(z["Fläche (m²)"] for z in uebersicht),
+            sum(p.flaeche * p.anzahl for p in positionen_typ) / 1e6, 0.01),
+       "Flaechensumme je Typ stimmt")
+
+# Gleich grosse Platten verschiedener Farbe duerfen nie eine Position werden
+quadrat_a = r.Feld(polygon=r.rechteck(0, 0, 800, 800), name="A", typ="Anthrazit")
+quadrat_b = r.Feld(polygon=r.rechteck(2000, 0, 2800, 800), name="B", typ="Silber")
+gemischt, _ = r.platten_aus_feldern([quadrat_a, quadrat_b])
+pruefe(len(r.gleichteile(gemischt, "gespiegelt")) == 2,
+       "gleich grosse Platten verschiedener Farbe bleiben getrennt")
+
+# Montageplan: je Typ ein eigener Layer
+plan_dxf = r.montageplan_als_dxf(felder_typ, positionen_typ,
+                                 farben={"Anthrazit": "Schwarz", "Silber": "Grau"})
+pruefe("TYP_ANTHRAZIT" in plan_dxf and "TYP_SILBER" in plan_dxf,
+       "Montageplan hat je Plattentyp einen Layer")
+pruefe(plan_dxf.count("TYP_ANTHRAZIT") >= 4,
+       "die anthrazitfarbenen Platten liegen auf ihrem Layer")
+pruefe("Anthrazit" in plan_dxf, "der Plattentyp steht in der Beschriftung")
+
+# Farbnamen und DXF-Farbnummern
+from zeichnung import FARBNAMEN, farbe_nach_name, dxf_farbnummer, svg_fassade
+pruefe(farbe_nach_name("Schwarz").startswith("#") and dxf_farbnummer("Schwarz") > 0,
+       "Farbname liefert Zeichenfarbe und DXF-Farbnummer")
+pruefe(farbe_nach_name("gibt es nicht") == "#1E3A8A", "unbekannte Farbe faellt zurueck")
+
+bild = svg_fassade(felder_typ, r.position_je_feld(positionen_typ),
+                   farbe_je_feld={f.name: farbe_nach_name("Schwarz"
+                                                          if f.typ == "Anthrazit"
+                                                          else "Grau")
+                                  for f in felder_typ})
+pruefe(farbe_nach_name("Schwarz") in bild and farbe_nach_name("Grau") in bild,
+       "die Ansicht laesst sich nach Plattentyp einfaerben")
+
+
+# ==========================================================
 print("\n9. Fassadenraster aus einer DXF-Datei")
 # ==========================================================
 

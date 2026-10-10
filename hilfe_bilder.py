@@ -163,7 +163,7 @@ def bild_schnittarten() -> str:
     teile.append(_mini_tafel(
         480, "Kontur",
         "Echte Form: die Teile greifen|ineinander, kaum Abfall", paare))
-    return _rahmen("".join(teile), 690, 240)
+    return _rahmen("".join(teile), 690, 272)
 
 
 # ==========================================================
@@ -344,9 +344,9 @@ def bild_felder() -> str:
             teile.append(f'<rect x="{x}" y="{y}" width="{b}" height="{h}" '
                          f'fill="{farbe}" fill-opacity="0.85" stroke="#111827" '
                          f'stroke-width="1.2"/>')
-    beschriftung = [(HELLBLAU, "Typ A (Alucobond anthrazit)"),
-                    (ORANGE, "Typ B (Alucobond silber)"),
-                    (GRUEN, "Typ C (Blech 2 mm)"),
+    beschriftung = [(HELLBLAU, "RAL 7016 anthrazit - Alucobond 4 mm"),
+                    (ORANGE, "RAL 9006 silber - Alucobond 4 mm"),
+                    (GRUEN, "Lochblech - Blech 2 mm"),
                     (HELLGRAU, "Oeffnung - keine Platte")]
     for i, (farbe, text) in enumerate(beschriftung):
         y = y0 + 8 + i * 22
@@ -355,8 +355,13 @@ def bild_felder() -> str:
         teile.append(_text(x0 + 3 * b + 44, y + 1, text, 11.5, "#111827"))
     teile.append(_text(x0, y0 + 3 * h + 20,
                        "Feld anklicken oder mit gedrueckter Maustaste "
-                       "ueber mehrere Felder ziehen", 11, GRAU))
-    return _rahmen("".join(teile), 690, 240)
+                       "ueber mehrere Felder ziehen.", 11, GRAU))
+    teile.append(_text(x0, y0 + 3 * h + 36,
+                       "Je Plattentyp eine Farbe und ein eigenes Material - "
+                       "gleich grosse Platten verschiedener", 11, GRAU))
+    teile.append(_text(x0, y0 + 3 * h + 52,
+                       "Typen bleiben getrennte Positionen.", 11, GRAU))
+    return _rahmen("".join(teile), 690, 272)
 
 
 # ==========================================================

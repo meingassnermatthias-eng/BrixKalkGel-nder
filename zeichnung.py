@@ -12,6 +12,37 @@ FARBEN = [
 ]
 FARBE_TAFEL = "#F3F4F6"
 
+# Benannte Farben fuer die Plattentypen. Der Name steht in der Oberflaeche,
+# der Wert faerbt die Zeichnung, die Nummer ist die AutoCAD-Farbe im DXF.
+FARBNAMEN = {
+    "Blau": ("#1E3A8A", 5),
+    "Türkis": ("#0E7490", 4),
+    "Orange": ("#B45309", 30),
+    "Grün": ("#4D7C0F", 3),
+    "Violett": ("#7E22CE", 6),
+    "Rot": ("#BE123C", 1),
+    "Petrol": ("#0F766E", 134),
+    "Gold": ("#A16207", 2),
+    "Hellblau": ("#1D4ED8", 150),
+    "Magenta": ("#9D174D", 240),
+    "Dunkelgrün": ("#166534", 94),
+    "Ziegel": ("#C2410C", 20),
+    "Grau": ("#6B7280", 8),
+    "Schwarz": ("#111827", 250),
+}
+
+
+def farbe_nach_name(name: str, ersatz: str = "#1E3A8A") -> str:
+    """Zeichenfarbe zu einem Farbnamen (siehe FARBNAMEN)."""
+    eintrag = FARBNAMEN.get(str(name).strip())
+    return eintrag[0] if eintrag else ersatz
+
+
+def dxf_farbnummer(name: str, ersatz: int = 7) -> int:
+    """AutoCAD-Farbnummer zu einem Farbnamen."""
+    eintrag = FARBNAMEN.get(str(name).strip())
+    return eintrag[1] if eintrag else ersatz
+
 
 def farbe_fuer(name: str, karte: dict | None = None) -> str:
     """
@@ -187,12 +218,15 @@ def legende(namen, farben: dict | None = None) -> str:
 
 def svg_fassade(felder, nummern: dict | None = None, farben: dict | None = None,
                 max_px: int = 900, max_hoehe: int = 700,
-                mit_massen: bool = True, titel: str = "") -> str:
+                mit_massen: bool = True, titel: str = "",
+                farbe_je_feld: dict | None = None) -> str:
     """
     Zeichnet die Fassadenansicht eines Plattenrasters.
 
-    nummern   Feldname -> Positionsnummer (dann wird nach Position gefaerbt)
-    farben    Farbkarte fuer die Positionsnummern bzw. Plattentypen
+    nummern        Feldname -> Positionsnummer (Beschriftung im Feld)
+    farben         Farbkarte fuer die Positionsnummern bzw. Plattentypen
+    farbe_je_feld  Feldname -> Farbe; uebersteuert die Einfaerbung, damit sich
+                   die Ansicht z. B. nach Plattentyp einfaerben laesst
     """
     if not felder:
         return '<div style="color:#6B7280">Kein Raster vorhanden.</div>'
@@ -238,7 +272,9 @@ def svg_fassade(felder, nummern: dict | None = None, farben: dict | None = None,
                          f'fill-opacity="0.45" stroke="none"/>')
             continue
         marke = (nummern or {}).get(feld.name, feld.typ)
-        teile.append(f'<polygon points="{punkte}" fill="{farbe_fuer(marke, farben)}" '
+        fuellung = ((farbe_je_feld or {}).get(feld.name)
+                    or farbe_fuer(marke, farben))
+        teile.append(f'<polygon points="{punkte}" fill="{fuellung}" '
                      f'fill-opacity="0.85" stroke="#111827" stroke-width="1.2"/>')
 
     for feld in felder:

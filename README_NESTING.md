@@ -78,11 +78,21 @@ Fensteröffnung hin bleibt die Fuge erhalten. Die **Zugabe je Seite** schlägt
 danach wieder auf – zum Beispiel die Aufkantung einer Kassette:
 Sichtmaß + 2 × Zugabe = Zuschnitt.
 
-**Felder zuordnen.** Jedes Feld bekommt mit dem Pinsel einen Plattentyp
-(Farbe und eigenes Material) oder wird als **Öffnung** weggeklickt. Anklicken
-oder mit gedrückter Maustaste über mehrere Felder ziehen; Zifferntasten wählen
-den Pinsel, Strg+Z nimmt zurück. Erst *Zuordnung übernehmen* schreibt sie ins
-Raster.
+**Plattentypen.** Eine Tabelle mit einer Zeile je Plattenart – meist je Farbe:
+*Plattentyp* (Name, z. B. „RAL 7016 anthrazit“), *Farbe im Plan* (nur die
+Darstellung) und *Material* (kommt in die Teileliste).
+
+**Felder zuordnen.** Jedes Feld bekommt mit dem Pinsel einen dieser Typen oder
+wird als **Öffnung** weggeklickt. Anklicken oder mit gedrückter Maustaste über
+mehrere Felder ziehen; Zifferntasten wählen den Pinsel, Strg+Z nimmt zurück.
+Erst *Zuordnung übernehmen* schreibt sie ins Raster. Ändert sich auf der
+Baustelle eine Farbe, wird einfach das betroffene Feld umgemalt.
+
+Gleich große Platten verschiedener Typen werden **nie zusammengefasst**. Die
+Position heißt dann `P03 RAL 9006 silber` und bekommt das Material ihres Typs.
+Die Ansicht lässt sich wahlweise nach Position oder nach Plattentyp einfärben,
+der Montageplan legt jeden Typ auf einen eigenen DXF-Layer (`TYP_...`), und die
+Excel-Liste bekommt ein Blatt *Plattentypen* mit Stück und m² je Farbe.
 
 **Gleichteilsuche.** Deckungsgleiche Platten werden zu Positionen
 (P01, P02 …) gebündelt:
@@ -93,11 +103,11 @@ Raster.
 | auch gedreht | wenn 90/180/270° gedreht eingebaut werden darf |
 | auch gespiegelt | nur bei beidseitig gleichem Material – die Sichtseite dreht sich |
 
-Platten verschiedener Typen werden nie zusammengefasst, auch wenn sie gleich
-groß sind. Zum Schluss gehen die Positionen mit Stückzahl und echter Kontur in
-die Teileliste. Dazu gibt es die **Positionsliste** als Excel (mit Feldliste)
-und den **Montageplan als DXF**: Rasterfelder, Plattenkonturen und
-Positionsnummern – die Zeichnung für die Baustelle.
+Zum Schluss gehen die Positionen mit Stückzahl und echter Kontur in die
+Teileliste. Dazu gibt es die **Positionsliste** als Excel (mit Feldliste und
+Blatt *Plattentypen*) und den **Montageplan als DXF**: Rasterfelder,
+Plattenkonturen, Positionsnummern und Plattentyp – die Zeichnung für die
+Baustelle.
 
 ## Schritt ② – Teile
 

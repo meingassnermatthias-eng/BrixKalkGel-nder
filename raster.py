@@ -1068,18 +1068,32 @@ def platte_je_feld(positionen: list) -> dict:
 
 
 def montageplan_als_dxf(felder: list, positionen: list,
-                        mit_platten: bool = True) -> str:
+                        mit_platten: bool = True,
+                        farben: dict | None = None) -> str:
     """
     Montageplan der Fassade als DXF: Rasterfelder, Platten und Positionsnummern.
 
     Das ist die Zeichnung fuer die Baustelle - sie zeigt, welche Position in
-    welches Feld gehoert.
+    welches Feld gehoert und welchen Plattentyp (Farbe) sie bekommt.
+
+    farben  {Plattentyp: Farbname} - dann bekommt jeder Typ einen eigenen
+            Layer 'TYP_<name>' in seiner Farbe, der sich in CAD einzeln ein-
+            und ausblenden laesst.
     """
     import dxf_import
+    from zeichnung import dxf_farbnummer
 
     nummern = position_je_feld(positionen)
     platten = platte_je_feld(positionen)
+    typ_je_feld = {platte.feld.name: position.typ
+                   for position in positionen for platte in position.platten}
     polylinien, texte = [], []
+    zusatz_layer: dict = {}
+
+    def layer_fuer(typ: str) -> str:
+        name = dxf_import._layername(f"TYP_{typ}")
+        zusatz_layer.setdefault(name, dxf_farbnummer((farben or {}).get(typ, "")))
+        return name
 
     for feld in felder:
         polylinien.append((list(feld.polygon), "RASTER", True))
@@ -1090,19 +1104,52 @@ def montageplan_als_dxf(felder: list, positionen: list,
             continue
         platte = platten.get(feld.name)
         if mit_platten and platte:
-            polylinien.append((list(platte.polygon), "KONTUR", True))
+            polylinien.append((list(platte.polygon),
+                               layer_fuer(typ_je_feld.get(feld.name, STANDARDTYP)),
+                               True))
 
     for feld in felder:
         if feld.aus:
             beschriftung = "Oeffnung"
         else:
+            typ = typ_je_feld.get(feld.name, "")
             beschriftung = f"{nummern.get(feld.name, '?')} ({feld.name})"
+            if typ and typ != STANDARDTYP:
+                beschriftung += f" {typ}"
         hoehe = max(min(feld.hoehe / 10.0, feld.breite / 8.0, 120.0), 15.0)
         mx, my = feld.mitte
         texte.append((beschriftung, mx - len(beschriftung) * hoehe * 0.3,
                       my - hoehe / 2, hoehe, "BESCHRIFTUNG"))
 
-    return dxf_import.zeichnung_als_dxf(polylinien, texte)
+    return dxf_import.zeichnung_als_dxf(polylinien, texte, zusatz_layer)
+
+
+def typ_uebersicht(positionen: list, typen: list | None = None) -> list:
+    """
+    Zeilen je Plattentyp: wieviele Platten, wieviel Flaeche, welches Material.
+
+    Das ist die Liste zum Bestellen - je Farbe eine Zeile.
+    """
+    angaben = {str(t.get("name")): t for t in (typen or [])}
+    zusammen: dict = {}
+    for position in positionen:
+        eintrag = zusammen.setdefault(position.typ, {"stueck": 0, "flaeche": 0.0,
+                                                     "positionen": 0})
+        eintrag["stueck"] += position.anzahl
+        eintrag["flaeche"] += position.flaeche * position.anzahl
+        eintrag["positionen"] += 1
+    zeilen = []
+    for typ in sorted(zusammen, key=lambda t: -zusammen[t]["flaeche"]):
+        angabe = angaben.get(typ, {})
+        zeilen.append({
+            "Plattentyp": typ,
+            "Farbe": angabe.get("farbe_name", ""),
+            "Material": angabe.get("material", ""),
+            "Positionen": zusammen[typ]["positionen"],
+            "Platten": zusammen[typ]["stueck"],
+            "Fläche (m²)": round(zusammen[typ]["flaeche"] / 1e6, 2),
+        })
+    return zeilen
 
 
 def positionen_als_dxf(positionen: list, spalten: int = 4,
