@@ -1,0 +1,133 @@
+NESTING - VERSCHNITTOPTIMIERUNG
+Meingassner Metalltechnik
+===============================================================
+
+SO STARTEST DU DAS PROGRAMM (Windows)
+---------------------------------------------------------------
+
+  1. Diesen Ordner irgendwohin entpacken,
+     zum Beispiel nach C:\Nesting
+     (WICHTIG: nicht direkt aus der ZIP-Datei starten)
+
+  2. Doppelklick auf   start_nesting.bat
+
+  3. Beim allerersten Start:
+     - Fehlt Python, fragt das Fenster, ob es installiert
+       werden soll -> mit J bestaetigen, danach die Datei
+       start_nesting.bat noch einmal doppelklicken.
+     - Danach laedt es die benoetigten Pakete. Das dauert
+       ein paar Minuten. Das schwarze Fenster bitte offen
+       lassen, bis sich der Browser oeffnet.
+     - Es wird gefragt, ob ein Startknopf auf dem Desktop
+       angelegt werden soll -> mit J bestaetigen.
+
+  Jeder weitere Start geht sofort.
+  Das schwarze Fenster muss waehrend der Arbeit offen bleiben -
+  zum Beenden einfach schliessen.
+
+
+STARTKNOPF AUF DEM DESKTOP
+---------------------------------------------------------------
+
+  Nachtraeglich jederzeit mit einem Doppelklick auf
+  Desktop-Verknuepfung.bat
+
+  WICHTIG: Den Programmordner danach nicht mehr verschieben
+  oder umbenennen - sonst findet die Verknuepfung ihr Ziel
+  nicht mehr. Dann einfach Desktop-Verknuepfung.bat erneut
+  doppelklicken.
+
+
+DER ABLAUF - VIER SCHRITTE
+---------------------------------------------------------------
+
+  1  RASTER (FASSADE)   -- freiwillig
+     Fuer eine Fassade: das Plattenraster zeichnen (Spalten-
+     und Zeilenmasse eintippen) oder aus einer DXF-Ansicht
+     holen. Dann in der Ansicht die Felder anklicken:
+     Plattentyp vergeben oder Fenster wegklicken.
+     In der Tabelle "Plattentypen und ihre Tafeln" steht
+     eine Zeile je Plattenart - meist je Farbe - mit
+     eigener Farbe im Plan, eigenem Material, eigenem
+     Tafelformat und Preis je Tafel. Diese Tafel legt das
+     Programm beim Uebernehmen gleich mit an. Gleich grosse Platten
+     verschiedener Farbe bleiben getrennte Positionen und
+     landen nie auf derselben Tafel - das Programm legt
+     dafuer zu jeder Farbe eine Tafel an.
+     Das Programm zieht die Fuge ab, schlaegt die Zugabe auf,
+     sucht die Gleichteile und legt die Positionen
+     (P01, P02 ...) in die Teileliste.
+     Dazu gibt es die Positionsliste als Excel und den
+     Montageplan als DXF.
+     Wer seine Teile schon hat, faengt bei Schritt 2 an.
+
+  2  TEILE
+     DXF-Dateien aus HiCAD einlesen (Alucobond-Kassetten
+     und andere Abwicklungen) oder Teile von Hand erfassen.
+     Sammelaktionen setzen Material oder Drehbarkeit fuer
+     alle Teile auf einmal.
+
+  3  MATERIAL & NESTING
+     Tafelformate waehlen, Schnittfuge und Besaeumung
+     eintragen, Schnittart waehlen:
+        Guillotine - durchgehende Schnitte (Tafelschere, Saege)
+        Frei       - Rechtecke dicht gepackt (Laser, Plasma)
+        Kontur     - echte Teileform, Teile greifen ineinander
+     Dann "Nesting starten".
+
+     Die Teile werden danach mit der echten Kontur
+     zusammengeschoben, bis genau die Schnittfuge bleibt
+     ("Teile nachruecken"). Das spart Material und macht
+     den Plan massgenau.
+
+     Bei schiefen Teilen (Parallelogramm, Trapez, Dreieck,
+     Diagonalstreifen) steht unter "Einstellungen
+     Konturnesting" die erlaubte Drehung auf
+     "beliebig - an den Teilekanten". Das Teil wird dann so
+     gedreht, dass eine seiner eigenen Kanten waagrecht
+     liegt - das spart oft eine halbe Tafel. Bei reinen
+     Rechtecken aendert es nichts und kostet nur Rechenzeit,
+     dort genuegen die 90-Grad-Schritte.
+
+  4  PLAN & AUSGABE
+     Plan ansehen, von Hand nachbessern (Teile mit der Maus
+     ziehen, auch von Tafel zu Tafel) und ausgeben als
+     PDF, Excel, CSV oder DXF.
+
+  Der Reiter HILFE erklaert alles noch einmal mit Bildern.
+
+
+WENN ETWAS HAKT
+---------------------------------------------------------------
+
+  Das Fenster bleibt stehen bei
+     "Welcome to Streamlit! ... Email:"
+  -> Einfach Enter druecken, das Feld bleibt leer.
+
+  Der Browser oeffnet sich nicht
+  -> Im Browser von Hand aufrufen:  http://localhost:8501
+
+  Beim Rasterimport wird kein Feld erkannt
+  -> Meist fehlt der Umriss: er liegt oft auf einem
+     anderen Layer als die Teilung. Alle Layer ankreuzen,
+     die zur Zeichnung gehoeren.
+  -> Oder die Toleranz erhoehen, wenn die Linien kleine
+     Luecken haben oder nicht genau aneinanderstossen.
+     Schraege Linien sind kein Problem: auch schiefe
+     Ansichten, Giebel und Vielecke werden erkannt.
+
+  Teile stehen unter "Nicht eingeplant"
+  -> Meist stimmt das Material nicht ueberein: in der
+     Teileliste und bei den Tafeln dieselbe Schreibweise
+     verwenden, oder das Materialfeld leer lassen.
+
+  Der Desktop-Knopf findet sein Ziel nicht
+  -> Der Programmordner wurde verschoben. Einmal
+     Desktop-Verknuepfung.bat doppelklicken.
+
+
+ALLE MASSE IN MILLIMETER.
+Die Oberflaeche laeuft nur auf diesem Rechner, es gehen
+keine Daten nach aussen.
+
+Ausfuehrliche Beschreibung: README_NESTING.md

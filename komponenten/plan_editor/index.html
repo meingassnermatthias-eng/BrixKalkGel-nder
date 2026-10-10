@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; color: #111827;
+         background: #FFFFFF; font-size: 13px; }
+  .leiste { display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+            padding: 6px 0 8px 0; }
+  button { font: inherit; padding: 6px 11px; border: 1px solid #D1D5DB; border-radius: 7px;
+           background: #F9FAFB; cursor: pointer; }
+  button:hover:not(:disabled) { background: #EEF2F7; border-color: #9CA3AF; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.wichtig { background: #1E3A8A; border-color: #1E3A8A; color: #fff; font-weight: 600; }
+  button.wichtig:hover:not(:disabled) { background: #1B326F; }
+  .trenner { width: 1px; height: 22px; background: #E5E7EB; margin: 0 3px; }
+  label.schalter { display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+                   user-select: none; }
+  .hinweis { color: #6B7280; }
+  .feld { width: 62px; padding: 5px 6px; border: 1px solid #D1D5DB; border-radius: 6px;
+          font: inherit; }
+  #buehne { border: 1px solid #E5E7EB; border-radius: 8px; background: #FAFAFA;
+            touch-action: none; display: block; width: 100%; }
+  .teil { cursor: grab; }
+  .teil.gewaehlt { cursor: grabbing; }
+  .zeile { display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+           padding: 7px 0; }
+  .marke { padding: 3px 9px; border-radius: 999px; font-weight: 600; }
+  .gut { background: #DCFCE7; color: #166534; }
+  .schlecht { background: #FEE2E2; color: #991B1B; }
+  .vorrat { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0 0 0; }
+  .vorrat button { display: inline-flex; align-items: center; gap: 6px; }
+  .punkt { width: 11px; height: 11px; border-radius: 3px; border: 1px solid #111; }
+</style>
+</head>
+<body>
+<div class="leiste">
+  <button id="drehenLinks" title="Gegen den Uhrzeigersinn drehen">&#8634; 90&deg;</button>
+  <button id="drehenRechts" title="Im Uhrzeigersinn drehen">&#8635; 90&deg;</button>
+  <input class="feld" id="winkelFeld" type="number" step="5" title="Winkel in Grad">
+  <button id="entfernen" title="Teil von der Tafel nehmen (Entf)">Ablegen</button>
+  <div class="trenner"></div>
+  <button id="zurueck" title="Rueckgaengig (Strg+Z)">&#8592; Zur&uuml;ck</button>
+  <button id="vor" title="Wiederholen (Strg+Y)">Vor &#8594;</button>
+  <div class="trenner"></div>
+  <label class="schalter" title="Teile fangen sich an Kanten und Nachbarn">
+    <input type="checkbox" id="fangen" checked> Fangen</label>
+  <label class="schalter" title="Teile, die rot liegen, ruecken selbst auf die naechste freie Stelle">
+    <input type="checkbox" id="einruecken" checked> Einr&uuml;cken</label>
+  <label class="schalter">Raster <input class="feld" id="rasterFeld" type="number"
+         min="0" step="1" value="5"> mm</label>
+  <div class="trenner"></div>
+  <button class="wichtig" id="uebernehmen">&#10003; &Auml;nderungen &uuml;bernehmen</button>
+  <button id="verwerfen" title="Auf den gerechneten Plan zuruecksetzen">Verwerfen</button>
+</div>
+
+<svg id="buehne" xmlns="http://www.w3.org/2000/svg"></svg>
+
+<div class="zeile">
+  <span id="status" class="marke gut">Keine &Uuml;berschneidung</span>
+  <span class="hinweis" id="angaben"></span>
+</div>
+<div class="zeile" id="vorratZeile" style="display:none">
+  <span class="hinweis">Abgelegt / nicht eingeplant &ndash; zum Einsetzen anklicken:</span>
+</div>
+<div class="vorrat" id="vorrat"></div>
+<div class="zeile hinweis">
+  Ziehen mit der Maus, auch von einer Tafel auf die andere &middot;
+  Pfeiltasten 1&nbsp;mm (mit Umschalt 10&nbsp;mm) &middot; R dreht &middot;
+  Entf legt ab &middot; rot abgelegte Teile r&uuml;cken selbst auf die
+  n&auml;chste freie Stelle
+</div>
+
+<script>
+"use strict";
+
+// Hoechste Zeichenhoehe in Pixeln. Bewusst eine feste Zahl: wuerde sie von der
+// Fensterhoehe des Rahmens abhaengen, entstuende eine Rueckkopplung - Streamlit
+// setzt die Rahmenhoehe aus der Zeichenhoehe, und die Zeichnung wuerde sich
+// endlos neu aufbauen.
+const MAX_ZEICHENHOEHE = 700;
+const LUECKE = 16;          // Abstand zwischen zwei Tafeln in Pixeln
+const KOPFHOEHE = 17;       // Platz fuer die Beschriftung ueber jeder Tafel
+
+// ==========================================================
+// Verbindung zu Streamlit (Komponenten-Protokoll)
+// ==========================================================
+function anStreamlit(nachricht) {
+  window.parent.postMessage(Object.assign({isStreamlitMessage: true}, nachricht), "*");
+}
+let letzteHoehe = 0;
+function hoeheMelden() {
+  // Bewusst body statt documentElement: im Streamlit-Rahmen ist das
+  // html-Element auf die Hoehe des Elternfensters gestreckt, was zu einer
+  // riesigen Leerflaeche unter der Zeichnung fuehrt.
+  const hoehe = Math.ceil(document.body.getBoundingClientRect().height) + 6;
+  if (Math.abs(hoehe - letzteHoehe) < 2) return;
+  letzteHoehe = hoehe;
+  anStreamlit({type: "streamlit:setFrameHeight", height: hoehe});
+}
+function wertSetzen(wert) {
+  anStreamlit({type: "streamlit:setComponentValue", value: wert, dataType: "json"});
+}
+
+// ==========================================================
+// Geometrie
+// ==========================================================
+function drehePunkte(punkte, grad) {
+  const b = grad * Math.PI / 180, c = Math.cos(b), s = Math.sin(b);
+  return punkte.map(p => [p[0] * c - p[1] * s, p[0] * s + p[1] * c]);
+}
+
+/** Dreht eine Kontur (Aussenkontur + Ausschnitte) und schiebt sie in den Nullpunkt. */
+function dreheKontur(kontur, grad) {
+  const gedreht = kontur.map(ring => drehePunkte(ring, grad));
+  if (!gedreht.length || !gedreht[0].length) return {ringe: gedreht, breite: 0, hoehe: 0};
+  const xs = gedreht[0].map(p => p[0]), ys = gedreht[0].map(p => p[1]);
+  const x0 = Math.min(...xs), y0 = Math.min(...ys);
+  return {
+    ringe: gedreht.map(r => r.map(p => [p[0] - x0, p[1] - y0])),
+    breite: Math.max(...xs) - x0,
+    hoehe: Math.max(...ys) - y0,
+  };
+}
+
+function huelle(ringe) {
+  const xs = ringe[0].map(p => p[0]), ys = ringe[0].map(p => p[1]);
+  return {x0: Math.min(...xs), y0: Math.min(...ys),
+          x1: Math.max(...xs), y1: Math.max(...ys)};
+}
+
+function abstandPunktStrecke(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const laenge = dx * dx + dy * dy;
+  if (laenge === 0) return Math.hypot(p[0] - a[0], p[1] - a[1]);
+  let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / laenge;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+}
+
+function schneiden(a, b, c, d) {
+  const richtung = (p, q, r) =>
+    (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  const d1 = richtung(c, d, a), d2 = richtung(c, d, b);
+  const d3 = richtung(a, b, c), d4 = richtung(a, b, d);
+  return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0));
+}
+
+function abstandStrecken(a, b, c, d) {
+  if (schneiden(a, b, c, d)) return 0;
+  return Math.min(abstandPunktStrecke(a, c, d), abstandPunktStrecke(b, c, d),
+                  abstandPunktStrecke(c, a, b), abstandPunktStrecke(d, a, b));
+}
+
+function imPolygon(punkt, ring) {
+  let drin = false;
+  for (let i = 0, n = ring.length; i < n; i++) {
+    const [x1, y1] = ring[i], [x2, y2] = ring[(i + 1) % n];
+    if ((y1 > punkt[1]) !== (y2 > punkt[1])) {
+      const x = x1 + (punkt[1] - y1) * (x2 - x1) / (y2 - y1);
+      if (punkt[0] < x) drin = !drin;
+    }
+  }
+  return drin;
+}
+
+/** Even-Odd ueber alle Ringe: Loch zaehlt nicht als Material. */
+function imMaterial(punkt, ringe) {
+  let zahl = 0;
+  for (const ring of ringe) if (imPolygon(punkt, ring)) zahl++;
+  return zahl % 2 === 1;
+}
+
+function* kanten(ringe) {
+  for (const ring of ringe)
+    for (let i = 0; i < ring.length; i++)
+      yield [ring[i], ring[(i + 1) % ring.length]];
+}
+
+/** Kleinster Abstand zweier Teile; 0 bei Ueberschneidung oder Einschluss. */
+function kleinsterAbstand(ringeA, ringeB) {
+  for (const p of ringeA[0]) if (imMaterial(p, ringeB)) return 0;
+  for (const p of ringeB[0]) if (imMaterial(p, ringeA)) return 0;
+  const kantenB = [...kanten(ringeB)];
+  let kleinster = Infinity;
+  for (const [a, b] of kanten(ringeA)) {
+    for (const [c, d] of kantenB) {
+      const wert = abstandStrecken(a, b, c, d);
+      if (wert < kleinster) kleinster = wert;
+      if (kleinster === 0) return 0;
+    }
+  }
+  return kleinster;
+}
+
+function flaecheRinge(ringe) {
+  let gesamt = 0;
+  ringe.forEach((ring, i) => {
+    let summe = 0;
+    for (let k = 0; k < ring.length; k++) {
+      const [x1, y1] = ring[k], [x2, y2] = ring[(k + 1) % ring.length];
+      summe += x1 * y2 - x2 * y1;
+    }
+    gesamt += (i === 0 ? 1 : -1) * Math.abs(summe / 2);
+  });
+  return Math.max(gesamt, 0);
+}
+
+// ==========================================================
+// Zustand
+// ==========================================================
+let vorgabe = null;        // Daten aus Python
+let teile = [];            // alle Teile aller gezeigten Tafeln (Feld "tafel")
+let vorrat = [];           // abgelegte und nicht eingeplante Teile
+let gewaehlt = null;       // id des gewaehlten Teils
+let aktiveTafel = 0;       // Ziel fuer das Einsetzen aus der Ablage
+let verlauf = [], zukunft = [];
+let zieht = null;
+let zaehler = 0;
+let aufteilung = [];       // je Tafel {ox, oy, breite, hoehe} in Pixeln
+let massstab = 1;          // Pixel je Millimeter
+
+const svg = document.getElementById("buehne");
+const NS = "http://www.w3.org/2000/svg";
+
+function tiefeKopie(wert) { return JSON.parse(JSON.stringify(wert)); }
+function tafelVon(teil) { return vorgabe.tafeln[teil.tafel] || vorgabe.tafeln[0]; }
+
+function standSichern() {
+  verlauf.push({teile: tiefeKopie(teile), vorrat: tiefeKopie(vorrat)});
+  if (verlauf.length > 60) verlauf.shift();
+  zukunft = [];
+}
+
+function zurueckgehen() {
+  if (!verlauf.length) return;
+  zukunft.push({teile: tiefeKopie(teile), vorrat: tiefeKopie(vorrat)});
+  const stand = verlauf.pop();
+  teile = stand.teile; vorrat = stand.vorrat;
+  gewaehlt = null;
+  zeichnen();
+}
+
+function vorgehen() {
+  if (!zukunft.length) return;
+  verlauf.push({teile: tiefeKopie(teile), vorrat: tiefeKopie(vorrat)});
+  const stand = zukunft.pop();
+  teile = stand.teile; vorrat = stand.vorrat;
+  gewaehlt = null;
+  zeichnen();
+}
+
+/** Weltkoordinaten der Kontur eines Teils (in Millimetern seiner Tafel). */
+function weltRinge(teil) {
+  const gedreht = dreheKontur(teil.kontur, teil.winkel);
+  return gedreht.ringe.map(r => r.map(p => [p[0] + teil.x, p[1] + teil.y]));
+}
+
+function weltStich(teil) {
+  if (!teil.stich || !teil.stich.length) return [];
+  const b = teil.winkel * Math.PI / 180, c = Math.cos(b), s = Math.sin(b);
+  const roh = teil.kontur.map(ring => drehePunkte(ring, teil.winkel));
+  const xs = roh[0].map(p => p[0]), ys = roh[0].map(p => p[1]);
+  const x0 = Math.min(...xs), y0 = Math.min(...ys);
+  return teil.stich.map(linie => linie.map(p => {
+    const x = p[0] * c - p[1] * s, y = p[0] * s + p[1] * c;
+    return [x - x0 + teil.x, y - y0 + teil.y];
+  }));
+}
+
+function masse(teil) {
+  const g = dreheKontur(teil.kontur, teil.winkel);
+  return {breite: g.breite, hoehe: g.hoehe};
+}
+
+function teileAuf(nr) { return teile.filter(t => t.tafel === nr); }
+
+// ==========================================================
+// Pruefung
+// ==========================================================
+/** Falsch liegende Teile ueber alle Tafeln; Rueckgabe: Menge von Teil-Ids. */
+function pruefen() {
+  const fuge = vorgabe.saegeblatt;
+  const fehler = new Set();
+  const fremd = new Set();          // Teil liegt auf Tafel aus anderem Material
+  const ringeJe = new Map();
+
+  vorgabe.tafeln.forEach((tafel, nr) => {
+    const auswahl = teileAuf(nr);
+    const ringe = auswahl.map(teil => {
+      const r = weltRinge(teil);
+      ringeJe.set(teil.id, r);
+      return r;
+    });
+    const huellen = ringe.map(huelle);
+    const rand = tafel.besaeumung;
+
+    auswahl.forEach((teil, i) => {
+      const h = huellen[i];
+      if (h.x0 < rand - 0.01 || h.y0 < rand - 0.01 ||
+          h.x1 > tafel.breite - rand + 0.01 ||
+          h.y1 > tafel.hoehe - rand + 0.01) fehler.add(teil.id);
+      // Eine anthrazitfarbene Platte hat auf einer silbernen Tafel nichts
+      // verloren - das ist genauso ein Fehler wie eine Ueberschneidung.
+      if (teil.material && tafel.material && teil.material !== tafel.material) {
+        fehler.add(teil.id);
+        fremd.add(teil.id);
+      }
+    });
+    for (let i = 0; i < auswahl.length; i++) {
+      for (let k = i + 1; k < auswahl.length; k++) {
+        const a = huellen[i], b = huellen[k];
+        // grobe Vorpruefung ueber die Huellen spart die teure Rechnung
+        if (a.x1 + fuge < b.x0 || b.x1 + fuge < a.x0 ||
+            a.y1 + fuge < b.y0 || b.y1 + fuge < a.y0) continue;
+        if (kleinsterAbstand(ringe[i], ringe[k]) < fuge - 0.01) {
+          fehler.add(auswahl[i].id); fehler.add(auswahl[k].id);
+        }
+      }
+    }
+  });
+  return {fehler, fremd, ringeJe};
+}
+
+// ==========================================================
+// Aufteilung der Zeichenflaeche
+// ==========================================================
+/**
+ * Verteilt die Tafeln auf ein Raster und waehlt den groesstmoeglichen
+ * Massstab. Alle Tafeln werden gleich skaliert, damit sie vergleichbar sind.
+ */
+function aufteilen(breitePx) {
+  const n = vorgabe.tafeln.length;
+  const maxB = Math.max(...vorgabe.tafeln.map(t => t.breite));
+  const maxH = Math.max(...vorgabe.tafeln.map(t => t.hoehe));
+  let beste = null;
+  for (let spalten = 1; spalten <= n; spalten++) {
+    const zeilen = Math.ceil(n / spalten);
+    const zelleB = (breitePx - (spalten + 1) * LUECKE) / spalten;
+    const zelleH = (MAX_ZEICHENHOEHE - zeilen * (LUECKE + KOPFHOEHE)) / zeilen;
+    if (zelleB <= 10 || zelleH <= 10) continue;
+    const skala = Math.min(zelleB / maxB, zelleH / maxH);
+    if (!beste || skala > beste.skala) beste = {spalten, zeilen, skala};
+  }
+  if (!beste) {
+    const spalten = Math.min(n, 4), zeilen = Math.ceil(n / spalten);
+    beste = {spalten, zeilen,
+             skala: (breitePx - (spalten + 1) * LUECKE) / spalten / maxB};
+  }
+
+  massstab = beste.skala;
+  const zelleBreite = (breitePx - (beste.spalten + 1) * LUECKE) / beste.spalten;
+  aufteilung = vorgabe.tafeln.map((tafel, i) => {
+    const spalte = i % beste.spalten, zeile = Math.floor(i / beste.spalten);
+    const breite = tafel.breite * massstab;
+    return {
+      // in der Spalte mittig, sonst klebt die Tafel bei breiten Feldern links
+      ox: LUECKE + spalte * (zelleBreite + LUECKE) + (zelleBreite - breite) / 2,
+      oy: KOPFHOEHE + zeile * (maxH * massstab + LUECKE + KOPFHOEHE),
+      breite: breite,
+      hoehe: tafel.hoehe * massstab,
+    };
+  });
+  return KOPFHOEHE + beste.zeilen * (maxH * massstab + LUECKE + KOPFHOEHE);
+}
+
+function sx(nr, x) { return aufteilung[nr].ox + x * massstab; }
+function sy(nr, y) { return aufteilung[nr].oy + aufteilung[nr].hoehe - y * massstab; }
+
+/** Welche Tafel liegt unter diesem Punkt der Zeichenflaeche? */
+function tafelUnter(px, py) {
+  for (let i = 0; i < aufteilung.length; i++) {
+    const a = aufteilung[i];
+    if (px >= a.ox - LUECKE / 2 && px <= a.ox + a.breite + LUECKE / 2 &&
+        py >= a.oy - KOPFHOEHE && py <= a.oy + a.hoehe + LUECKE / 2) return i;
+  }
+  return -1;
+}
+
+// ==========================================================
+// Zeichnen
+// ==========================================================
+function element(name, eigenschaften) {
+  const e = document.createElementNS(NS, name);
+  for (const schluessel in eigenschaften) e.setAttribute(schluessel, eigenschaften[schluessel]);
+  return e;
+}
+
+function zeichnen() {
+  const breite = svg.clientWidth || 700;
+  const hoehe = aufteilen(breite);
+  svg.setAttribute("height", hoehe);
+  svg.setAttribute("viewBox", `0 0 ${breite} ${hoehe}`);
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  const {fehler, fremd} = pruefen();
+
+  vorgabe.tafeln.forEach((tafel, nr) => {
+    const a = aufteilung[nr];
+    const auswahl = teileAuf(nr);
+    const genutzt = auswahl.reduce((summe, teil) => summe + flaecheRinge(weltRinge(teil)), 0);
+    const anteil = 100 * genutzt / (tafel.breite * tafel.hoehe);
+
+    const beschriftung = element("text", {
+      x: a.ox, y: a.oy - 5, "font-size": 11.5, "font-weight": 600,
+      fill: nr === aktiveTafel && vorgabe.tafeln.length > 1 ? "#1E3A8A" : "#374151"});
+    beschriftung.textContent =
+      `Tafel ${tafel.nummer} \u00B7 ${tafel.name} \u00B7 ${auswahl.length} Teile `
+      + `\u00B7 ${anteil.toFixed(1)} %`;
+    svg.appendChild(beschriftung);
+
+    svg.appendChild(element("rect", {
+      x: a.ox, y: a.oy, width: a.breite, height: a.hoehe,
+      fill: "#FFFFFF",
+      stroke: nr === aktiveTafel && vorgabe.tafeln.length > 1 ? "#1E3A8A" : "#374151",
+      "stroke-width": nr === aktiveTafel && vorgabe.tafeln.length > 1 ? 2.2 : 1.5}));
+    if (tafel.besaeumung > 0) {
+      svg.appendChild(element("rect", {
+        x: sx(nr, tafel.besaeumung), y: sy(nr, tafel.hoehe - tafel.besaeumung),
+        width: (tafel.breite - 2 * tafel.besaeumung) * massstab,
+        height: (tafel.hoehe - 2 * tafel.besaeumung) * massstab,
+        fill: "none", stroke: "#9CA3AF", "stroke-width": 1, "stroke-dasharray": "5 4"}));
+    }
+  });
+
+  teile.forEach(teil => {
+    const nr = teil.tafel;
+    if (!aufteilung[nr]) return;
+    const gruppe = element("g", {class: "teil" + (teil.id === gewaehlt ? " gewaehlt" : "")});
+    gruppe.dataset.id = teil.id;
+    const schlecht = fehler.has(teil.id);
+    weltRinge(teil).forEach((ring, k) => {
+      const punkte = ring.map(p => `${sx(nr, p[0]).toFixed(2)},${sy(nr, p[1]).toFixed(2)}`)
+                         .join(" ");
+      gruppe.appendChild(element("polygon", {
+        points: punkte,
+        fill: k === 0 ? teil.farbe : "#FFFFFF",
+        "fill-opacity": k === 0 ? (schlecht ? 0.55 : 0.85) : 1,
+        stroke: schlecht ? "#DC2626" : (teil.id === gewaehlt ? "#111827" : "#1F2937"),
+        "stroke-width": schlecht || teil.id === gewaehlt ? 2.2 : 0.9}));
+    });
+    weltStich(teil).forEach(linie => {
+      const punkte = linie.map(p => `${sx(nr, p[0]).toFixed(2)},${sy(nr, p[1]).toFixed(2)}`)
+                          .join(" ");
+      gruppe.appendChild(element("polyline", {
+        points: punkte, fill: "none", stroke: "#DC2626",
+        "stroke-width": 1, "stroke-dasharray": "4 3"}));
+    });
+
+    const m = masse(teil);
+    if (m.breite * massstab > 46 && m.hoehe * massstab > 24) {
+      const mx = sx(nr, teil.x + m.breite / 2), my = sy(nr, teil.y + m.hoehe / 2);
+      const kopf = element("text", {
+        x: mx, y: my - 2, "text-anchor": "middle", "font-size": 11,
+        "font-weight": 700, fill: "#FFFFFF", "pointer-events": "none"});
+      kopf.textContent = teil.sorte.substring(0, 18);
+      gruppe.appendChild(kopf);
+      const fuss = element("text", {
+        x: mx, y: my + 11, "text-anchor": "middle", "font-size": 9.5,
+        fill: "#F9FAFB", "pointer-events": "none"});
+      fuss.textContent = `${Math.round(m.breite)} x ${Math.round(m.hoehe)}`
+                         + (teil.winkel ? `  ${Math.round(teil.winkel)}\u00B0` : "");
+      gruppe.appendChild(fuss);
+    }
+    svg.appendChild(gruppe);
+  });
+
+  const marke = document.getElementById("status");
+  if (fehler.size) {
+    marke.className = "marke schlecht";
+    marke.textContent = fehler.size + " Teil(e) liegen falsch"
+      + (fremd && fremd.size
+         ? ", davon " + fremd.size + " auf einer Tafel aus anderem Material"
+         : "");
+  } else {
+    marke.className = "marke gut";
+    marke.textContent = "Alles frei \u2013 Schnittfuge eingehalten";
+  }
+  const genutzt = teile.reduce((summe, teil) => summe + flaecheRinge(weltRinge(teil)), 0);
+  const gesamt = vorgabe.tafeln.reduce((summe, t) => summe + t.breite * t.hoehe, 0);
+  document.getElementById("angaben").textContent =
+    `${vorgabe.tafeln.length} Tafel(n) \u00B7 ${teile.length} Teile \u00B7 `
+    + `Ausnutzung ${(100 * genutzt / gesamt).toFixed(1)} % \u00B7 `
+    + `Schnittfuge ${vorgabe.saegeblatt} mm`;
+
+  const teil = teile.find(t => t.id === gewaehlt);
+  document.getElementById("winkelFeld").value = teil ? Math.round(teil.winkel) : "";
+  ["drehenLinks", "drehenRechts", "entfernen", "winkelFeld"].forEach(
+    id => document.getElementById(id).disabled = !teil);
+  document.getElementById("zurueck").disabled = !verlauf.length;
+  document.getElementById("vor").disabled = !zukunft.length;
+
+  vorratZeichnen();
+  hoeheMelden();
+}
+
+function vorratZeichnen() {
+  const behaelter = document.getElementById("vorrat");
+  behaelter.innerHTML = "";
+  const zeile = document.getElementById("vorratZeile");
+  zeile.style.display = vorrat.length ? "" : "none";
+  if (vorrat.length && vorgabe.tafeln.length > 1) {
+    zeile.querySelector("span").textContent =
+      `Abgelegt / nicht eingeplant \u2013 Anklicken setzt auf Tafel `
+      + `${vorgabe.tafeln[aktiveTafel].nummer} (Tafel vorher anklicken):`;
+  }
+  vorrat.forEach((posten, i) => {
+    const knopf = document.createElement("button");
+    const punkt = document.createElement("span");
+    punkt.className = "punkt";
+    punkt.style.background = posten.farbe;
+    knopf.appendChild(punkt);
+    const g = dreheKontur(posten.kontur, 0);
+    knopf.appendChild(document.createTextNode(
+      `${posten.sorte}  ${Math.round(g.breite)}\u00D7${Math.round(g.hoehe)}`
+      + (posten.anzahl > 1 ? `  (${posten.anzahl}\u00D7)` : "")));
+    knopf.title = "Auf die gewaehlte Tafel setzen";
+    knopf.onclick = () => einsetzen(i);
+    behaelter.appendChild(knopf);
+  });
+}
+
+// ==========================================================
+// Freie Plaetze suchen
+// ==========================================================
+/** Huellen aller anderen Teile derselben Tafel - fuer die Lagepruefung. */
+function nachbarnAusser(teil, nr) {
+  const tafelNr = nr === undefined ? teil.tafel : nr;
+  return teile.filter(a => a.tafel === tafelNr && a.id !== (teil ? teil.id : null))
+              .map(a => { const ringe = weltRinge(a); return {ringe, h: huelle(ringe)}; });
+}
+
+/** Liegt das Teil an dieser Stelle frei (Tafelrand und Schnittfuge eingehalten)? */
+function lageFrei(teil, x, y, nachbarn, tafel) {
+  const t = tafel || tafelVon(teil);
+  const rand = t.besaeumung;
+  const fuge = vorgabe.saegeblatt;
+  const m = masse(teil);
+  if (x < rand - 0.01 || y < rand - 0.01 ||
+      x + m.breite > t.breite - rand + 0.01 ||
+      y + m.hoehe > t.hoehe - rand + 0.01) return false;
+
+  const h = {x0: x, y0: y, x1: x + m.breite, y1: y + m.hoehe};
+  let ringe = null;
+  for (const nachbar of nachbarn) {
+    const n = nachbar.h;
+    if (h.x1 + fuge < n.x0 || n.x1 + fuge < h.x0 ||
+        h.y1 + fuge < n.y0 || n.y1 + fuge < h.y0) continue;
+    if (ringe === null) {
+      ringe = weltRinge({kontur: teil.kontur, winkel: teil.winkel, x: x, y: y});
+    }
+    if (kleinsterAbstand(ringe, nachbar.ringe) < fuge - 0.01) return false;
+  }
+  return true;
+}
+
+/** Vollstaendige Suche von links unten auf einer Tafel. */
+function freierPlatz(kontur, winkel, ausserId, tafelNr) {
+  const t = vorgabe.tafeln[tafelNr];
+  const g = dreheKontur(kontur, winkel);
+  const rand = t.besaeumung;
+  const fuge = vorgabe.saegeblatt;
+  if (g.breite > t.breite - 2 * rand || g.hoehe > t.hoehe - 2 * rand) return null;
+
+  const nachbarn = teile.filter(teil => teil.tafel === tafelNr && teil.id !== ausserId)
+                        .map(teil => { const ringe = weltRinge(teil);
+                                       return {ringe, h: huelle(ringe)}; });
+  const schritt = Math.max(vorgabe.raster || 5, 10);
+  const probe = {kontur: kontur, winkel: winkel, x: 0, y: 0};
+
+  for (let y = rand; y + g.hoehe <= t.hoehe - rand + 0.01; y += schritt) {
+    for (let x = rand; x + g.breite <= t.breite - rand + 0.01; x += schritt) {
+      const h = {x0: x, y0: y, x1: x + g.breite, y1: y + g.hoehe};
+      let frei = true, ringe = null;
+      for (const nachbar of nachbarn) {
+        const n = nachbar.h;
+        if (h.x1 + fuge < n.x0 || n.x1 + fuge < h.x0 ||
+            h.y1 + fuge < n.y0 || n.y1 + fuge < h.y0) continue;
+        if (ringe === null) { probe.x = x; probe.y = y; ringe = weltRinge(probe); }
+        if (kleinsterAbstand(ringe, nachbar.ringe) < fuge - 0.01) { frei = false; break; }
+      }
+      if (frei) return {x, y};
+    }
+  }
+  return null;
+}
+
+/** Ringfoermige Suche um einen Punkt; kuerzeste Verschiebung gewinnt. */
+function ringSuche(teil, startX, startY, nachbarn, schritt, maxRing, budget, tafel) {
+  for (let ring = 1; ring <= maxRing && budget > 0; ring++) {
+    const kandidaten = [];
+    for (let i = -ring; i <= ring; i++) {
+      kandidaten.push([startX + i * schritt, startY - ring * schritt]);
+      kandidaten.push([startX + i * schritt, startY + ring * schritt]);
+    }
+    for (let k = -ring + 1; k <= ring - 1; k++) {
+      kandidaten.push([startX - ring * schritt, startY + k * schritt]);
+      kandidaten.push([startX + ring * schritt, startY + k * schritt]);
+    }
+    kandidaten.sort((a, b) =>
+      ((a[0] - startX) ** 2 + (a[1] - startY) ** 2)
+      - ((b[0] - startX) ** 2 + (b[1] - startY) ** 2));
+    for (const [x, y] of kandidaten) {
+      if (budget-- <= 0) break;
+      if (lageFrei(teil, x, y, nachbarn, tafel)) return {x, y};
+    }
+  }
+  return null;
+}
+
+/**
+ * Naechste freie Lage fuer ein Teil, das rot liegt - in drei Stufen, damit es
+ * so wenig wie moeglich wandert und trotzdem ein Platz gefunden wird:
+ * feine Ringsuche, grobe Ringsuche, vollstaendige Suche von links unten.
+ * Die Drehung bleibt, wie der Benutzer sie gewaehlt hat.
+ */
+function naechsteFreieLage(teil) {
+  const t = tafelVon(teil);
+  const rand = t.besaeumung;
+  const m = masse(teil);
+  if (m.breite > t.breite - 2 * rand + 0.01 ||
+      m.hoehe > t.hoehe - 2 * rand + 0.01) return null;
+
+  const nachbarn = nachbarnAusser(teil);
+  const schritt = Math.max(vorgabe.raster || 5, 5);
+  const startX = Math.min(Math.max(teil.x, rand), t.breite - rand - m.breite);
+  const startY = Math.min(Math.max(teil.y, rand), t.hoehe - rand - m.hoehe);
+  if (lageFrei(teil, startX, startY, nachbarn, t)) return {x: startX, y: startY};
+
+  const nah = ringSuche(teil, startX, startY, nachbarn, schritt, 24, 4000, t);
+  if (nah) return nah;
+  const grob = Math.max(schritt * 4, 20);
+  const weit = ringSuche(teil, startX, startY, nachbarn, grob,
+                         Math.ceil(Math.max(t.breite, t.hoehe) / grob), 9000, t);
+  if (weit) return weit;
+  return freierPlatz(teil.kontur, teil.winkel, teil.id, teil.tafel);
+}
+
+/** Rueckt ein Teil auf die naechste freie Stelle, wenn es rot liegt. */
+function einruecken(teil) {
+  if (!teil || !document.getElementById("einruecken").checked) return null;
+  if (lageFrei(teil, teil.x, teil.y, nachbarnAusser(teil), tafelVon(teil))) return null;
+  const ziel = naechsteFreieLage(teil);
+  if (!ziel) return "kein";
+  const weg = Math.hypot(ziel.x - teil.x, ziel.y - teil.y);
+  teil.x = ziel.x; teil.y = ziel.y;
+  return weg;
+}
+
+function einrueckenMelden(ergebnis) {
+  if (ergebnis === null) return;
+  const marke = document.getElementById("status");
+  if (ergebnis === "kein") {
+    marke.className = "marke schlecht";
+    marke.textContent = "Keine freie Stelle auf dieser Tafel - Teil ablegen oder "
+                        + "auf eine andere Tafel ziehen";
+  } else {
+    marke.textContent = `Auf die n\u00E4chste freie Stelle ger\u00FCckt `
+                        + `(${Math.round(ergebnis)} mm)`;
+  }
+}
+
+// ==========================================================
+// Bearbeiten
+// ==========================================================
+function einsetzen(index) {
+  const posten = vorrat[index];
+  const nr = aktiveTafel;
+  let platz = null, winkel = 0;
+  for (const grad of [0, 90, 180, 270]) {
+    platz = freierPlatz(posten.kontur, grad, null, nr);
+    if (platz) { winkel = grad; break; }
+  }
+  const passt = platz !== null;
+  if (!passt) platz = {x: vorgabe.tafeln[nr].besaeumung, y: vorgabe.tafeln[nr].besaeumung};
+
+  standSichern();
+  teile.push({
+    id: "neu" + (++zaehler), tafel: nr, sorte: posten.sorte, kontur: posten.kontur,
+    stich: posten.stich || [], farbe: posten.farbe,
+    x: platz.x, y: platz.y, winkel: winkel,
+  });
+  posten.anzahl -= 1;
+  if (posten.anzahl <= 0) vorrat.splice(index, 1);
+  gewaehlt = teile[teile.length - 1].id;
+  zeichnen();
+  if (!passt) {
+    document.getElementById("status").textContent =
+      `Kein freier Platz auf Tafel ${vorgabe.tafeln[nr].nummer} - Teil liegt vorerst `
+      + `uebereinander, bitte von Hand schieben`;
+  }
+}
+
+function ablegen() {
+  const i = teile.findIndex(t => t.id === gewaehlt);
+  if (i < 0) return;
+  standSichern();
+  const teil = teile[i];
+  const vorhanden = vorrat.find(p => p.sorte === teil.sorte);
+  if (vorhanden) vorhanden.anzahl += 1;
+  else vorrat.push({sorte: teil.sorte, kontur: teil.kontur, stich: teil.stich,
+                    farbe: teil.farbe, anzahl: 1});
+  teile.splice(i, 1);
+  gewaehlt = null;
+  zeichnen();
+}
+
+function drehen(grad) {
+  const teil = teile.find(t => t.id === gewaehlt);
+  if (!teil) return;
+  standSichern();
+  const vorher = masse(teil);
+  teil.winkel = ((teil.winkel + grad) % 360 + 360) % 360;
+  const nachher = masse(teil);
+  // um die Mitte drehen, damit das Teil nicht wegspringt
+  teil.x += (vorher.breite - nachher.breite) / 2;
+  teil.y += (vorher.hoehe - nachher.hoehe) / 2;
+  const ergebnis = einruecken(teil);
+  zeichnen();
+  einrueckenMelden(ergebnis);
+}
+
+/** Fangpunkte: Tafelrand und Kanten der Nachbarn (im Abstand der Schnittfuge). */
+function fangen(teil, x, y) {
+  if (!document.getElementById("fangen").checked) return {x, y};
+  const t = tafelVon(teil);
+  const m = masse(teil);
+  const fuge = vorgabe.saegeblatt;
+  const rand = t.besaeumung;
+  const schwelle = Math.max(6, t.breite / 110);
+
+  const xZiele = [rand, t.breite - rand - m.breite];
+  const yZiele = [rand, t.hoehe - rand - m.hoehe];
+  teile.forEach(anderes => {
+    if (anderes.id === teil.id || anderes.tafel !== teil.tafel) return;
+    const a = masse(anderes);
+    xZiele.push(anderes.x + a.breite + fuge, anderes.x - m.breite - fuge, anderes.x,
+                anderes.x + a.breite - m.breite);
+    yZiele.push(anderes.y + a.hoehe + fuge, anderes.y - m.hoehe - fuge, anderes.y,
+                anderes.y + a.hoehe - m.hoehe);
+  });
+
+  let besteX = x, besteY = y, abstandX = schwelle, abstandY = schwelle;
+  xZiele.forEach(ziel => {
+    const d = Math.abs(ziel - x);
+    if (d < abstandX) { abstandX = d; besteX = ziel; }
+  });
+  yZiele.forEach(ziel => {
+    const d = Math.abs(ziel - y);
+    if (d < abstandY) { abstandY = d; besteY = ziel; }
+  });
+
+  const raster = parseFloat(document.getElementById("rasterFeld").value) || 0;
+  if (raster > 0) {
+    if (abstandX >= schwelle) besteX = Math.round(x / raster) * raster;
+    if (abstandY >= schwelle) besteY = Math.round(y / raster) * raster;
+  }
+  return {x: besteX, y: besteY};
+}
+
+function schieben(dx, dy) {
+  const teil = teile.find(t => t.id === gewaehlt);
+  if (!teil) return;
+  standSichern();
+  teil.x += dx; teil.y += dy;
+  zeichnen();
+}
+
+// ==========================================================
+// Maus
+// ==========================================================
+/** Punkt der Zeichenflaeche in Pixeln. */
+function mausPixel(ereignis) {
+  const kasten = svg.getBoundingClientRect();
+  const breite = svg.clientWidth || kasten.width;
+  return {x: (ereignis.clientX - kasten.left) * (breite / kasten.width),
+          y: (ereignis.clientY - kasten.top) * (breite / kasten.width)};
+}
+
+/** Punkt in Millimetern einer bestimmten Tafel. */
+function mausMm(ereignis, nr) {
+  const p = mausPixel(ereignis);
+  const a = aufteilung[nr];
+  return {x: (p.x - a.ox) / massstab, y: (a.oy + a.hoehe - p.y) / massstab};
+}
+
+svg.addEventListener("pointerdown", ereignis => {
+  const p = mausPixel(ereignis);
+  const unter = tafelUnter(p.x, p.y);
+  if (unter >= 0) aktiveTafel = unter;
+
+  const gruppe = ereignis.target.closest(".teil");
+  if (!gruppe) { gewaehlt = null; zeichnen(); return; }
+  const teil = teile.find(t => t.id === gruppe.dataset.id);
+  if (!teil) return;
+  gewaehlt = teil.id;
+  aktiveTafel = teil.tafel;
+  const punkt = mausMm(ereignis, teil.tafel);
+  standSichern();
+  zieht = {id: teil.id, dx: punkt.x - teil.x, dy: punkt.y - teil.y, bewegt: false};
+  svg.setPointerCapture(ereignis.pointerId);
+  zeichnen();
+});
+
+svg.addEventListener("pointermove", ereignis => {
+  if (!zieht) return;
+  const teil = teile.find(t => t.id === zieht.id);
+  if (!teil) return;
+  const p = mausPixel(ereignis);
+  const unter = tafelUnter(p.x, p.y);
+  if (unter >= 0 && unter !== teil.tafel) {
+    teil.tafel = unter;          // Teil wandert auf eine andere Tafel
+    aktiveTafel = unter;
+  }
+  const punkt = mausMm(ereignis, teil.tafel);
+  const ziel = fangen(teil, punkt.x - zieht.dx, punkt.y - zieht.dy);
+  teil.x = ziel.x; teil.y = ziel.y;
+  zieht.bewegt = true;
+  zeichnen();
+});
+
+function ziehenBeenden(ereignis) {
+  if (!zieht) return;
+  const teil = teile.find(t => t.id === zieht.id);
+  const bewegt = zieht.bewegt;
+  if (!bewegt) verlauf.pop();           // reiner Klick ist kein Schritt
+  zieht = null;
+  if (ereignis && ereignis.pointerId !== undefined) {
+    try { svg.releasePointerCapture(ereignis.pointerId); } catch (e) {}
+  }
+  const ergebnis = bewegt ? einruecken(teil) : null;
+  zeichnen();
+  einrueckenMelden(ergebnis);           // nach dem Zeichnen, sonst ueberschrieben
+}
+svg.addEventListener("pointerup", ziehenBeenden);
+svg.addEventListener("pointercancel", ziehenBeenden);
+
+document.addEventListener("keydown", ereignis => {
+  if (ereignis.target.tagName === "INPUT") return;
+  const schritt = ereignis.shiftKey ? 10 : 1;
+  const tasten = {ArrowLeft: [-schritt, 0], ArrowRight: [schritt, 0],
+                  ArrowUp: [0, schritt], ArrowDown: [0, -schritt]};
+  if (tasten[ereignis.key]) {
+    ereignis.preventDefault();
+    schieben(tasten[ereignis.key][0], tasten[ereignis.key][1]);
+  } else if (ereignis.key === "r" || ereignis.key === "R") {
+    drehen(ereignis.shiftKey ? -90 : 90);
+  } else if (ereignis.key === "Delete" || ereignis.key === "Backspace") {
+    ablegen();
+  } else if (ereignis.ctrlKey && ereignis.key === "z") {
+    zurueckgehen();
+  } else if (ereignis.ctrlKey && (ereignis.key === "y" || ereignis.key === "Z")) {
+    vorgehen();
+  }
+});
+
+// ==========================================================
+// Bedienelemente
+// ==========================================================
+document.getElementById("drehenLinks").onclick = () => drehen(90);
+document.getElementById("drehenRechts").onclick = () => drehen(-90);
+document.getElementById("entfernen").onclick = ablegen;
+document.getElementById("zurueck").onclick = zurueckgehen;
+document.getElementById("vor").onclick = vorgehen;
+document.getElementById("winkelFeld").onchange = ereignis => {
+  const teil = teile.find(t => t.id === gewaehlt);
+  if (!teil) return;
+  const wert = parseFloat(ereignis.target.value);
+  if (isNaN(wert)) return;
+  standSichern();
+  const vorher = masse(teil);
+  teil.winkel = ((wert % 360) + 360) % 360;
+  const nachher = masse(teil);
+  teil.x += (vorher.breite - nachher.breite) / 2;
+  teil.y += (vorher.hoehe - nachher.hoehe) / 2;
+  const ergebnis = einruecken(teil);
+  zeichnen();
+  einrueckenMelden(ergebnis);
+};
+document.getElementById("fangen").onchange = zeichnen;
+document.getElementById("verwerfen").onclick = () => {
+  standSichern();
+  teile = tiefeKopie(vorgabe.teile);
+  vorrat = tiefeKopie(vorgabe.vorrat || []);
+  gewaehlt = null;
+  zeichnen();
+};
+document.getElementById("uebernehmen").onclick = () => {
+  const {fehler, fremd} = pruefen();
+  if (fehler.size && !window.confirm(
+      fehler.size + " Teil(e) liegen falsch (Ueberschneidung, ausserhalb der "
+      + "Tafel" + (fremd.size ? " oder falsches Material" : "")
+      + "). Trotzdem uebernehmen?")) return;
+  wertSetzen({
+    stand: Date.now(),
+    tafeln: vorgabe.tafeln.map(t => t.nummer),
+    teile: teile.map(t => ({id: t.id, tafel: t.tafel, sorte: t.sorte,
+                            x: t.x, y: t.y, winkel: t.winkel})),
+    fehlerhaft: fehler.size,
+  });
+};
+
+// ==========================================================
+// Start
+// ==========================================================
+window.addEventListener("message", ereignis => {
+  if (!ereignis.data || ereignis.data.type !== "streamlit:render") return;
+  const neu = ereignis.data.args.daten;
+  if (!neu) return;
+  const gleich = vorgabe && JSON.stringify(vorgabe) === JSON.stringify(neu);
+  vorgabe = neu;
+  if (!gleich) {
+    teile = tiefeKopie(neu.teile);
+    vorrat = tiefeKopie(neu.vorrat || []);
+    verlauf = []; zukunft = []; gewaehlt = null; aktiveTafel = 0;
+    document.getElementById("rasterFeld").value = neu.raster || 5;
+  }
+  zeichnen();
+});
+let letzteBreite = 0;
+window.addEventListener("resize", () => {
+  // Nur die Breite ist eine echte Vorgabe von aussen; auf Hoehenaenderungen zu
+  // reagieren wuerde die Zeichnung endlos neu aufbauen.
+  if (!vorgabe) return;
+  const breite = svg.clientWidth;
+  if (Math.abs(breite - letzteBreite) < 2) return;
+  letzteBreite = breite;
+  zeichnen();
+});
+anStreamlit({type: "streamlit:componentReady", apiVersion: 1});
+hoeheMelden();
+</script>
+</body>
+</html>

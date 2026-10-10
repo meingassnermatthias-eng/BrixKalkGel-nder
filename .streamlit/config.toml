@@ -1,0 +1,12 @@
+# Einstellungen fuer die Streamlit-Oberflaeche.
+# Diese Datei muss im selben Ordner wie app_nesting.py liegen.
+
+[server]
+# Keine Begruessung mit E-Mail-Abfrage beim ersten Start.
+# Ohne diese Zeile bleibt das Startfenster unter Windows bei
+# "Welcome to Streamlit! ... Email:" stehen und wartet auf eine Eingabe.
+showEmailPrompt = false
+
+[browser]
+# Keine Nutzungsstatistik an Streamlit senden.
+gatherUsageStats = false

@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; color: #111827;
+         background: #FFFFFF; font-size: 13px; }
+  .leiste { display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+            padding: 6px 0 8px 0; }
+  button { font: inherit; padding: 6px 11px; border: 1px solid #D1D5DB; border-radius: 7px;
+           background: #F9FAFB; cursor: pointer; }
+  button:hover:not(:disabled) { background: #EEF2F7; border-color: #9CA3AF; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.wichtig { background: #1E3A8A; border-color: #1E3A8A; color: #fff; font-weight: 600; }
+  button.wichtig:hover:not(:disabled) { background: #1B326F; }
+  button.pinsel { display: inline-flex; align-items: center; gap: 6px; }
+  button.pinsel.aktiv { border-color: #1E3A8A; border-width: 2px; background: #EEF2FF;
+                        font-weight: 600; }
+  .punkt { width: 12px; height: 12px; border-radius: 3px; border: 1px solid #111; }
+  .trenner { width: 1px; height: 22px; background: #E5E7EB; margin: 0 3px; }
+  .hinweis { color: #6B7280; }
+  .zeile { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 7px 0; }
+  #buehne { border: 1px solid #E5E7EB; border-radius: 8px; background: #FAFAFA;
+            touch-action: none; display: block; width: 100%; user-select: none; }
+  .feld { cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="leiste" id="pinselLeiste">
+  <span class="hinweis">Pinsel:</span>
+</div>
+
+<div class="leiste">
+  <button id="alle">Alle Felder</button>
+  <button id="rest">Nur noch freie Felder</button>
+  <button id="umkehren" title="Oeffnungen und Platten tauschen">&#8646; Umkehren</button>
+  <div class="trenner"></div>
+  <button id="zurueck" title="Rueckgaengig (Strg+Z)">&#8592; Zur&uuml;ck</button>
+  <button id="vor" title="Wiederholen (Strg+Y)">Vor &#8594;</button>
+  <button id="verwerfen">Verwerfen</button>
+  <div class="trenner"></div>
+  <label class="hinweis"><input type="checkbox" id="masse" checked> Ma&szlig;e anzeigen</label>
+  <div class="trenner"></div>
+  <button class="wichtig" id="uebernehmen">&#10003; Zuordnung &uuml;bernehmen</button>
+</div>
+
+<svg id="buehne" xmlns="http://www.w3.org/2000/svg"></svg>
+
+<div class="zeile">
+  <span class="hinweis" id="angaben"></span>
+</div>
+<div class="zeile hinweis">
+  Feld anklicken oder mit gedr&uuml;ckter Maustaste &uuml;ber mehrere Felder ziehen &middot;
+  Zifferntasten w&auml;hlen den Pinsel &middot; Strg+Z nimmt zur&uuml;ck
+</div>
+
+<script>
+"use strict";
+
+const MAX_HOEHE = 620;          // Hoechste Zeichenhoehe in Pixeln (feste Zahl,
+                                // damit keine Rueckkopplung mit dem Rahmen entsteht)
+const FARBE_AUS = "#9CA3AF";
+
+function anStreamlit(nachricht) {
+  window.parent.postMessage(Object.assign({isStreamlitMessage: true}, nachricht), "*");
+}
+let letzteHoehe = 0;
+function hoeheMelden() {
+  const hoehe = Math.ceil(document.body.getBoundingClientRect().height) + 6;
+  if (Math.abs(hoehe - letzteHoehe) < 2) return;
+  letzteHoehe = hoehe;
+  anStreamlit({type: "streamlit:setFrameHeight", height: hoehe});
+}
+function wertSetzen(wert) {
+  anStreamlit({type: "streamlit:setComponentValue", value: wert, dataType: "json"});
+}
+
+const svg = document.getElementById("buehne");
+let vorgabe = null;             // {felder: [...], typen: [...]}
+let zuordnung = {};             // Feldname -> {typ, aus}
+let verlauf = [], zukunft = [];
+let pinsel = 0;                 // Index in pinselliste
+let pinselliste = [];
+let malt = false;
+let beruehrt = new Set();
+
+function tiefeKopie(wert) { return JSON.parse(JSON.stringify(wert)); }
+
+function standSichern() {
+  verlauf.push(tiefeKopie(zuordnung));
+  if (verlauf.length > 60) verlauf.shift();
+  zukunft = [];
+}
+
+// ==========================================================
+// Pinsel
+// ==========================================================
+function pinselAufbauen() {
+  pinselliste = [];
+  (vorgabe.typen || []).forEach(t => {
+    pinselliste.push({art: "typ", name: t.name, farbe: t.farbe, text: t.name});
+  });
+  pinselliste.push({art: "aus", name: "", farbe: FARBE_AUS, text: "Öffnung / entfällt"});
+
+  const leiste = document.getElementById("pinselLeiste");
+  leiste.querySelectorAll("button").forEach(b => b.remove());
+  pinselliste.forEach((p, i) => {
+    const knopf = document.createElement("button");
+    knopf.className = "pinsel" + (i === pinsel ? " aktiv" : "");
+    knopf.innerHTML = `<span class="punkt" style="background:${p.farbe}"></span>`
+      + `${i < 9 ? "<b>" + (i + 1) + "</b> " : ""}${p.text}`;
+    knopf.onclick = () => { pinsel = i; pinselAufbauen(); };
+    leiste.appendChild(knopf);
+  });
+  hoeheMelden();
+}
+
+function anwenden(name) {
+  const p = pinselliste[pinsel];
+  if (!p) return false;
+  const jetzt = zuordnung[name] || {typ: "", aus: false};
+  const neu = p.art === "aus" ? {typ: jetzt.typ, aus: true} : {typ: p.name, aus: false};
+  if (jetzt.typ === neu.typ && jetzt.aus === neu.aus) return false;
+  zuordnung[name] = neu;
+  return true;
+}
+
+// ==========================================================
+// Zeichnen
+// ==========================================================
+let abbild = {skala: 1, x0: 0, y0: 0, hoehe: 0};
+
+function grenzen() {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  (vorgabe.felder || []).forEach(f => f.polygon.forEach(p => {
+    x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]);
+    x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]);
+  }));
+  if (!isFinite(x0)) return {x0: 0, y0: 0, x1: 1, y1: 1};
+  return {x0, y0, x1, y1};
+}
+
+function zeichnen() {
+  if (!vorgabe) return;
+  const g = grenzen();
+  const rand = 16;
+  const breitePx = Math.max(svg.clientWidth || 900, 320);
+  const nutzbar = breitePx - 2 * rand;
+  const mmBreit = Math.max(g.x1 - g.x0, 1), mmHoch = Math.max(g.y1 - g.y0, 1);
+  const skala = Math.min(nutzbar / mmBreit, (MAX_HOEHE - 2 * rand) / mmHoch);
+  const hoehePx = mmHoch * skala + 2 * rand;
+  abbild = {skala, x0: g.x0, y0: g.y0, hoehe: hoehePx, rand,
+            links: rand + (nutzbar - mmBreit * skala) / 2};
+
+  svg.setAttribute("height", Math.ceil(hoehePx));
+  svg.setAttribute("viewBox", `0 0 ${breitePx} ${Math.ceil(hoehePx)}`);
+
+  const zeigeMasse = document.getElementById("masse").checked;
+  const teile = [`<defs><pattern id="schraeg" width="8" height="8"
+      patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="8" stroke="#6B7280" stroke-width="2"/>
+      </pattern></defs>`];
+
+  (vorgabe.felder || []).forEach(f => {
+    const z = zuordnung[f.name] || {typ: "", aus: false};
+    const typ = (vorgabe.typen || []).find(t => t.name === z.typ);
+    const farbe = z.aus ? FARBE_AUS : (typ ? typ.farbe : "#D1D5DB");
+    const punkte = f.polygon.map(p => `${sx(p[0]).toFixed(1)},${sy(p[1]).toFixed(1)}`)
+                            .join(" ");
+    teile.push(`<polygon class="feld" data-name="${f.name}" points="${punkte}"
+       fill="${farbe}" fill-opacity="${z.aus ? 0.5 : 0.85}"
+       stroke="#111827" stroke-width="1.1"/>`);
+    if (z.aus) {
+      // Schraffur liegt nur obenauf - Klicks sollen das Feld darunter treffen
+      teile.push(`<polygon points="${punkte}" fill="url(#schraeg)"
+         fill-opacity="0.5" stroke="none" pointer-events="none"/>`);
+    }
+    const bb = huelle(f.polygon);
+    const bpx = bb.b * skala, hpx = bb.h * skala;
+    const mx = sx(bb.x + bb.b / 2), my = sy(bb.y + bb.h / 2);
+    if (bpx > 46 && hpx > 20) {
+      teile.push(`<text x="${mx.toFixed(1)}" y="${(my - (zeigeMasse ? 3 : -4)).toFixed(1)}"
+         text-anchor="middle" font-size="11" font-weight="700" fill="#FFFFFF"
+         pointer-events="none">${f.name}</text>`);
+      if (zeigeMasse && hpx > 34) {
+        // Bei schiefen Feldern ist das Mass nur die Huelle, nicht die Plattenkante
+        const vorsatz = f.rechteckig === false ? "Hülle " : "";
+        teile.push(`<text x="${mx.toFixed(1)}" y="${(my + 11).toFixed(1)}"
+           text-anchor="middle" font-size="10" fill="#F9FAFB" pointer-events="none"
+           >${vorsatz}${Math.round(bb.b)} × ${Math.round(bb.h)}</text>`);
+      }
+    }
+  });
+  svg.innerHTML = teile.join("");
+  angabenZeigen();
+  hoeheMelden();
+}
+
+function sx(x) { return abbild.links + (x - abbild.x0) * abbild.skala; }
+function sy(y) { return abbild.hoehe - abbild.rand - (y - abbild.y0) * abbild.skala; }
+
+function huelle(polygon) {
+  const xs = polygon.map(p => p[0]), ys = polygon.map(p => p[1]);
+  const x = Math.min(...xs), y = Math.min(...ys);
+  return {x, y, b: Math.max(...xs) - x, h: Math.max(...ys) - y};
+}
+
+function angabenZeigen() {
+  const felder = vorgabe.felder || [];
+  let aus = 0, frei = 0;
+  const nachTyp = {};
+  felder.forEach(f => {
+    const z = zuordnung[f.name] || {};
+    if (z.aus) { aus++; return; }
+    if (!z.typ) { frei++; return; }
+    nachTyp[z.typ] = (nachTyp[z.typ] || 0) + 1;
+  });
+  const teile = Object.keys(nachTyp).sort().map(t => `${nachTyp[t]}× ${t}`);
+  if (aus) teile.push(`${aus} Öffnung(en)`);
+  if (frei) teile.push(`${frei} ohne Typ`);
+  document.getElementById("angaben").textContent =
+    `${felder.length} Felder: ` + (teile.join(" · ") || "–");
+}
+
+// ==========================================================
+// Maus
+// ==========================================================
+function feldUnter(ereignis) {
+  const ziel = document.elementFromPoint(ereignis.clientX, ereignis.clientY);
+  if (!ziel || !ziel.dataset || !ziel.dataset.name) return null;
+  return ziel.dataset.name;
+}
+
+svg.addEventListener("pointerdown", ereignis => {
+  const name = feldUnter(ereignis);
+  if (!name) return;
+  ereignis.preventDefault();
+  standSichern();
+  malt = true;
+  beruehrt = new Set([name]);
+  if (!anwenden(name)) verlauf.pop();
+  else zeichnen();
+  try { svg.setPointerCapture(ereignis.pointerId); } catch (e) {}
+});
+
+svg.addEventListener("pointermove", ereignis => {
+  if (!malt) return;
+  const name = feldUnter(ereignis);
+  if (!name || beruehrt.has(name)) return;
+  beruehrt.add(name);
+  if (anwenden(name)) zeichnen();
+});
+
+function malenBeenden(ereignis) {
+  if (!malt) return;
+  malt = false;
+  if (ereignis && ereignis.pointerId !== undefined) {
+    try { svg.releasePointerCapture(ereignis.pointerId); } catch (e) {}
+  }
+}
+svg.addEventListener("pointerup", malenBeenden);
+svg.addEventListener("pointercancel", malenBeenden);
+
+document.addEventListener("keydown", ereignis => {
+  if (ereignis.target.tagName === "INPUT") return;
+  const ziffer = parseInt(ereignis.key, 10);
+  if (!isNaN(ziffer) && ziffer >= 1 && ziffer <= pinselliste.length) {
+    pinsel = ziffer - 1;
+    pinselAufbauen();
+  } else if (ereignis.ctrlKey && ereignis.key === "z") {
+    zurueckgehen();
+  } else if (ereignis.ctrlKey && (ereignis.key === "y" || ereignis.key === "Z")) {
+    vorgehen();
+  }
+});
+
+// ==========================================================
+// Bedienelemente
+// ==========================================================
+function zurueckgehen() {
+  if (!verlauf.length) return;
+  zukunft.push(tiefeKopie(zuordnung));
+  zuordnung = verlauf.pop();
+  zeichnen();
+}
+function vorgehen() {
+  if (!zukunft.length) return;
+  verlauf.push(tiefeKopie(zuordnung));
+  zuordnung = zukunft.pop();
+  zeichnen();
+}
+
+document.getElementById("alle").onclick = () => {
+  standSichern();
+  (vorgabe.felder || []).forEach(f => anwenden(f.name));
+  zeichnen();
+};
+document.getElementById("rest").onclick = () => {
+  standSichern();
+  (vorgabe.felder || []).forEach(f => {
+    const z = zuordnung[f.name] || {};
+    if (!z.typ && !z.aus) anwenden(f.name);
+  });
+  zeichnen();
+};
+document.getElementById("umkehren").onclick = () => {
+  standSichern();
+  const standardtyp = (vorgabe.typen || [{}])[0].name || "Standard";
+  (vorgabe.felder || []).forEach(f => {
+    const z = zuordnung[f.name] || {typ: standardtyp, aus: false};
+    zuordnung[f.name] = {typ: z.typ || standardtyp, aus: !z.aus};
+  });
+  zeichnen();
+};
+document.getElementById("zurueck").onclick = zurueckgehen;
+document.getElementById("vor").onclick = vorgehen;
+document.getElementById("verwerfen").onclick = () => {
+  standSichern();
+  zuordnung = tiefeKopie(vorgabe.zuordnung || {});
+  zeichnen();
+};
+document.getElementById("masse").onchange = zeichnen;
+document.getElementById("uebernehmen").onclick = () => {
+  wertSetzen({stand: Date.now(), zuordnung: zuordnung});
+};
+
+// ==========================================================
+// Start
+// ==========================================================
+window.addEventListener("message", ereignis => {
+  if (!ereignis.data || ereignis.data.type !== "streamlit:render") return;
+  const neu = ereignis.data.args.daten;
+  if (!neu) return;
+  const gleich = vorgabe && JSON.stringify(vorgabe) === JSON.stringify(neu);
+  vorgabe = neu;
+  if (!gleich) {
+    zuordnung = tiefeKopie(neu.zuordnung || {});
+    verlauf = []; zukunft = [];
+    pinsel = Math.min(pinsel, Math.max((neu.typen || []).length, 0));
+    pinselAufbauen();
+  }
+  zeichnen();
+});
+let letzteBreite = 0;
+window.addEventListener("resize", () => {
+  if (!vorgabe) return;
+  const breite = svg.clientWidth;
+  if (Math.abs(breite - letzteBreite) < 2) return;
+  letzteBreite = breite;
+  zeichnen();
+});
+anStreamlit({type: "streamlit:componentReady", apiVersion: 1});
+hoeheMelden();
+</script>
+</body>
+</html>
