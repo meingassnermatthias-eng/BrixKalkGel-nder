@@ -42,18 +42,34 @@ heißt dreimal 1250 mm, dann 900 mm. Oder das Gesamtmaß angeben und in gleiche
 Felder teilen lassen.
 
 **Raster aus DXF.** Eine beliebige Ansicht einlesen. Die Linien werden
-**layerweise** gelesen; angekreuzt wird, welcher Layer das Raster zeichnet
-(z. B. `0`), alles andere bleibt liegen. Erkannt werden:
+**layerweise** gelesen; angekreuzt wird, was zum Raster gehört. Vorgewählt ist
+alles außer Bemaßung, Text und Schraffur – **der Umriss muss dabei sein**, und
+er liegt oft auf einem anderen Layer als die Teilung.
 
-* Felder aus einem Liniennetz – auch unregelmäßig, auch wenn ein Feld über
-  mehrere Rasterzellen geht (fehlende Trennlinie), auch L-förmige Felder;
+Das Programm zerlegt die ausgewählten Linien an ihren Kreuzungspunkten und
+sucht alle Maschen – jede rundum geschlossene Fläche wird ein Feld. Deshalb
+funktionieren auch:
+
+* unregelmäßige Raster und Felder, die über mehrere Rasterzellen gehen
+  (fehlende Trennlinie), L-förmige Felder;
+* **schiefwinklige und perspektivisch gezeichnete Ansichten** – Parallelogramme,
+  Dreiecke (Giebel), beliebige Vielecke;
 * geschlossene Polylinien als Feld, in beliebiger Form;
-* Flächen, deren Rand nicht vollständig gezeichnet ist, zählen **nicht** mit –
-  eine L-förmige Fassade bekommt so keine Scheinfelder in der offenen Ecke;
+* über den Umriss hinausstehende Linienenden – sie stören nicht;
 * Fenster und Türen aus den Texten (`Fenster`, `Aussparung`, `Entfall` …),
   wenn der Haken gesetzt ist.
 
-Die **Toleranz** überbrückt kleine Lücken zwischen den Linien (typisch 1–3 mm).
+Flächen, deren Rand nicht vollständig gezeichnet ist, entstehen gar nicht erst:
+eine L-förmige Fassade bekommt in der offenen Ecke kein Scheinfeld. Die
+**Toleranz** überbrückt kleine Lücken und Ungenauigkeiten zwischen den Linien
+(typisch 1–3 mm); damit werden auch Linien verbunden, die sich nur fast
+berühren.
+
+Bei einem rechtwinkligen Raster heißen die Felder `Z2/S3` (Zeile/Spalte), bei
+schiefwinkligen Ansichten gibt es keine Zeilen und Spalten – dort werden sie
+von links oben nach rechts unten durchnumeriert (`F01`). Bei nicht
+rechteckigen Feldern ist das angezeigte Maß das **Hüllmaß**, nicht die
+Plattenkante; geschnitten wird die echte Form.
 
 **Fuge und Zugabe.** Die Rasterlinie gilt als **Fugenmitte**: zwischen zwei
 Platten geht die ganze Fugenbreite ab, je Seite die Hälfte. Am Außenrand geht
@@ -199,8 +215,11 @@ Tafelliste als Excel und CSV, kompletter Plan als DXF (Layer `TAFEL`,
   die nur seitlich erreichbar wäre, bleibt frei.
 * Die Optimierung ist eine sehr gute Heuristik, kein mathematisches Optimum.
 * Der ausgegebene Plan ersetzt die Kontrolle in der Werkstatt nicht.
-* Das Fassadenraster wird als Ansicht behandelt: schräge Rasterlinien bilden
-  nur dann ein Feld, wenn sie als geschlossene Polylinie gezeichnet sind.
+* Das Fassadenraster wird als ebene Ansicht behandelt: eine perspektivisch
+  verzerrte Zeichnung liefert die Maße, die darin stehen – nicht die wahren
+  Maße am Bau.
+* Bögen und Kreise im Rasterplan werden in kurze Strecken zerlegt; ein Feld
+  mit runder Kante bekommt dadurch viele Eckpunkte.
 * Gerechnet wird die Abwicklung in der Ebene – Gehrungen, Kantungen und
   Befestigungen bleiben Sache der Konstruktion.
 

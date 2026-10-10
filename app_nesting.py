@@ -510,14 +510,24 @@ with schritt_raster:
 
                 linien = st.session_state.raster_linien
                 if linien:
-                    reihenfolge = sorted(linien, key=lambda n: -len(linien[n]))
+                    # Layer mit Linien, die meisten zuerst. Vorgewaehlt ist alles,
+                    # was nicht nach Bemassung, Text oder Schraffur aussieht -
+                    # Umriss und Teilung liegen oft auf verschiedenen Layern.
+                    reihenfolge = [name for name in
+                                   sorted(linien, key=lambda n: -len(linien[n]))
+                                   if linien[name]]
+                    beschriftet = {name: f"{name}  ({len(linien[name])} Linien)"
+                                   for name in reihenfolge}
+                    vorgabe = [beschriftet[name] for name in reihenfolge
+                               if dxf.klassifiziere_layer(name) != "ignorieren"]
                     st.caption("Layer der Datei "
                                f"**{st.session_state.get('raster_datei_name', '')}** – "
-                               "ankreuzen, was das Raster zeichnet:")
+                               "ankreuzen, was zum Raster gehört. **Der Umriss muss "
+                               "dabei sein**, auch wenn er auf einem anderen Layer "
+                               "liegt:")
                     gewaehlt = st.multiselect(
-                        "Rasterlayer",
-                        [f"{name}  ({len(linien[name])} Linien)" for name in reihenfolge],
-                        default=[f"{reihenfolge[0]}  ({len(linien[reihenfolge[0]])} Linien)"],
+                        "Rasterlayer", [beschriftet[name] for name in reihenfolge],
+                        default=vorgabe or [beschriftet[reihenfolge[0]]],
                         key="raster_layer", label_visibility="collapsed")
                     namen = [eintrag.rsplit("  (", 1)[0] for eintrag in gewaehlt]
                     d1, d2 = st.columns(2)
@@ -1134,11 +1144,21 @@ entstehen die Platten von selbst.
   `3x1250 900` heißt: dreimal 1250 mm, dann 900 mm. Oder das Gesamtmaß
   angeben und in gleiche Felder teilen lassen.
 * **Aus einem DXF** – eine beliebige Ansicht einlesen. Das Programm liest die
-  Linien **layerweise**, man kreuzt an, welcher Layer das Raster zeichnet
-  (z. B. `0`), der Rest bleibt liegen. Es erkennt auch Felder, die über
-  mehrere Rasterzellen gehen, und L-förmige Felder. Flächen, deren Rand nicht
-  vollständig gezeichnet ist, zählen nicht mit – eine L-förmige Fassade
-  bekommt so keine Scheinfelder in der offenen Ecke.
+  Linien **layerweise**; vorgewählt ist alles außer Bemaßung, Text und
+  Schraffur. **Der Umriss muss angekreuzt sein** – er liegt oft auf einem
+  anderen Layer als die Teilung, und ohne ihn ist kein Feld geschlossen.
+
+Die Linien werden an ihren Kreuzungspunkten zerlegt; jede rundum geschlossene
+Masche wird ein Feld. Deshalb gehen auch Felder über mehrere Rasterzellen
+(fehlende Trennlinie), L-Formen, **schiefwinklige und perspektivisch
+gezeichnete Ansichten**, Giebeldreiecke und beliebige Vielecke. Flächen, deren
+Rand nicht vollständig gezeichnet ist, entstehen gar nicht erst, und
+überstehende Linienenden stören nicht. Die **Toleranz** überbrückt Lücken und
+Ungenauigkeiten (typisch 1–3 mm).
+
+Felder heißen `Z2/S3` (Zeile/Spalte), solange das Raster rechtwinklig ist –
+sonst `F01`, `F02` … von links oben nach rechts unten. Bei schiefen Feldern
+ist das angezeigte Maß das **Hüllmaß**; geschnitten wird die echte Form.
     """)
     st.markdown(hilfe_bilder.bild_raster(), unsafe_allow_html=True)
     st.markdown("""

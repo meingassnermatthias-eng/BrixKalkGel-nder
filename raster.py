@@ -417,13 +417,6 @@ def _cluster(werte: list, toleranz: float) -> list:
     return [sum(g) / len(g) for g in gruppen]
 
 
-def _index_nahe(werte: list, wert: float, toleranz: float):
-    for i, w in enumerate(werte):
-        if abs(w - wert) <= toleranz:
-            return i
-    return None
-
-
 def _segmente(linienzuege: list) -> list:
     """Linienzuege in Einzelstrecken aufloesen."""
     segmente = []
@@ -458,179 +451,241 @@ def felder_aus_linien(linienzuege: list, toleranz: float = 2.0,
     """
     Erkennt die Felder eines beliebigen Linienrasters.
 
-    Arbeitsweise: alle waagrechten und senkrechten Linien bilden ein Gitter.
-    Benachbarte Gitterzellen, zwischen denen keine Linie liegt, gehoeren zum
-    selben Feld. Ein Feld gilt nur, wenn sein ganzer Rand von Linien gedeckt
-    ist - so bleiben Flaechen ausserhalb der Fassade (z. B. bei einem
-    L-foermigen Umriss) unberuecksichtigt.
+    Arbeitsweise: alle Linien werden an ihren Kreuzungspunkten geteilt und zu
+    einem Netz verknuepft. Jede Masche dieses Netzes - jede Flaeche, die
+    rundum von Linien umschlossen ist - wird ein Feld. Das funktioniert fuer
+    rechtwinklige Raster ebenso wie fuer schiefwinklige oder perspektivisch
+    gezeichnete Ansichten, und Felder duerfen beliebig viele Ecken haben.
+
+    Flaechen, deren Rand nicht geschlossen ist, entstehen gar nicht erst: ein
+    L-foermiger Umriss bekommt in der offenen Ecke kein Scheinfeld.
+
+    toleranz     Luecken und Ungenauigkeiten bis zu diesem Mass werden
+                 ueberbrueckt (Linienenden zusammengezogen, Beruehrpunkte
+                 als Kreuzung gewertet)
+    min_flaeche  kleinere Maschen gelten als Hilfslinien
 
     Rueckgabe: (felder, hinweise)
     """
     hinweise = []
     felder = []
 
-    # a) geschlossene Linienzuege sind bereits Felder (auch schraeg)
+    # a) geschlossene Linienzuege sind bereits Felder
     polygone = _geschlossene_polygone(linienzuege, min_flaeche)
     for polygon in polygone:
         felder.append(Feld(polygon=polygon))
 
-    # b) Gitter aus den achsparallelen Linien
+    # b) alles uebrige als Netz auswerten
     segmente = _segmente(linienzuege)
-    waagrecht = [s for s in segmente if abs(s[0][1] - s[1][1]) <= toleranz
-                 and abs(s[0][0] - s[1][0]) > toleranz]
-    senkrecht = [s for s in segmente if abs(s[0][0] - s[1][0]) <= toleranz
-                 and abs(s[0][1] - s[1][1]) > toleranz]
-    schraeg = len(segmente) - len(waagrecht) - len(senkrecht)
-    if schraeg and not polygone:
-        hinweise.append(f"{schraeg} schraege Linie(n) uebersprungen - das Gitter "
-                        f"wird aus den waagrechten und senkrechten Linien gebildet.")
-
-    if waagrecht and senkrecht:
-        gitterfelder, gitterhinweise = _felder_aus_gitter(
-            waagrecht, senkrecht, toleranz, min_flaeche)
-        hinweise.extend(gitterhinweise)
-        for feld in gitterfelder:
-            # Felder, die schon als geschlossenes Polygon erkannt wurden, nicht doppelt
-            if any(punkt_in_polygon(feld.mitte, p) for p in polygone):
+    if segmente:
+        maschen, netzhinweise = _felder_aus_netz(segmente, toleranz, min_flaeche)
+        hinweise.extend(netzhinweise)
+        for polygon in maschen:
+            # was schon als geschlossenes Polygon erkannt wurde, nicht doppelt
+            mitte = schwerpunkt(polygon)
+            if any(punkt_in_polygon(mitte, p) for p in polygone):
                 continue
-            felder.append(feld)
-    elif not polygone:
-        hinweise.append("Kein Gitter erkannt - es braucht waagrechte und "
-                        "senkrechte Linien oder geschlossene Polylinien.")
+            felder.append(Feld(polygon=polygon))
+
+    if not felder and not hinweise:
+        hinweise.append("Keine geschlossene Flaeche gefunden - sind die "
+                        "Rasterlinien durchgezogen? Groessere Toleranz hilft "
+                        "bei Luecken, und der Umriss muss mit ausgewaehlt sein.")
 
     felder = _benenne(felder)
     return felder, hinweise
 
 
-def _felder_aus_gitter(waagrecht: list, senkrecht: list, toleranz: float,
-                       min_flaeche: float) -> tuple:
+# ----------------------------------------------------------
+# Ebene Flaechenzerlegung: aus Linien werden Maschen
+# ----------------------------------------------------------
+
+HOECHSTE_SEGMENTE = 4000
+
+
+def _felder_aus_netz(segmente: list, toleranz: float, min_flaeche: float) -> tuple:
+    """Zerlegt ein Liniennetz in seine Maschen. Rueckgabe: (polygone, hinweise)"""
     hinweise = []
-    xs = _cluster([p[0] for s in senkrecht for p in s]
-                  + [p[0] for s in waagrecht for p in s], toleranz)
-    ys = _cluster([p[1] for s in waagrecht for p in s]
-                  + [p[1] for s in senkrecht for p in s], toleranz)
-    if len(xs) < 2 or len(ys) < 2:
-        return [], ["Zu wenige Rasterlinien fuer ein Gitter."]
-    if (len(xs) - 1) * (len(ys) - 1) > 40000:
-        return [], ["Das Linienraster ist zu feingliedrig (zu viele Schnittpunkte). "
-                    "Bitte nur den Rasterlayer waehlen."]
+    if len(segmente) > HOECHSTE_SEGMENTE:
+        return [], [f"Zu viele Linien ({len(segmente)}) - bitte nur die Layer "
+                    f"mit dem Raster auswaehlen."]
 
-    nx, ny = len(xs) - 1, len(ys) - 1
-
-    # Kantendeckung: liegt auf der Zellkante eine gezeichnete Linie?
-    unten = [[False] * nx for _ in range(ny + 1)]      # unten[j][i]: y=ys[j], Spalte i
-    links = [[False] * (nx + 1) for _ in range(ny)]    # links[j][i]: x=xs[i], Zeile j
-
-    for (a, b) in waagrecht:
-        j = _index_nahe(ys, (a[1] + b[1]) / 2.0, toleranz)
-        if j is None:
-            continue
-        von, bis = sorted((a[0], b[0]))
-        for i in range(nx):
-            if xs[i] >= von - toleranz and xs[i + 1] <= bis + toleranz:
-                unten[j][i] = True
-    for (a, b) in senkrecht:
-        i = _index_nahe(xs, (a[0] + b[0]) / 2.0, toleranz)
-        if i is None:
-            continue
-        von, bis = sorted((a[1], b[1]))
-        for j in range(ny):
-            if ys[j] >= von - toleranz and ys[j + 1] <= bis + toleranz:
-                links[j][i] = True
-
-    # Zellen verbinden, wo keine Linie trennt
-    eltern = list(range(nx * ny))
-
-    def wurzel(k):
-        while eltern[k] != k:
-            eltern[k] = eltern[eltern[k]]
-            k = eltern[k]
-        return k
-
-    def verbinde(k1, k2):
-        w1, w2 = wurzel(k1), wurzel(k2)
-        if w1 != w2:
-            eltern[max(w1, w2)] = min(w1, w2)
-
-    for j in range(ny):
-        for i in range(nx):
-            if i + 1 < nx and not links[j][i + 1]:
-                verbinde(j * nx + i, j * nx + i + 1)
-            if j + 1 < ny and not unten[j + 1][i]:
-                verbinde(j * nx + i, (j + 1) * nx + i)
-
-    gruppen: dict = {}
-    for j in range(ny):
-        for i in range(nx):
-            gruppen.setdefault(wurzel(j * nx + i), []).append((i, j))
-
-    felder = []
-    offen = 0
-    for zellen in gruppen.values():
-        if not _rand_gedeckt(zellen, unten, links, nx, ny):
-            offen += 1
-            continue
-        polygon = _umriss(zellen, xs, ys)
-        if len(polygon) < 3 or abs(flaeche(polygon)) < min_flaeche:
-            continue
-        felder.append(Feld(polygon=gegen_uhrzeiger(polygon)))
-    if offen and not felder:
-        hinweise.append("Kein geschlossenes Feld gefunden - sind die Rasterlinien "
-                        "wirklich durchgezogen? Toleranz erhoehen hilft bei Luecken.")
-    return felder, hinweise
-
-
-def _rand_gedeckt(zellen: list, unten: list, links: list, nx: int, ny: int) -> bool:
-    """Ist der Rand einer Zellgruppe vollstaendig von Linien gedeckt?"""
-    menge = set(zellen)
-    for (i, j) in zellen:
-        if (i - 1, j) not in menge and not links[j][i]:
-            return False
-        if (i + 1, j) not in menge and not links[j][i + 1]:
-            return False
-        if (i, j - 1) not in menge and not unten[j][i]:
-            return False
-        if (i, j + 1) not in menge and not unten[j + 1][i]:
-            return False
-    return True
-
-
-def _umriss(zellen: list, xs: list, ys: list) -> list:
-    """Umriss einer Zellgruppe als Polygon (rechtwinklig, auch L-foermig)."""
-    menge = set(zellen)
-    kanten = []                      # gerichtete Randkanten, Flaeche links
-    for (i, j) in zellen:
-        if (i, j - 1) not in menge:                      # untere Kante nach rechts
-            kanten.append(((xs[i], ys[j]), (xs[i + 1], ys[j])))
-        if (i + 1, j) not in menge:                      # rechte Kante nach oben
-            kanten.append(((xs[i + 1], ys[j]), (xs[i + 1], ys[j + 1])))
-        if (i, j + 1) not in menge:                      # obere Kante nach links
-            kanten.append(((xs[i + 1], ys[j + 1]), (xs[i], ys[j + 1])))
-        if (i - 1, j) not in menge:                      # linke Kante nach unten
-            kanten.append(((xs[i], ys[j + 1]), (xs[i], ys[j])))
-
+    teile = _teile_an_kreuzungen(segmente, toleranz)
+    knoten, kanten = _netz_bauen(teile, toleranz)
+    kanten = _enden_kappen(kanten)
     if not kanten:
-        return []
-    nachfolger: dict = {}
-    for a, b in kanten:
-        nachfolger.setdefault(a, []).append(b)
+        return [], ["Keine geschlossene Masche gefunden - die Linien bilden "
+                    "keine umschlossene Flaeche."]
 
-    start = min(nachfolger)
-    weg = [start]
-    jetzt = start
-    for _ in range(len(kanten) + 1):
-        ziele = nachfolger.get(jetzt)
-        if not ziele:
-            break
-        jetzt = ziele.pop(0)
-        if abs(jetzt[0] - start[0]) < 1e-9 and abs(jetzt[1] - start[1]) < 1e-9:
-            break
-        weg.append(jetzt)
-    return _entferne_gestreckte(weg)
+    polygone = []
+    for masche in _maschen(knoten, kanten):
+        polygon = _entferne_gestreckte(_ohne_doppelpunkte(masche))
+        if len(polygon) < 3:
+            continue
+        if flaeche(polygon) < min_flaeche:
+            continue                    # zu klein oder Aussenmasche (negativ)
+        polygone.append(polygon)
+    return polygone, hinweise
+
+
+def _teile_an_kreuzungen(segmente: list, toleranz: float) -> list:
+    """Teilt jede Strecke an allen Kreuzungen und Beruehrpunkten."""
+    kaesten = [(min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1]))
+               for a, b in segmente]
+    stellen = [[0.0, 1.0] for _ in segmente]
+
+    for i in range(len(segmente)):
+        a1, a2 = segmente[i]
+        for j in range(i + 1, len(segmente)):
+            if (kaesten[i][0] > kaesten[j][2] + toleranz
+                    or kaesten[j][0] > kaesten[i][2] + toleranz
+                    or kaesten[i][1] > kaesten[j][3] + toleranz
+                    or kaesten[j][1] > kaesten[i][3] + toleranz):
+                continue
+            b1, b2 = segmente[j]
+            treffer = _kreuzungsstelle(a1, a2, b1, b2, toleranz)
+            if treffer is not None:
+                t, s = treffer
+                stellen[i].append(t)
+                stellen[j].append(s)
+                continue
+            # Beruehrpunkt: Ende der einen Strecke liegt auf der anderen (T-Stoss)
+            for punkt, eigen in ((b1, j), (b2, j)):
+                t = _lot(punkt, a1, a2)
+                if t is not None and _abstand_punkt_segment(punkt, a1, a2) <= toleranz:
+                    stellen[i].append(t)
+            for punkt in (a1, a2):
+                s = _lot(punkt, b1, b2)
+                if s is not None and _abstand_punkt_segment(punkt, b1, b2) <= toleranz:
+                    stellen[j].append(s)
+
+    teile = []
+    for (a, b), liste in zip(segmente, stellen):
+        laenge = math.hypot(b[0] - a[0], b[1] - a[1])
+        if laenge < 1e-9:
+            continue
+        grenze = max(toleranz / laenge, 1e-9)
+        sortiert = []
+        for t in sorted(min(max(t, 0.0), 1.0) for t in liste):
+            if not sortiert or t - sortiert[-1] > grenze:
+                sortiert.append(t)
+        if sortiert[-1] < 1.0 - grenze:
+            sortiert.append(1.0)
+        for t1, t2 in zip(sortiert, sortiert[1:]):
+            p1 = (a[0] + t1 * (b[0] - a[0]), a[1] + t1 * (b[1] - a[1]))
+            p2 = (a[0] + t2 * (b[0] - a[0]), a[1] + t2 * (b[1] - a[1]))
+            teile.append((p1, p2))
+    return teile
+
+
+def _kreuzungsstelle(a1, a2, b1, b2, toleranz: float):
+    """Parameter (t, s) der Kreuzung zweier Strecken, sonst None."""
+    r = (a2[0] - a1[0], a2[1] - a1[1])
+    s_ = (b2[0] - b1[0], b2[1] - b1[1])
+    nenner = r[0] * s_[1] - r[1] * s_[0]
+    if abs(nenner) < 1e-12:
+        return None                     # parallel oder deckungsgleich
+    dx, dy = b1[0] - a1[0], b1[1] - a1[1]
+    t = (dx * s_[1] - dy * s_[0]) / nenner
+    s = (dx * r[1] - dy * r[0]) / nenner
+    la = math.hypot(*r) or 1.0
+    lb = math.hypot(*s_) or 1.0
+    if -toleranz / la <= t <= 1 + toleranz / la and -toleranz / lb <= s <= 1 + toleranz / lb:
+        return min(max(t, 0.0), 1.0), min(max(s, 0.0), 1.0)
+    return None
+
+
+def _lot(punkt, a, b):
+    """Fusspunktparameter des Lots, None wenn ausserhalb der Strecke."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    laenge2 = dx * dx + dy * dy
+    if laenge2 < 1e-18:
+        return None
+    t = ((punkt[0] - a[0]) * dx + (punkt[1] - a[1]) * dy) / laenge2
+    return t if 0.0 <= t <= 1.0 else None
+
+
+def _netz_bauen(teile: list, toleranz: float) -> tuple:
+    """Zieht nahe Punkte zusammen und baut die Nachbarschaftsliste."""
+    knoten: list = []
+    raster: dict = {}
+    weite = max(toleranz, 1e-6)
+
+    def knoten_fuer(punkt) -> int:
+        gx, gy = int(punkt[0] // weite), int(punkt[1] // weite)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for index in raster.get((gx + dx, gy + dy), ()):
+                    if math.hypot(knoten[index][0] - punkt[0],
+                                  knoten[index][1] - punkt[1]) <= toleranz:
+                        return index
+        knoten.append((float(punkt[0]), float(punkt[1])))
+        raster.setdefault((gx, gy), []).append(len(knoten) - 1)
+        return len(knoten) - 1
+
+    kanten: dict = {}
+    for a, b in teile:
+        ka, kb = knoten_fuer(a), knoten_fuer(b)
+        if ka == kb:
+            continue
+        kanten.setdefault(ka, set()).add(kb)
+        kanten.setdefault(kb, set()).add(ka)
+    return knoten, kanten
+
+
+def _enden_kappen(kanten: dict) -> dict:
+    """Entfernt freie Enden - sie gehoeren zu keiner Masche."""
+    kanten = {k: set(v) for k, v in kanten.items()}
+    offen = [k for k, v in kanten.items() if len(v) < 2]
+    while offen:
+        k = offen.pop()
+        for nachbar in list(kanten.get(k, ())):
+            kanten[nachbar].discard(k)
+            if len(kanten[nachbar]) < 2:
+                offen.append(nachbar)
+        kanten.pop(k, None)
+    return {k: v for k, v in kanten.items() if v}
+
+
+def _maschen(knoten: list, kanten: dict):
+    """
+    Laeuft alle Maschen des Netzes ab.
+
+    An jedem Knoten wird die naechste Kante im Uhrzeigersinn genommen - so
+    werden die inneren Flaechen gegen den Uhrzeigersinn umrundet (positive
+    Flaeche), die Aussenmasche im Uhrzeigersinn (negative Flaeche).
+    """
+    winkel: dict = {}
+    for k, nachbarn in kanten.items():
+        liste = sorted(nachbarn,
+                       key=lambda n: math.atan2(knoten[n][1] - knoten[k][1],
+                                                knoten[n][0] - knoten[k][0]))
+        winkel[k] = liste
+
+    benutzt = set()
+    for start_k, nachbarn in kanten.items():
+        for start_n in nachbarn:
+            if (start_k, start_n) in benutzt:
+                continue
+            masche = []
+            k, n = start_k, start_n
+            for _ in range(4 * sum(len(v) for v in kanten.values()) + 4):
+                benutzt.add((k, n))
+                masche.append(knoten[k])
+                liste = winkel[n]
+                platz = liste.index(k)
+                naechster = liste[(platz - 1) % len(liste)]
+                k, n = n, naechster
+                if (k, n) == (start_k, start_n):
+                    break
+            else:                       # Reissleine, sollte nie eintreten
+                continue
+            if len(masche) >= 3:
+                yield masche
 
 
 def _entferne_gestreckte(punkte: list) -> list:
-    """Punkte auf einer Geraden zwischen Nachbarn weglassen."""
+    """Punkte, die auf der Geraden zwischen ihren Nachbarn liegen, weglassen."""
     n = len(punkte)
     if n < 4:
         return punkte
@@ -638,18 +693,34 @@ def _entferne_gestreckte(punkte: list) -> list:
     for i in range(n):
         a, b, c = punkte[(i - 1) % n], punkte[i], punkte[(i + 1) % n]
         kreuz = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
-        if abs(kreuz) > 1e-6:
+        laenge = (math.hypot(b[0] - a[0], b[1] - a[1])
+                  * math.hypot(c[0] - b[0], c[1] - b[1]))
+        if laenge < 1e-12 or abs(kreuz) / laenge > 1e-4:
             raus.append(b)
     return raus or punkte
 
 
 def _benenne(felder: list) -> list:
-    """Vergibt Feldnamen zeilenweise von links oben nach rechts unten."""
+    """
+    Vergibt die Feldnamen.
+
+    Bei einem rechtwinkligen Raster zeilenweise als 'Z2/S3' - das liest sich
+    auf der Baustelle am leichtesten. Bei schiefwinkligen oder frei
+    gezeichneten Ansichten gibt es keine Zeilen und Spalten; dort werden die
+    Felder von links oben nach rechts unten durchnumeriert ('F01').
+    """
     if not felder:
         return felder
+    if all(f.rechteckig for f in felder):
+        return _benenne_raster(felder)
+    return _benenne_frei(felder)
+
+
+def _benenne_raster(felder: list) -> list:
+    """Zeilenweise Benennung Z<Zeile>/S<Spalte> von links oben."""
     mitten = [f.mitte for f in felder]
-    hoehen = _cluster([m[1] for m in mitten], max(
-        10.0, 0.4 * min((f.hoehe for f in felder), default=100.0)))
+    hoehen = _cluster([m[1] for m in mitten],
+                      max(10.0, 0.4 * min(f.hoehe for f in felder)))
     hoehen = list(reversed(hoehen))                     # oben zuerst
     reihen: dict = {}
     for feld, mitte in zip(felder, mitten):
@@ -663,6 +734,16 @@ def _benenne(felder: list) -> list:
             if not feld.name:
                 feld.name = f"Z{zeile}/S{spalte}"
             geordnet.append(feld)
+    return geordnet
+
+
+def _benenne_frei(felder: list) -> list:
+    """Durchnumerierung von links oben nach rechts unten."""
+    geordnet = sorted(felder, key=lambda f: (-f.mitte[1], f.mitte[0]))
+    for nummer, feld in enumerate(geordnet, start=1):
+        feld.zeile, feld.spalte = 0, 0        # keine Zeilen/Spalten vorhanden
+        if not feld.name:
+            feld.name = f"F{nummer:02d}"
     return geordnet
 
 
@@ -925,22 +1006,30 @@ def positionsliste(positionen: list) -> list:
 
 def feldliste(positionen: list) -> list:
     """Zeilen der Feldliste: welches Feld bekommt welche Position?"""
+    # Zeile und Spalte gibt es nur beim rechtwinkligen Raster
+    mit_raster = any(platte.feld.spalte for p in positionen for platte in p.platten)
     zeilen = []
     for p in positionen:
         for platte in p.platten:
             feld = platte.feld
-            zeilen.append({
-                "Feld": feld.name,
-                "Zeile": feld.zeile,
-                "Spalte": feld.spalte,
+            zeile = {"Feld": feld.name}
+            if mit_raster:
+                zeile["Zeile"] = feld.zeile
+                zeile["Spalte"] = feld.spalte
+            zeile.update({
                 "Position": p.nummer,
                 "Typ": p.typ,
                 "Breite (mm)": round(platte.breite, 1),
                 "Höhe (mm)": round(platte.hoehe, 1),
+                "Ecken": len(platte.polygon),
                 "gedreht": feld.name in p.gedreht,
                 "gespiegelt": feld.name in p.gespiegelt,
             })
-    zeilen.sort(key=lambda z: (z["Zeile"], z["Spalte"]))
+            zeilen.append(zeile)
+    if mit_raster:
+        zeilen.sort(key=lambda z: (z["Zeile"], z["Spalte"]))
+    else:
+        zeilen.sort(key=lambda z: z["Feld"])
     return zeilen
 
 

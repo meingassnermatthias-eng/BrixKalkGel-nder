@@ -40,6 +40,7 @@ def daten_fuer(felder: list, typen: list) -> dict:
         "typen": typen,
         "felder": [{
             "name": feld.name,
+            "rechteckig": bool(feld.rechteckig),
             "polygon": [[round(float(x), 2), round(float(y), 2)]
                         for x, y in feld.polygon],
         } for feld in felder],

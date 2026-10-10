@@ -276,6 +276,75 @@ mit_toleranz, _ = r.felder_aus_linien(lueckig, toleranz=3.0)
 pruefe(len(mit_toleranz) == 1, "kleine Luecke mit Toleranz ueberbrueckt")
 
 
+# ----------------------------------------------------------
+# Schiefwinklige Ansicht (perspektivische Skizze): die Felder sind keine
+# Rechtecke, trotzdem muss jede umschlossene Masche ein Feld werden.
+# ----------------------------------------------------------
+
+def schiefes_raster(spalten=4, zeilen=2, breite=1200.0, hoehe=1100.0,
+                    schraeg=0.35):
+    """Ein Raster, dessen senkrechte Linien schraeg stehen (Scherung)."""
+    def punkt(i, j):
+        return (i * breite + j * hoehe * schraeg, j * hoehe)
+    linien = []
+    for j in range(zeilen + 1):                      # waagrechte Linien
+        linien.append([punkt(0, j), punkt(spalten, j)])
+    for i in range(spalten + 1):                     # schraege Linien
+        linien.append([punkt(i, 0), punkt(i, zeilen)])
+    return linien
+
+schief = schiefes_raster()
+schiefe_felder, schiefe_hinweise = r.felder_aus_linien(schief, toleranz=2.0)
+pruefe(len(schiefe_felder) == 8,
+       f"schiefes Raster 4x2: 8 Felder (hier {len(schiefe_felder)})")
+pruefe(not schiefe_hinweise, "schiefes Raster ohne Hinweise")
+pruefe(all(len(f.polygon) == 4 for f in schiefe_felder),
+       "jedes Feld ein Viereck")
+pruefe(all(not f.rechteckig for f in schiefe_felder),
+       "die Felder sind keine Rechtecke")
+pruefe(nahe(sum(f.flaeche for f in schiefe_felder), 4 * 1200 * 2 * 1100, 1.0),
+       "Flaechensumme stimmt (Parallelogramme)")
+pruefe(all(f.name.startswith("F") for f in schiefe_felder),
+       f"ohne Zeilen/Spalten wird durchnumeriert: {schiefe_felder[0].name}")
+schiefe_platten, _ = r.platten_aus_feldern(schiefe_felder, fuge=20.0)
+pruefe(len(schiefe_platten) == 8, "auch schiefe Felder werden zu Platten")
+pruefe(all(p.flaeche < p.feld.flaeche for p in schiefe_platten),
+       "die Fuge verkleinert jede schiefe Platte")
+schiefe_positionen = r.gleichteile(schiefe_platten, "gleich")
+pruefe(len(schiefe_positionen) <= 4,
+       f"gleiche Parallelogramme werden gebuendelt ({len(schiefe_positionen)} "
+       f"Positionen fuer 8 Platten)")
+
+# Dreieckige Felder (Giebel)
+giebel = [
+    [(0, 0), (4000, 0)], [(0, 0), (2000, 1500)], [(2000, 1500), (4000, 0)],
+    [(1000, 750), (3000, 750)],
+]
+giebel_felder, _ = r.felder_aus_linien(giebel, toleranz=2.0)
+pruefe(len(giebel_felder) == 2,
+       f"Giebeldreieck mit Teilung: 2 Felder (hier {len(giebel_felder)})")
+pruefe(nahe(sum(f.flaeche for f in giebel_felder), 4000 * 1500 / 2, 1.0),
+       "Dreiecksflaeche vollstaendig")
+
+# Umriss und Teilung auf verschiedenen Layern: nur zusammen ergibt es Felder
+umriss = [[(0, 0), (3000, 0)], [(3000, 0), (3000, 2000)],
+          [(3000, 2000), (0, 2000)], [(0, 2000), (0, 0)]]
+teilung = [[(1500, 0), (1500, 2000)]]
+nur_teilung, _ = r.felder_aus_linien(teilung, toleranz=2.0)
+pruefe(len(nur_teilung) == 0, "nur die Teilung ergibt kein Feld")
+zusammen_felder, _ = r.felder_aus_linien(umriss + teilung, toleranz=2.0)
+pruefe(len(zusammen_felder) == 2,
+       f"Umriss + Teilung ergibt 2 Felder (hier {len(zusammen_felder)})")
+
+# Linien, die ueber den Umriss hinausstehen (ueberstehende Enden)
+ueberstand = umriss + [[(1500, -300), (1500, 2300)]]
+ueber_felder, _ = r.felder_aus_linien(ueberstand, toleranz=2.0)
+pruefe(len(ueber_felder) == 2,
+       f"ueberstehende Linienenden stoeren nicht (hier {len(ueber_felder)})")
+pruefe(nahe(sum(f.flaeche for f in ueber_felder), 3000 * 2000),
+       "Flaeche trotz Ueberstand richtig")
+
+
 # ==========================================================
 print("\n7. Oeffnungen aus Texten")
 # ==========================================================

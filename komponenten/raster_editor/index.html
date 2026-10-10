@@ -185,9 +185,11 @@ function zeichnen() {
          text-anchor="middle" font-size="11" font-weight="700" fill="#FFFFFF"
          pointer-events="none">${f.name}</text>`);
       if (zeigeMasse && hpx > 34) {
+        // Bei schiefen Feldern ist das Mass nur die Huelle, nicht die Plattenkante
+        const vorsatz = f.rechteckig === false ? "Hülle " : "";
         teile.push(`<text x="${mx.toFixed(1)}" y="${(my + 11).toFixed(1)}"
            text-anchor="middle" font-size="10" fill="#F9FAFB" pointer-events="none"
-           >${Math.round(bb.b)} × ${Math.round(bb.h)}</text>`);
+           >${vorsatz}${Math.round(bb.b)} × ${Math.round(bb.h)}</text>`);
       }
     }
   });

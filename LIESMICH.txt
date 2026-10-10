@@ -86,9 +86,13 @@ WENN ETWAS HAKT
   -> Im Browser von Hand aufrufen:  http://localhost:8501
 
   Beim Rasterimport wird kein Feld erkannt
-  -> Anderen Layer ankreuzen (der Layer mit den meisten
-     Linien steht oben) oder die Toleranz erhoehen, wenn
-     die Rasterlinien kleine Luecken haben.
+  -> Meist fehlt der Umriss: er liegt oft auf einem
+     anderen Layer als die Teilung. Alle Layer ankreuzen,
+     die zur Zeichnung gehoeren.
+  -> Oder die Toleranz erhoehen, wenn die Linien kleine
+     Luecken haben oder nicht genau aneinanderstossen.
+     Schraege Linien sind kein Problem: auch schiefe
+     Ansichten, Giebel und Vielecke werden erkannt.
 
   Teile stehen unter "Nicht eingeplant"
   -> Meist stimmt das Material nicht ueberein: in der

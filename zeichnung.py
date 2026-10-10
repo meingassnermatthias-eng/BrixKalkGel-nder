@@ -260,10 +260,13 @@ def svg_fassade(felder, nummern: dict | None = None, farben: dict | None = None,
             f'font-family="sans-serif" font-size="11" font-weight="700" '
             f'fill="#FFFFFF">{_esc(marke)}</text>')
         if mit_massen and h_feld > 34:
+            # schiefe Felder: das Mass ist die Huelle, nicht die Plattenkante
+            vorsatz = "" if feld.rechteckig else "H&#252;lle "
             teile.append(
                 f'<text x="{mx:.1f}" y="{my + 11:.1f}" text-anchor="middle" '
                 f'font-family="sans-serif" font-size="9" fill="#F9FAFB">'
-                f'{feld.name} &#183; {feld.breite:.0f} &#215; {feld.hoehe:.0f}</text>')
+                f'{feld.name} &#183; {vorsatz}{feld.breite:.0f} &#215; '
+                f'{feld.hoehe:.0f}</text>')
 
     teile.append("</svg>")
     return "".join(teile)
