@@ -49,7 +49,9 @@ DER ABLAUF - VIER SCHRITTE
      In der Tabelle "Plattentypen" steht eine Zeile je
      Plattenart - meist je Farbe - mit eigener Farbe im
      Plan und eigenem Material. Gleich grosse Platten
-     verschiedener Farbe bleiben getrennte Positionen.
+     verschiedener Farbe bleiben getrennte Positionen und
+     landen nie auf derselben Tafel - das Programm legt
+     dafuer zu jeder Farbe eine Tafel an.
      Das Programm zieht die Fuge ab, schlaegt die Zugabe auf,
      sucht die Gleichteile und legt die Positionen
      (P01, P02 ...) in die Teileliste.

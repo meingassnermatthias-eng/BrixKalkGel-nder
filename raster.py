@@ -1124,6 +1124,24 @@ def montageplan_als_dxf(felder: list, positionen: list,
     return dxf_import.zeichnung_als_dxf(polylinien, texte, zusatz_layer)
 
 
+def material_je_typ(typen: list) -> dict:
+    """
+    Material je Plattentyp.
+
+    Ein Typ ohne eigenes Material bekommt seinen Namen als Material. Das
+    Nesting trennt die Tafeln naemlich nach dem Material - ohne diese Regel
+    lagen zwei Farben auf derselben Tafel, und am Blech sieht man nicht, was
+    anthrazit und was silber werden soll.
+    """
+    material = {}
+    for eintrag in typen or []:
+        name = str(eintrag.get("name", "")).strip()
+        if not name:
+            continue
+        material[name] = str(eintrag.get("material") or "").strip() or name
+    return material
+
+
 def typ_uebersicht(positionen: list, typen: list | None = None) -> list:
     """
     Zeilen je Plattentyp: wieviele Platten, wieviel Flaeche, welches Material.

@@ -389,12 +389,17 @@ def zeige_editor(erg, farben):
 
     plaene = [erg.plaene[nummer - 1] for nummer in nummern]
     karte = kontur_karte(erg, st.session_state.konturen)
-    vorrat = vorrat_fuer(erg, plaene[0], karte, farben)
+    # Material je Teil - damit meldet der Editor, wenn ein Teil auf einer Tafel
+    # aus anderem Material landet (z. B. anthrazit auf silber).
+    teile_jetzt = stand("teile")
+    materialien = {str(z["Bezeichnung"]): str(z.get("Material") or "")
+                   for _, z in teile_jetzt.iterrows()} if len(teile_jetzt) else {}
+    vorrat = vorrat_fuer(erg, plaene[0], karte, farben, materialien)
 
     rueckgabe = plan_editor(
         plaene, nummern, saegeblatt=st.session_state.get("schnittfuge", 5.0),
         besaeumung=st.session_state.get("besaeumung", 10.0),
-        farben=farben, vorrat=vorrat, raster=5.0,
+        farben=farben, vorrat=vorrat, raster=5.0, materialien=materialien,
         key=f"plan_editor_{nummern[0]}_{len(nummern)}")
 
     # Meldung erst nach dem Neuaufbau zeigen - st.rerun() verwirft sie sonst
@@ -726,20 +731,29 @@ with schritt_raster:
 
             # ---------------- Uebergabe und Ausgabe ----------------
             st.markdown("##### Positionen ins Nesting übernehmen")
-            ohne_material = sorted({p.typ for p in positionen}
-                                   if not typ_material else
-                                   {p.typ for p in positionen
-                                    if not typ_material.get(p.typ)})
-            if ohne_material:
-                st.caption("Ohne Material in der Typentabelle: "
-                           + ", ".join(ohne_material)
-                           + " – diese Positionen kommen ohne Material in die "
-                             "Teileliste und passen dann auf jede Tafel.")
-            material = typ_material
+            # Das Nesting trennt die Tafeln nach dem Material. Ein Plattentyp
+            # ohne eigenes Material bekommt darum seinen Namen als Material -
+            # sonst laegen zwei Farben auf derselben Tafel.
+            material = raster.material_je_typ(typen)
+            ohne_material = sorted(typ for typ, wert in typ_material.items()
+                                   if not wert.strip()
+                                   and typ in {p.typ for p in positionen})
+            if ohne_material and len(material) > 1:
+                st.caption("Ohne Materialangabe tragen diese Typen ihren Namen "
+                           "als Material ein: " + ", ".join(ohne_material)
+                           + ". So landen zwei Farben nie auf derselben Tafel – "
+                             "in Schritt ③ bei den Tafeln dasselbe Material "
+                             "eintragen oder das Materialfeld der Tafel leer "
+                             "lassen.")
 
             u1, u2, u3 = st.columns([3, 2, 2])
             ersetzen = u2.checkbox("Teileliste vorher leeren", True,
                                    key="raster_ersetzen")
+            tafeln_anlegen = u2.checkbox(
+                "Fehlende Tafeln anlegen", True, key="raster_tafeln_anlegen",
+                help="Legt zu jedem Plattentyp eine Tafel in diesem Material "
+                     "an, falls es noch keine gibt – sonst findet die Platte "
+                     "in Schritt ③ keine passende Tafel.")
             laufrichtung = u3.checkbox(
                 "Laufrichtung beachten", False, key="raster_laufrichtung",
                 help="Bei Walz- oder Dekorrichtung (z. B. Alucobond metallic) "
@@ -772,12 +786,46 @@ with schritt_raster:
                 setze_tabelle("teile", pd.concat(
                     [alt, pd.DataFrame(zeilen, columns=SPALTEN_TEILE)],
                     ignore_index=True))
+
+                # Zu jedem Material eine Tafel: ohne passende Tafel bliebe die
+                # Platte in Schritt 3 unter "Nicht eingeplant" stehen.
+                neue_tafeln = []
+                if tafeln_anlegen:
+                    tafeln_jetzt = stand("tafeln")
+                    vorhanden = {str(z.get("Material") or "")
+                                 for _, z in tafeln_jetzt.iterrows()}
+                    if "" not in vorhanden:         # leeres Material passt ohnehin
+                        vorlage = (tafeln_jetzt.iloc[0] if len(tafeln_jetzt)
+                                   else pd.Series({"Bezeichnung": "Tafel",
+                                                   "Breite (mm)": 1500.0,
+                                                   "Höhe (mm)": 3200.0,
+                                                   "Anzahl": float("nan"),
+                                                   "Preis (€)": 0.0}))
+                        for wert in dict.fromkeys(material.get(p.typ, "")
+                                                  for p in positionen):
+                            if not wert or wert in vorhanden:
+                                continue
+                            neue_tafeln.append({
+                                "Bezeichnung": f"{zahl(vorlage['Breite (mm)']):.0f} x "
+                                               f"{zahl(vorlage['Höhe (mm)']):.0f} – {wert}",
+                                "Breite (mm)": zahl(vorlage["Breite (mm)"], 1500.0),
+                                "Höhe (mm)": zahl(vorlage["Höhe (mm)"], 3200.0),
+                                "Anzahl": float("nan"),
+                                "Material": wert,
+                                "Preis (€)": zahl(vorlage.get("Preis (€)"))})
+                        if neue_tafeln:
+                            setze_tabelle("tafeln", pd.concat(
+                                [tafeln_jetzt,
+                                 pd.DataFrame(neue_tafeln, columns=SPALTEN_TAFELN)],
+                                ignore_index=True))
                 # Die Meldung steht beim Knopf, nicht oben am Seitenanfang:
                 # nach dem Neuaufbau bleibt die Seite stehen, wo sie war.
                 st.session_state.raster_uebergabe = (
                     f"{len(zeilen)} Positionen mit {sum(p.anzahl for p in positionen)} "
-                    f"Platten in die Teileliste übernommen – weiter mit Schritt "
-                    f"② Teile bzw. ③ Material & Nesting.")
+                    f"Platten in die Teileliste übernommen"
+                    + (f", dazu {len(neue_tafeln)} Tafelformat(e) für die "
+                       f"Materialien angelegt" if neue_tafeln else "")
+                    + " – weiter mit Schritt ② Teile bzw. ③ Material & Nesting.")
                 st.rerun()
 
             if st.session_state.get("raster_uebergabe"):
@@ -1276,6 +1324,15 @@ Was jeder Typ bewirkt:
   sie bleiben getrennte Positionen, auch wenn sie millimetergenau gleich sind.
 * Die Position heißt dann z. B. `P03 RAL 9006 silber` und bekommt das Material
   des Typs; im Schachtelplan sind die Farben damit auseinanderzuhalten.
+* **Zwei Farben landen nie auf derselben Tafel.** Das Nesting trennt die Tafeln
+  nach dem *Material* – darum trägt ein Typ ohne eigene Materialangabe seinen
+  Namen als Material ein, und beim Übernehmen legt das Programm zu jedem
+  Material eine Tafel an, falls noch keine passende da ist (abschaltbar mit
+  *Fehlende Tafeln anlegen*). Steht bei einer Tafel kein Material, passt sie
+  ohnehin für alles.
+* Auch von Hand lässt sich im Plan-Editor keine Platte auf eine Tafel aus
+  anderem Material schieben, ohne dass sie **rot** wird; die Ablage bietet nur
+  Teile an, die zum Material der Tafel passen.
 * Mit *Ansicht einfärben nach: Plattentyp* zeigt die Fassadenansicht die
   Farbaufteilung statt der Gleichteile.
 * Der **Montageplan als DXF** legt jeden Typ auf einen eigenen Layer

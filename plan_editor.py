@@ -78,14 +78,20 @@ def _punkte(ringe) -> list:
 
 
 def daten_fuer(plaene, nummern, saegeblatt: float, besaeumung: float,
-               farben: dict, vorrat: list, raster: float = 5.0) -> dict:
+               farben: dict, vorrat: list, raster: float = 5.0,
+               materialien: dict | None = None) -> dict:
     """
     Baut die Vorgabe fuer die Oberflaeche.
 
     plaene/nummern  die gezeigten Tafeln und ihre Nummern im Gesamtplan.
     Die Teile kommen als eine Liste mit Feld "tafel" (Index innerhalb der
     gezeigten Tafeln) - so kann die Oberflaeche sie zwischen Tafeln ziehen.
+
+    materialien     Bezeichnung -> Material des Teils. Damit erkennt die
+                    Oberflaeche, wenn ein Teil auf einer Tafel aus anderem
+                    Material liegt (z. B. anthrazit auf silber).
     """
+    materialien = materialien or {}
     tafeln, teile = [], []
     for index, (plan, nummer) in enumerate(zip(plaene, nummern)):
         tafeln.append({
@@ -94,12 +100,15 @@ def daten_fuer(plaene, nummern, saegeblatt: float, besaeumung: float,
             "breite": float(plan.breite),
             "hoehe": float(plan.hoehe),
             "besaeumung": float(besaeumung),
+            "material": str(plan.material or ""),
         })
         for i, p in enumerate(plan.platzierungen):
             teile.append({
                 "id": f"t{index}_{i}",
                 "tafel": index,
                 "sorte": p.bezeichnung,
+                "material": str(materialien.get(p.bezeichnung,
+                                                plan.material) or ""),
                 "x": round(float(p.x), 3),
                 "y": round(float(p.y), 3),
                 "winkel": float(p.winkel or 0.0),
@@ -116,19 +125,30 @@ def daten_fuer(plaene, nummern, saegeblatt: float, besaeumung: float,
     }
 
 
-def vorrat_fuer(ergebnis, plan, karte: dict, farben: dict) -> list:
+def vorrat_fuer(ergebnis, plan, karte: dict, farben: dict,
+                materialien: dict | None = None) -> list:
     """
     Teile, die auf keiner Tafel liegen und zum Material dieser Tafel passen -
     sie koennen im Editor von Hand eingesetzt werden.
+
+    materialien  Bezeichnung -> Material. Teile aus einem anderen Material
+                 werden gar nicht erst angeboten: eine anthrazitfarbene Platte
+                 hat auf einer silbernen Tafel nichts verloren.
     """
+    materialien = materialien or {}
+    tafel_material = str(getattr(plan, "material", "") or "")
     posten = []
     for bezeichnung, breite, hoehe, anzahl in ergebnis.fehlende:
+        material = str(materialien.get(bezeichnung, "") or "")
+        if material and tafel_material and material != tafel_material:
+            continue
         kontur, stich = karte.get(bezeichnung, (None, []))
         if kontur is None:
             kontur = _rechteck(float(breite), float(hoehe))
         posten.append({
             "sorte": bezeichnung,
             "anzahl": int(anzahl),
+            "material": material,
             "kontur": _punkte(kontur),
             "stich": _punkte(stich or []),
             "farbe": farben.get(bezeichnung, "#6B7280"),
@@ -137,9 +157,11 @@ def vorrat_fuer(ergebnis, plan, karte: dict, farben: dict) -> list:
 
 
 def plan_editor(plaene, nummern, saegeblatt: float, besaeumung: float,
-                farben: dict, vorrat: list, raster: float = 5.0, key=None):
+                farben: dict, vorrat: list, raster: float = 5.0, key=None,
+                materialien: dict | None = None):
     """Zeigt den Editor an. Rueckgabe: None oder die uebernommenen Aenderungen."""
-    daten = daten_fuer(plaene, nummern, saegeblatt, besaeumung, farben, vorrat, raster)
+    daten = daten_fuer(plaene, nummern, saegeblatt, besaeumung, farben, vorrat,
+                       raster, materialien)
     return _komponente(daten=daten, key=key, default=None)
 
 

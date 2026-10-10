@@ -265,6 +265,50 @@ def test_vorrat():
     pruefe(posten[0]["anzahl"] == 1, "Stueckzahl uebernommen")
 
 
+def test_material_im_editor():
+    """Teile aus anderem Material gehoeren nicht auf diese Tafel."""
+    print("Editor: Material wird mitgefuehrt")
+    teile = [Zuschnitt2D(600, 400, 2, "Platte anthrazit", "Alu anthrazit"),
+             Zuschnitt2D(600, 400, 2, "Platte silber", "Alu silber"),
+             Zuschnitt2D(4000, 400, 1, "Zu lang anthrazit", "Alu anthrazit"),
+             Zuschnitt2D(4000, 400, 1, "Zu lang silber", "Alu silber")]
+    tafeln = [Tafel(1500, 3000, None, "Blech anthrazit", "Alu anthrazit"),
+              Tafel(1500, 3000, None, "Blech silber", "Alu silber")]
+    erg = optimize_2d(teile, tafeln, saegeblatt=5, besaeumung=10, modus="frei")
+    pruefe(len(erg.plaene) == 2, f"zwei Materialien, zwei Tafeln ({len(erg.plaene)})")
+    for plan in erg.plaene:
+        materialien = {plan.material}
+        pruefe(len({p.bezeichnung.split()[-1] for p in plan.platzierungen}) == 1,
+               f"Tafel {plan.material}: nur ein Material "
+               f"({[p.bezeichnung for p in plan.platzierungen]})")
+
+    karte = kontur_karte(erg)
+    materialien = {t.bezeichnung: t.material for t in teile}
+
+    # Vorrat: nur Teile, die zum Material der Tafel passen
+    anthrazit_plan = next(p for p in erg.plaene if p.material == "Alu anthrazit")
+    posten = vorrat_fuer(erg, anthrazit_plan, karte, {}, materialien)
+    pruefe([p["sorte"] for p in posten] == ["Zu lang anthrazit"],
+           f"Vorrat der anthrazitfarbenen Tafel: {[p['sorte'] for p in posten]}")
+    silber_plan = next(p for p in erg.plaene if p.material == "Alu silber")
+    posten = vorrat_fuer(erg, silber_plan, karte, {}, materialien)
+    pruefe([p["sorte"] for p in posten] == ["Zu lang silber"],
+           f"Vorrat der silbernen Tafel: {[p['sorte'] for p in posten]}")
+    pruefe(len(vorrat_fuer(erg, silber_plan, karte, {})) == 2,
+           "ohne Materialangabe wird weiterhin alles angeboten")
+
+    # Die Oberflaeche bekommt Material je Tafel und je Teil
+    daten = daten_fuer(erg.plaene, [1, 2], saegeblatt=5, besaeumung=10,
+                       farben={}, vorrat=[], materialien=materialien)
+    pruefe([t["material"] for t in daten["tafeln"]] == ["Alu anthrazit", "Alu silber"],
+           "Tafeln tragen ihr Material")
+    pruefe(all(t["material"] in ("Alu anthrazit", "Alu silber")
+               for t in daten["teile"]), "Teile tragen ihr Material")
+    falsch = [t for t in daten["teile"]
+              if t["material"] != daten["tafeln"][t["tafel"]]["material"]]
+    pruefe(not falsch, "im gerechneten Plan passt jedes Teil zu seiner Tafel")
+
+
 def test_flaeche_nach_aenderung():
     print("Editor: Kennzahlen rechnen neu")
     erg = beispiel()
@@ -285,6 +329,7 @@ if __name__ == "__main__":
     for fn in [test_vorgabe, test_verschieben, test_rechteck_ohne_kontur,
                test_drehen, test_ablegen_und_einsetzen,
                test_unbekanntes_teil, test_tafelwechsel, test_vorrat,
+               test_material_im_editor,
                test_flaeche_nach_aenderung]:
         fn()
     print()

@@ -454,6 +454,44 @@ pruefe(farbe_nach_name("Schwarz") in bild and farbe_nach_name("Grau") in bild,
        "die Ansicht laesst sich nach Plattentyp einfaerben")
 
 
+# ----------------------------------------------------------
+# Zwei Farben duerfen nie auf derselben Tafel landen
+# ----------------------------------------------------------
+
+typen_ohne = [{"name": "Anthrazit", "material": ""},
+              {"name": "Silber", "material": ""}]
+material = r.material_je_typ(typen_ohne)
+pruefe(material == {"Anthrazit": "Anthrazit", "Silber": "Silber"},
+       "ohne Materialangabe wird der Typname zum Material")
+pruefe(r.material_je_typ([{"name": "Silber", "material": " Alucobond silber "}])
+       == {"Silber": "Alucobond silber"},
+       "mit Materialangabe bleibt diese stehen")
+
+felder_farbe = r.felder_aus_raster([1200, 1200], [1000, 1000])
+for feld_eintrag in felder_farbe:
+    feld_eintrag.typ = "Anthrazit" if feld_eintrag.spalte == 1 else "Silber"
+platten_farbe, _ = r.platten_aus_feldern(felder_farbe, fuge=15.0)
+positionen_farbe = r.gleichteile(platten_farbe, "gleich")
+teile_farbe = [Zuschnitt2D(p.breite, p.hoehe, p.anzahl, p.nummer,
+                           material[p.typ], True,
+                           kontur=[[(x, y) for x, y in p.polygon]])
+               for p in positionen_farbe]
+ergebnis_farbe = optimize_2d(teile_farbe,
+                             [Tafel(2000, 4000, None, "Tafel", "")],
+                             saegeblatt=5.0, besaeumung=0.0, modus="frei")
+typ_je_position = {p.nummer: p.typ for p in positionen_farbe}
+gemischt = [nr for nr, plan in enumerate(ergebnis_farbe.plaene, start=1)
+            if len({typ_je_position[pl.bezeichnung]
+                    for pl in plan.platzierungen}) > 1]
+pruefe(not gemischt,
+       f"keine Tafel traegt zwei Plattentypen (gemischt: {gemischt})")
+pruefe(ergebnis_farbe.anzahl_tafeln >= 2,
+       "zwei Farben brauchen mindestens zwei Tafeln")
+pruefe(not ergebnis_farbe.fehlende,
+       "trotz Materialtrennung sind alle Platten eingeplant "
+       "(leeres Materialfeld der Tafel passt zu jedem Teil)")
+
+
 # ==========================================================
 print("\n9. Fassadenraster aus einer DXF-Datei")
 # ==========================================================

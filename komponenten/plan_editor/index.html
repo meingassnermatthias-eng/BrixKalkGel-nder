@@ -283,6 +283,7 @@ function teileAuf(nr) { return teile.filter(t => t.tafel === nr); }
 function pruefen() {
   const fuge = vorgabe.saegeblatt;
   const fehler = new Set();
+  const fremd = new Set();          // Teil liegt auf Tafel aus anderem Material
   const ringeJe = new Map();
 
   vorgabe.tafeln.forEach((tafel, nr) => {
@@ -300,6 +301,12 @@ function pruefen() {
       if (h.x0 < rand - 0.01 || h.y0 < rand - 0.01 ||
           h.x1 > tafel.breite - rand + 0.01 ||
           h.y1 > tafel.hoehe - rand + 0.01) fehler.add(teil.id);
+      // Eine anthrazitfarbene Platte hat auf einer silbernen Tafel nichts
+      // verloren - das ist genauso ein Fehler wie eine Ueberschneidung.
+      if (teil.material && tafel.material && teil.material !== tafel.material) {
+        fehler.add(teil.id);
+        fremd.add(teil.id);
+      }
     });
     for (let i = 0; i < auswahl.length; i++) {
       for (let k = i + 1; k < auswahl.length; k++) {
@@ -313,7 +320,7 @@ function pruefen() {
       }
     }
   });
-  return {fehler, ringeJe};
+  return {fehler, fremd, ringeJe};
 }
 
 // ==========================================================
@@ -387,7 +394,7 @@ function zeichnen() {
   svg.setAttribute("viewBox", `0 0 ${breite} ${hoehe}`);
   while (svg.firstChild) svg.removeChild(svg.firstChild);
 
-  const {fehler} = pruefen();
+  const {fehler, fremd} = pruefen();
 
   vorgabe.tafeln.forEach((tafel, nr) => {
     const a = aufteilung[nr];
@@ -462,7 +469,10 @@ function zeichnen() {
   const marke = document.getElementById("status");
   if (fehler.size) {
     marke.className = "marke schlecht";
-    marke.textContent = fehler.size + " Teil(e) liegen falsch";
+    marke.textContent = fehler.size + " Teil(e) liegen falsch"
+      + (fremd && fremd.size
+         ? ", davon " + fremd.size + " auf einer Tafel aus anderem Material"
+         : "");
   } else {
     marke.className = "marke gut";
     marke.textContent = "Alles frei \u2013 Schnittfuge eingehalten";
@@ -877,10 +887,11 @@ document.getElementById("verwerfen").onclick = () => {
   zeichnen();
 };
 document.getElementById("uebernehmen").onclick = () => {
-  const {fehler} = pruefen();
+  const {fehler, fremd} = pruefen();
   if (fehler.size && !window.confirm(
-      fehler.size + " Teil(e) liegen falsch (Ueberschneidung oder ausserhalb der "
-      + "Tafel). Trotzdem uebernehmen?")) return;
+      fehler.size + " Teil(e) liegen falsch (Ueberschneidung, ausserhalb der "
+      + "Tafel" + (fremd.size ? " oder falsches Material" : "")
+      + "). Trotzdem uebernehmen?")) return;
   wertSetzen({
     stand: Date.now(),
     tafeln: vorgabe.tafeln.map(t => t.nummer),

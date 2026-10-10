@@ -90,6 +90,14 @@ Baustelle eine Farbe, wird einfach das betroffene Feld umgemalt.
 
 Gleich große Platten verschiedener Typen werden **nie zusammengefasst**. Die
 Position heißt dann `P03 RAL 9006 silber` und bekommt das Material ihres Typs.
+
+**Zwei Farben landen nie auf derselben Tafel.** Das Nesting trennt die Tafeln
+nach dem *Material*; ein Plattentyp ohne eigene Materialangabe trägt deshalb
+seinen Namen als Material ein, und beim Übernehmen legt das Programm zu jedem
+Material eine Tafel an, falls keine passende vorhanden ist (abschaltbar mit
+*Fehlende Tafeln anlegen*). Eine Tafel ohne Materialangabe passt weiterhin für
+alles. Im Plan-Editor wird eine Platte **rot**, sobald sie auf einer Tafel aus
+anderem Material liegt, und die Ablage bietet nur passende Teile an.
 Die Ansicht lässt sich wahlweise nach Position oder nach Plattentyp einfärben,
 der Montageplan legt jeden Typ auf einen eigenen DXF-Layer (`TYP_...`), und die
 Excel-Liste bekommt ein Blatt *Plattentypen* mit Stück und m² je Farbe.
