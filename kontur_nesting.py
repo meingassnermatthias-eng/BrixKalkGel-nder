@@ -38,6 +38,9 @@ from nesting import (
 
 STANDARD_WINKEL = (0.0, 90.0, 180.0, 270.0)
 FEINE_WINKEL = (0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0)
+# Zusaetzlich zu den festen Schritten die Winkel aus der Teileform selbst -
+# das ist der Gewinn bei schiefwinkligen Teilen.
+FREIE_WINKEL = (0.0, 90.0, 180.0, 270.0, "eigen")
 RASTER_MIN, RASTER_MAX = 0.5, 25.0
 MAX_ZELLEN = 4_000_000          # Obergrenze je Tafel (Speicher und Laufzeit)
 
@@ -164,16 +167,83 @@ def _kontur_von(teil: Zuschnitt2D) -> list:
     return [[(0.0, 0.0), (teil.breite, 0.0), (teil.breite, teil.hoehe), (0.0, teil.hoehe)]]
 
 
-def _winkel_fuer(teil: Zuschnitt2D, winkel: tuple) -> list:
+EIGENWINKEL = "eigen"           # Drehwinkel aus der Teileform ableiten
+EIGENWINKEL_HOECHSTENS = 3      # beste Ausrichtungen je Teil
+
+
+def _konvexe_huelle(punkte: list) -> list:
+    """Konvexe Huelle (Andrews Monotone Chain)."""
+    punkte = sorted(set((round(float(x), 4), round(float(y), 4)) for x, y in punkte))
+    if len(punkte) < 3:
+        return punkte
+
+    def halb(folge):
+        rand = []
+        for p in folge:
+            while len(rand) >= 2:
+                (x1, y1), (x2, y2) = rand[-2], rand[-1]
+                if (x2 - x1) * (p[1] - y1) - (y2 - y1) * (p[0] - x1) > 1e-9:
+                    break
+                rand.pop()
+            rand.append(p)
+        return rand[:-1]
+
+    return halb(punkte) + halb(reversed(punkte))
+
+
+def _eigenwinkel(kontur: list, hoechstens: int = EIGENWINKEL_HOECHSTENS) -> list:
+    """
+    Drehwinkel, die das Teil an seinen eigenen Kanten ausrichten.
+
+    Bei schiefwinkligen Teilen (Parallelogramme, Dreiecke, Trapeze) bringen
+    feste 90- oder 45-Grad-Schritte nichts: das Teil steht schief auf der
+    Tafel und verschenkt Platz. Gedreht man es dagegen so, dass eine seiner
+    eigenen Kanten waagrecht liegt, wird die Huellflaeche am kleinsten und
+    gleiche Teile greifen ineinander. Genau diese Winkel liefert diese
+    Funktion - je Kante der konvexen Huelle einen, die mit der kleinsten
+    Huellflaeche zuerst.
+    """
+    punkte = [p for ring in kontur[:1] for p in ring]
+    huelle = _konvexe_huelle(punkte)
+    if len(huelle) < 3:
+        return []
+    bewertet = {}
+    for a, b in zip(huelle, huelle[1:] + huelle[:1]):
+        grad = round((-math.degrees(math.atan2(b[1] - a[1], b[0] - a[0]))) % 90.0, 2)
+        if grad in bewertet:
+            continue
+        _, breite, hoehe = drehe_polygone(kontur, grad)
+        bewertet[grad] = breite * hoehe
+    beste = sorted(bewertet, key=lambda g: bewertet[g])[:max(hoechstens, 1)]
+    winkel = []
+    for grad in beste:
+        for zusatz in (0.0, 90.0, 180.0, 270.0):
+            wert = round((grad + zusatz) % 360.0, 2)
+            if wert not in winkel:
+                winkel.append(wert)
+    return winkel
+
+
+def _winkel_fuer(teil: Zuschnitt2D, winkel) -> list:
     """
     Erlaubte Drehwinkel eines Teils.
 
     Nicht drehbare Teile (Walz-/Dekorrichtung, z. B. Alucobond metallic)
     bleiben bei 0 Grad - auch 180 Grad wuerde die Laufrichtung umkehren.
+
+    Steht in der Liste der Eintrag 'eigen', kommen die aus der Teileform
+    abgeleiteten Winkel dazu (siehe _eigenwinkel).
     """
     if not teil.drehbar:
         return [0.0]
-    return list(winkel)
+    fest = [w for w in winkel if not isinstance(w, str)]
+    if EIGENWINKEL not in winkel:
+        return list(fest)
+    erlaubt = list(fest)
+    for grad in _eigenwinkel(_kontur_von(teil)):
+        if all(abs(grad - w) > 0.05 for w in erlaubt):
+            erlaubt.append(grad)
+    return erlaubt
 
 
 def _varianten(teil: Zuschnitt2D, raster: float, aufweitung: int, winkel: tuple) -> list:
@@ -194,6 +264,9 @@ def _varianten(teil: Zuschnitt2D, raster: float, aufweitung: int, winkel: tuple)
         varianten.append({
             "winkel": grad,
             "maske": maske,
+            # Huellflaeche dieser Drehlage in Rasterzellen - Mass dafuer, wie
+            # sparsam das Teil in dieser Lage auf der Tafel liegt
+            "huelle": int(maske.shape[0]) * int(maske.shape[1]),
             "rand": aufweitung,
             "unten": unten,
             "oben": oben,
@@ -334,19 +407,50 @@ def _setze(gitter, hoehenlinie, variante, zeile, spalte) -> None:
                                       variante["oben"][belegt] + zeile + 1)
 
 
-# Bewertungsstrategien: kleinster Wert gewinnt. Uebergeben werden
+# Bewertungsstrategien: kleinster Wert gewinnt. Bewertet wird eine moegliche
+# Platzierung, beschrieben durch
 #   verlust  eingeschlossene Flaeche unter dem Teil (Rasterzellen)
-#   zeile    Hoehe der Platzierung        spalte  Lage von links
-#   flaeche  Groesse des Teils            hoch    Hoehe der gedrehten Lage
-# Die Strategien unterscheiden sich vor allem darin, ob zuerst gross, zuerst
-# tief oder zuerst flach gelegt wird - je nach Auftrag gewinnt eine andere.
-STRATEGIEN = (
-    lambda verlust, zeile, spalte, flaeche, hoch: (-flaeche, hoch, verlust, zeile, spalte),
-    lambda verlust, zeile, spalte, flaeche, hoch: (zeile, hoch, -flaeche, spalte),
-    lambda verlust, zeile, spalte, flaeche, hoch: (-flaeche, verlust, zeile, spalte),
-    lambda verlust, zeile, spalte, flaeche, hoch: (zeile, spalte, -flaeche, verlust),
-    lambda verlust, zeile, spalte, flaeche, hoch: (verlust, zeile, -flaeche, spalte),
-)
+#   zeile    Hoehe der Platzierung        spalte   Lage von links
+#   flaeche  echte Groesse des Teils      hoch     Hoehe dieser Drehlage
+#   breit    Breite dieser Drehlage       huelle   Huellflaeche dieser Drehlage
+#
+# Die Strategien unterscheiden sich darin, was zuerst zaehlt: gross, tief,
+# flach, schmal oder gut ausgenutzt. Je nach Auftrag gewinnt eine andere -
+# darum werden mehrere durchgerechnet und die beste genommen.
+#
+# 'huelle' entscheidet zwischen den Drehlagen desselben Teils: bei schiefen
+# Teilen (Parallelogramm, Trapez, Dreieck) ist die Huelle in der guenstigen
+# Lage viel kleiner als in der ungedrehten - ohne dieses Kriterium bliebe das
+# Teil flach liegen und verschenkte die halbe Tafel.
+def _gross_dicht(lage):
+    return (-lage["flaeche"], lage["huelle"], lage["verlust"],
+            lage["zeile"], lage["spalte"])
+
+
+def _tief(lage):
+    return (lage["zeile"], lage["hoch"], -lage["flaeche"], lage["spalte"])
+
+
+def _gross_flach(lage):
+    return (-lage["flaeche"], lage["hoch"], lage["verlust"],
+            lage["zeile"], lage["spalte"])
+
+
+def _gross_schmal(lage):
+    return (-lage["flaeche"], lage["breit"], lage["verlust"],
+            lage["zeile"], lage["spalte"])
+
+
+def _links_unten(lage):
+    return (lage["zeile"], lage["spalte"], -lage["flaeche"], lage["verlust"])
+
+
+def _tasche(lage):
+    return (lage["verlust"], lage["zeile"], -lage["flaeche"], lage["spalte"])
+
+
+STRATEGIEN = (_gross_dicht, _tief, _gross_flach, _gross_schmal,
+              _links_unten, _tasche)
 
 
 def _fuelle_tafel(typen: list, g_spalten: int, g_zeilen: int, strategie,
@@ -376,8 +480,13 @@ def _fuelle_tafel(typen: list, g_spalten: int, g_zeilen: int, strategie,
                 if platz is None:
                     continue
                 zeile, spalte, verlust = platz
-                bewertung = strategie(verlust, zeile, spalte, typ["flaeche"],
-                                      variante["maske"].shape[0])
+                bewertung = strategie({
+                    "verlust": verlust, "zeile": zeile, "spalte": spalte,
+                    "flaeche": typ["flaeche"],
+                    "hoch": variante["maske"].shape[0],
+                    "breit": variante["maske"].shape[1],
+                    "huelle": variante["huelle"],
+                })
                 if bestes is None or bewertung < bestes[0]:
                     bestes = (bewertung, typ, variante, zeile, spalte)
         if bestes is None:

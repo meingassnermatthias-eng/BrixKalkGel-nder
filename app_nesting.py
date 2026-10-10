@@ -33,7 +33,8 @@ except Exception as exc:
     RASTER_FEHLER = str(exc)
 
 try:
-    from kontur_nesting import FEINE_WINKEL, STANDARD_WINKEL, optimize_2d_kontur
+    from kontur_nesting import (FEINE_WINKEL, FREIE_WINKEL, STANDARD_WINKEL,
+                               optimize_2d_kontur)
     KONTUR_OK = True
 except Exception as exc:                      # numpy fehlt
     KONTUR_OK = False
@@ -681,9 +682,15 @@ with schritt_raster:
                     key=f"raster_mat_{typ}", placeholder="z. B. Alucobond 4 mm")
             st.session_state.raster_material = material
 
-            u1, u2 = st.columns([3, 2])
+            u1, u2, u3 = st.columns([3, 2, 2])
             ersetzen = u2.checkbox("Teileliste vorher leeren", True,
                                    key="raster_ersetzen")
+            laufrichtung = u3.checkbox(
+                "Laufrichtung beachten", False, key="raster_laufrichtung",
+                help="Bei Walz- oder Dekorrichtung (z. B. Alucobond metallic) "
+                     "dürfen die Platten beim Schachteln nicht gedreht werden. "
+                     "Sonst darf das Nesting sie frei drehen – das spart "
+                     "Material und ändert am eingebauten Zustand nichts.")
             if u1.button("➡️ Positionen in die Teileliste", type="primary",
                          key="btn_raster_uebernehmen", disabled=not positionen):
                 zeilen, konturen = [], dict(st.session_state.konturen)
@@ -697,7 +704,7 @@ with schritt_raster:
                         "Höhe (mm)": round(position.hoehe, 1),
                         "Anzahl": position.anzahl,
                         "Material": material.get(position.typ, ""),
-                        "Drehbar": modus != "gleich",
+                        "Drehbar": not laufrichtung,
                         "Kontur": "ja"})
                 st.session_state.konturen = konturen
                 alt = pd.DataFrame(columns=SPALTEN_TEILE) if ersetzen else stand("teile")
@@ -995,20 +1002,33 @@ with schritt2:
         modus = ("guillotine" if modus_text.startswith("Guillotine")
                  else "frei" if modus_text.startswith("Frei") else "kontur")
 
-        raster, winkel, nachverdichten, versuche = 5.0, STANDARD_WINKEL if KONTUR_OK else (), True, 3
+        raster, winkel, nachverdichten, versuche = (
+            5.0, FREIE_WINKEL if KONTUR_OK else (), True, 4)
         if modus == "kontur":
             with st.expander("Einstellungen Konturnesting"):
                 raster = st.select_slider(
                     "Rasterweite (mm)", options=[1.0, 2.0, 3.0, 5.0, 8.0, 10.0],
                     value=5.0,
                     help="Kleiner = dichter geschachtelt, aber deutlich langsamer")
-                drehung = st.radio("Erlaubte Drehung",
-                                   ["90°-Schritte", "auch 45°-Schritte", "keine Drehung"])
-                winkel = {"90°-Schritte": STANDARD_WINKEL,
+                drehung = st.radio(
+                    "Erlaubte Drehung",
+                    ["beliebig – an den Teilekanten", "90°-Schritte",
+                     "auch 45°-Schritte", "keine Drehung"],
+                    help="„Beliebig“ dreht jedes Teil zusätzlich so, dass eine "
+                         "seiner eigenen Kanten waagrecht liegt. Bei schiefen "
+                         "Teilen (Parallelogramm, Trapez, Dreieck, "
+                         "Diagonalstreifen) spart das oft eine halbe Tafel; bei "
+                         "reinen Rechtecken ändert es nichts und kostet nur "
+                         "Rechenzeit.")
+                winkel = {"beliebig – an den Teilekanten": FREIE_WINKEL,
+                          "90°-Schritte": STANDARD_WINKEL,
                           "auch 45°-Schritte": FEINE_WINKEL,
                           "keine Drehung": (0.0,)}[drehung]
                 nachverdichten = st.checkbox("Ausschnitte und Taschen mitnutzen", True)
-                versuche = st.slider("Suchtiefe", 1, 5, 3)
+                versuche = st.slider(
+                    "Suchtiefe", 1, 6, 4,
+                    help="Mehr Bewertungsstrategien durchrechnen – genauer, "
+                         "aber langsamer")
 
     st.markdown("")
     if st.session_state.get("nesting_meldung"):
@@ -1231,6 +1251,22 @@ Walz- oder Dekorrichtung (Alucobond metallic) bekommen *Keines drehbar*.
   L-Formen, Dreiecken, Trapezen und Teilen mit großen Ausschnitten; bei reinen
   Rechtecken bringt es nichts. Das Programm rechnet dann zusätzlich das
   einfache Verfahren mit und nimmt automatisch den besseren Plan.
+
+**Erlaubte Drehung** (unter *Einstellungen Konturnesting*). Voreingestellt ist
+**beliebig – an den Teilekanten**: jedes Teil wird zusätzlich so gedreht, dass
+eine seiner eigenen Kanten waagrecht liegt. Das ist bei schiefen Teilen
+entscheidend, denn die liegen ungedreht schief in ihrem Hüllrechteck und
+verschenken Platz:
+
+| Teile | 90°-Schritte | an den Teilekanten |
+|---|---|---|
+| 10 Diagonalstreifen | 2 Tafeln, 24 % | **1 Tafel, 49 %** |
+| 12 Giebelschenkel | 2 Tafeln, 21 % | **1 Tafel, 43 %** |
+| 20 Rechtecke | 2 Tafeln, 78 % | 2 Tafeln, 78 % |
+
+Bei Rechteckteilen ändert sich nichts – dort kostet es nur Rechenzeit, dann
+genügen die 90°-Schritte. Teile mit Walz- oder Dekorrichtung bekommen in der
+Teileliste *Drehbar = aus* und bleiben in jedem Fall stehen.
     """)
 
     st.markdown("#### Schritt ④ – Plan & Ausgabe")
@@ -1254,7 +1290,8 @@ und DXF-Export den angepassten Plan.
 
 #### Grenzen
 * Geschachtelt wird in der Ebene; Biegeteile werden als Abwicklung behandelt.
-* Gedreht wird in 90°- oder 45°-Schritten, nicht in beliebigen Winkeln.
+* Gedreht wird in 90°- oder 45°-Schritten oder in den Winkeln, die sich aus
+  den Kanten des Teils ergeben – nicht in völlig freien Winkeln.
 * Das Konturnesting rechnet im Raster – die Teile stehen gelegentlich ein paar
   Millimeter weiter auseinander als nötig, nie enger als die Schnittfuge.
 * Der ausgegebene Plan ersetzt die Kontrolle in der Werkstatt nicht.

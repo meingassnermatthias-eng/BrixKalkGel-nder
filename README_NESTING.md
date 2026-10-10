@@ -161,8 +161,28 @@ eine Kreuzkorrelation (FFT) auf der ganzen Tafel gesucht. Weil nach außen
 gerundet wird, ist die eingestellte **Schnittfuge garantiert** eingehalten – im
 Zweifel steht etwas mehr Abstand, nie weniger.
 
-Stellschrauben: Rasterweite (5 mm ist ein guter Kompromiss), erlaubte Drehung
-(90°- oder 45°-Schritte oder keine), Ausschnitte mitnutzen, Suchtiefe.
+#### Erlaubte Drehung
+
+Voreingestellt ist **beliebig – an den Teilekanten**. Jedes Teil wird dann
+zusätzlich so gedreht, dass eine seiner eigenen Kanten waagrecht liegt. Das
+entscheidet bei schiefen Teilen alles: ungedreht liegen sie schräg in ihrem
+Hüllrechteck und verschenken die halbe Fläche.
+
+| Auftrag | 90°-Schritte | an den Teilekanten |
+|---|---|---|
+| 10 Diagonalstreifen (Hülle 1400×1100, echte Breite 200) | 2 Tafeln, 24 % | **1 Tafel, 49 %** |
+| 12 Giebelschenkel (langes Dreieck) | 2 Tafeln, 21 % | **1 Tafel, 43 %** |
+| 20 Rechtecke 700×500 | 2 Tafeln, 78 % | 2 Tafeln, 78 % |
+
+Die Winkel stammen aus der konvexen Hülle des Teils: je Kante eine Drehung, die
+sie waagrecht legt, davon die drei mit der kleinsten Hüllfläche, jeweils in vier
+Vierteldrehungen. Bei reinen Rechtecken kommt dabei nichts Neues heraus – dort
+kostet es nur Rechenzeit, und die 90°-Schritte genügen. Teile mit *Drehbar =
+aus* (Walz- oder Dekorrichtung) bleiben in jedem Fall stehen.
+
+Stellschrauben: Rasterweite (5 mm ist ein guter Kompromiss), erlaubte Drehung,
+Ausschnitte mitnutzen, Suchtiefe (1–6 Bewertungsstrategien; mehr ist genauer
+und langsamer).
 
 ## Schritt ④ – Plan & Ausgabe
 
@@ -208,7 +228,8 @@ Tafelliste als Excel und CSV, kompletter Plan als DXF (Layer `TAFEL`,
 ## Grenzen
 
 * Geschachtelt wird in der Ebene; Biegeteile werden als Abwicklung behandelt.
-* Gedreht wird in 90°- oder 45°-Schritten, nicht in beliebigen Winkeln.
+* Gedreht wird in 90°- oder 45°-Schritten oder in den Winkeln, die sich aus den
+  Kanten des Teils ergeben – nicht in völlig freien Winkeln.
 * Das Konturnesting rechnet im Raster – die Teile stehen gelegentlich ein paar
   Millimeter weiter auseinander als nötig, nie enger als die Schnittfuge.
 * Teile werden von oben eingelegt, nicht seitlich eingeschoben. Eine Tasche,

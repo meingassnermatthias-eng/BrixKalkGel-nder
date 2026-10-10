@@ -9,9 +9,10 @@ Ergebnis werden alle platzierten Konturen exakt gegeneinander gerechnet
 import math
 import time
 
-from nesting import Tafel, Zuschnitt2D, optimize_2d
+from nesting import Tafel, Zuschnitt2D, drehe_polygone, optimize_2d
+import kontur_nesting as kn
 from kontur_nesting import (
-    FEINE_WINKEL, optimize_2d_kontur, rastere_kontur, weite_auf,
+    FEINE_WINKEL, FREIE_WINKEL, optimize_2d_kontur, rastere_kontur, weite_auf,
 )
 
 fehler = []
@@ -457,12 +458,68 @@ def test_laufzeit():
     pruefe_plan(e, tafeln, 6, 10, 5, "Praxisfall")
 
 
+def test_eigenwinkel():
+    """Teile, die schief in ihrer Huelle liegen, werden selbst ausgerichtet."""
+    print("\n14. Drehwinkel aus der Teileform")
+
+    # Diagonalstreifen: Huelle 1400 x 1100, echte Breite nur 200 mm
+    streifen = [[(0.0, 0.0), (200.0, 0.0), (1400.0, 1100.0), (1200.0, 1100.0)]]
+    winkel = kn._eigenwinkel(streifen)
+    # Die lange Kante steigt um 42,5 Grad; gedreht wird um 47,5 Grad, damit sie
+    # waagrecht liegt.
+    pruefe(any(abs(w % 180 - 47.5) < 3 for w in winkel),
+           f"die Drehung fuer die lange Kante ist dabei "
+           f"({[round(w, 1) for w in winkel]})")
+    bester = min(winkel, key=lambda w: (lambda b, h: b * h)(*drehe_polygone(streifen, w)[1:]))
+    _, b, h = drehe_polygone(streifen, bester)
+    _, b0, h0 = drehe_polygone(streifen, 0.0)
+    pruefe(b * h < 0.45 * b0 * h0,
+           f"beste Lage hat weniger als die halbe Huellflaeche "
+           f"({b:.0f}x{h:.0f} statt {b0:.0f}x{h0:.0f})")
+
+    teile = [Zuschnitt2D(1400, 1100, 10, "Diagonale", "Alu", True, kontur=streifen)]
+    tafeln = [Tafel(1500, 3000, None, "Tafel", "Alu")]
+    fest = optimize_2d_kontur(teile, tafeln, saegeblatt=5, besaeumung=0, raster=5,
+                              winkel=kn.STANDARD_WINKEL, versuche=4)
+    frei = optimize_2d_kontur(teile, tafeln, saegeblatt=5, besaeumung=0, raster=5,
+                              winkel=kn.FREIE_WINKEL, versuche=4)
+    print(f"       -> 90-Schritte: {fest.anzahl_tafeln} Tafeln "
+          f"({fest.ausnutzung_echt_prozent:.1f} %), Eigenwinkel: "
+          f"{frei.anzahl_tafeln} Tafeln ({frei.ausnutzung_echt_prozent:.1f} %)")
+    pruefe(stueckzahl(fest) == 10 and stueckzahl(frei) == 10, "alle Teile platziert")
+    pruefe(frei.anzahl_tafeln < fest.anzahl_tafeln,
+           f"Eigenwinkel braucht weniger Tafeln ({frei.anzahl_tafeln} statt "
+           f"{fest.anzahl_tafeln})")
+    pruefe(frei.ausnutzung_echt_prozent > fest.ausnutzung_echt_prozent + 10,
+           "Ausnutzung deutlich besser")
+    pruefe_plan(frei, tafeln, 5, 0, 5, "Eigenwinkel")
+
+    # Gegenprobe Rechtecke: darf nicht schlechter werden
+    rechtecke = [Zuschnitt2D(700, 500, 20, "R", "Alu", True)]
+    r_fest = optimize_2d_kontur(rechtecke, tafeln, saegeblatt=5, besaeumung=0,
+                                raster=5, winkel=kn.STANDARD_WINKEL, versuche=4)
+    r_frei = optimize_2d_kontur(rechtecke, tafeln, saegeblatt=5, besaeumung=0,
+                                raster=5, winkel=kn.FREIE_WINKEL, versuche=4)
+    pruefe(r_frei.anzahl_tafeln <= r_fest.anzahl_tafeln,
+           f"Rechtecke werden nicht schlechter ({r_frei.anzahl_tafeln} vs "
+           f"{r_fest.anzahl_tafeln} Tafeln)")
+
+    # Nicht drehbare Teile bleiben trotz Eigenwinkeln stehen
+    starr = [Zuschnitt2D(1400, 1100, 4, "Diagonale", "Alu", False, kontur=streifen)]
+    e = optimize_2d_kontur(starr, tafeln, saegeblatt=5, besaeumung=0, raster=5,
+                           winkel=kn.FREIE_WINKEL, versuche=2)
+    gedreht = [p.winkel for plan in e.plaene for p in plan.platzierungen]
+    pruefe(all(abs(w) < 1e-9 for w in gedreht),
+           f"Laufrichtung schlaegt die Eigenwinkel ({gedreht})")
+
+
 if __name__ == "__main__":
     for fn in [test_rasterung, test_dreiecke_greifen_ineinander, test_l_formen,
                test_ausschnitt_wird_genutzt, test_kassetten_alucobond,
                test_laufrichtung, test_rechtecke_ohne_kontur, test_zu_grosses_teil,
                test_schnittfuge_wirkt, test_bbox_sicherheitsnetz, test_feine_winkel,
                test_rastergrenze, test_ohne_tafeln, test_ausgabe_pdf_und_dxf,
+               test_eigenwinkel,
                test_laufzeit]:
         fn()
     print()

@@ -67,6 +67,15 @@ DER ABLAUF - VIER SCHRITTE
         Kontur     - echte Teileform, Teile greifen ineinander
      Dann "Nesting starten".
 
+     Bei schiefen Teilen (Parallelogramm, Trapez, Dreieck,
+     Diagonalstreifen) steht unter "Einstellungen
+     Konturnesting" die erlaubte Drehung auf
+     "beliebig - an den Teilekanten". Das Teil wird dann so
+     gedreht, dass eine seiner eigenen Kanten waagrecht
+     liegt - das spart oft eine halbe Tafel. Bei reinen
+     Rechtecken aendert es nichts und kostet nur Rechenzeit,
+     dort genuegen die 90-Grad-Schritte.
+
   4  PLAN & AUSGABE
      Plan ansehen, von Hand nachbessern (Teile mit der Maus
      ziehen, auch von Tafel zu Tafel) und ausgeben als
