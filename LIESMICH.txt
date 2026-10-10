@@ -38,16 +38,28 @@ STARTKNOPF AUF DEM DESKTOP
   doppelklicken.
 
 
-DER ABLAUF - DREI SCHRITTE
+DER ABLAUF - VIER SCHRITTE
 ---------------------------------------------------------------
 
-  1  TEILE
+  1  RASTER (FASSADE)   -- freiwillig
+     Fuer eine Fassade: das Plattenraster zeichnen (Spalten-
+     und Zeilenmasse eintippen) oder aus einer DXF-Ansicht
+     holen. Dann in der Ansicht die Felder anklicken:
+     Plattentyp vergeben oder Fenster wegklicken. Das
+     Programm zieht die Fuge ab, schlaegt die Zugabe auf,
+     sucht die Gleichteile und legt die Positionen
+     (P01, P02 ...) in die Teileliste.
+     Dazu gibt es die Positionsliste als Excel und den
+     Montageplan als DXF.
+     Wer seine Teile schon hat, faengt bei Schritt 2 an.
+
+  2  TEILE
      DXF-Dateien aus HiCAD einlesen (Alucobond-Kassetten
      und andere Abwicklungen) oder Teile von Hand erfassen.
      Sammelaktionen setzen Material oder Drehbarkeit fuer
      alle Teile auf einmal.
 
-  2  MATERIAL & NESTING
+  3  MATERIAL & NESTING
      Tafelformate waehlen, Schnittfuge und Besaeumung
      eintragen, Schnittart waehlen:
         Guillotine - durchgehende Schnitte (Tafelschere, Saege)
@@ -55,7 +67,7 @@ DER ABLAUF - DREI SCHRITTE
         Kontur     - echte Teileform, Teile greifen ineinander
      Dann "Nesting starten".
 
-  3  PLAN & AUSGABE
+  4  PLAN & AUSGABE
      Plan ansehen, von Hand nachbessern (Teile mit der Maus
      ziehen, auch von Tafel zu Tafel) und ausgeben als
      PDF, Excel, CSV oder DXF.
@@ -72,6 +84,11 @@ WENN ETWAS HAKT
 
   Der Browser oeffnet sich nicht
   -> Im Browser von Hand aufrufen:  http://localhost:8501
+
+  Beim Rasterimport wird kein Feld erkannt
+  -> Anderen Layer ankreuzen (der Layer mit den meisten
+     Linien steht oben) oder die Toleranz erhoehen, wenn
+     die Rasterlinien kleine Luecken haben.
 
   Teile stehen unter "Nicht eingeplant"
   -> Meist stimmt das Material nicht ueberein: in der

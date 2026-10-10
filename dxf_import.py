@@ -229,6 +229,7 @@ def _elemente_ezdxf(daten: bytes, layer_override: dict | None = None) -> tuple[l
     msp = doc.modelspace()
     kontur, stich, texte = [], [], []
     layer_stat: dict = {}
+    nach_layer: dict = {}
 
     def verarbeite(e, transform_hinweis=""):
         typ = e.dxftype()
@@ -244,10 +245,12 @@ def _elemente_ezdxf(daten: bytes, layer_override: dict | None = None) -> tuple[l
             except Exception:
                 pass
             return
-        if klasse == "ignorieren":
-            return
 
-        ziel = kontur if klasse == "kontur" else stich
+        # Fuer den Rasterimport zaehlt der Layer, nicht die Klasse: darum wird
+        # jede Geometrie zusaetzlich unter ihrem Layer abgelegt.
+        ziel = _Sammler(nach_layer.setdefault(layer, []),
+                        None if klasse == "ignorieren"
+                        else (kontur if klasse == "kontur" else stich))
         try:
             if typ == "LINE":
                 ziel.append([(e.dxf.start[0], e.dxf.start[1]),
@@ -281,7 +284,7 @@ def _elemente_ezdxf(daten: bytes, layer_override: dict | None = None) -> tuple[l
 
     for e in msp:
         verarbeite(e)
-    return kontur, stich, texte, layer_stat
+    return kontur, stich, texte, layer_stat, nach_layer
 
 
 def _elemente_einfach(daten: bytes, layer_override: dict | None = None) -> tuple[list, list, list, dict]:
@@ -293,6 +296,7 @@ def _elemente_einfach(daten: bytes, layer_override: dict | None = None) -> tuple
     zeilen = [z.strip() for z in text.splitlines()]
     kontur, stich, texte = [], [], []
     layer_stat: dict = {}
+    nach_layer: dict = {}
 
     i = 0
     # nur den ENTITIES-Bereich lesen
@@ -302,9 +306,9 @@ def _elemente_einfach(daten: bytes, layer_override: dict | None = None) -> tuple
     def ziel_fuer(layer):
         klasse = layer_override.get(layer) or klassifiziere_layer(layer)
         layer_stat[layer] = (klasse, layer_stat.get(layer, (klasse, 0))[1] + 1)
-        if klasse == "ignorieren":
-            return None
-        return kontur if klasse == "kontur" else stich
+        return _Sammler(nach_layer.setdefault(layer, []),
+                        None if klasse == "ignorieren"
+                        else (kontur if klasse == "kontur" else stich))
 
     while i < len(zeilen) - 1:
         if zeilen[i] != "0":
@@ -334,8 +338,6 @@ def _elemente_einfach(daten: bytes, layer_override: dict | None = None) -> tuple
                           _f(werte.get("20", ["0"])[0])))
             continue
         ziel = ziel_fuer(layer)
-        if ziel is None:
-            continue
 
         if typ == "LINE":
             ziel.append([(_f(werte.get("10", ["0"])[0]), _f(werte.get("20", ["0"])[0])),
@@ -360,7 +362,54 @@ def _elemente_einfach(daten: bytes, layer_override: dict | None = None) -> tuple
         elif typ == "VERTEX":
             # POLYLINE-Stuetzpunkte sammeln wir vereinfacht als Einzelsegmente
             werte.setdefault("_vertex", [])
-    return kontur, stich, texte, layer_stat
+    return kontur, stich, texte, layer_stat, nach_layer
+
+
+class _Sammler:
+    """
+    Nimmt eine Geometrie auf und legt sie in mehreren Listen ab.
+
+    'layerliste' bekommt jede Geometrie (fuer den Rasterimport), 'klassenliste'
+    nur die, die laut Layerzuordnung geschnitten oder geritzt wird; bei
+    'ignorieren' ist sie None.
+    """
+
+    __slots__ = ("layerliste", "klassenliste")
+
+    def __init__(self, layerliste: list, klassenliste):
+        self.layerliste = layerliste
+        self.klassenliste = klassenliste
+
+    def append(self, punkte) -> None:
+        if not punkte or len(punkte) < 2:
+            return
+        self.layerliste.append(punkte)
+        if self.klassenliste is not None:
+            self.klassenliste.append(punkte)
+
+
+def lade_linien(daten, dateiname: str = "") -> dict:
+    """
+    Liest alle Linienzuege einer DXF-Datei nach Layer getrennt.
+
+    Gedacht fuer den Rasterimport: dort entscheidet nicht die Layerbenennung,
+    sondern der Anwender, welcher Layer das Plattenraster enthaelt.
+
+    Rueckgabe: {"linien": {Layer: [Linienzug, ...]}, "texte": [(Text, x, y)],
+                "hinweise": [...]}
+    """
+    hinweise = []
+    if isinstance(daten, str):
+        daten = daten.encode("utf-8")
+    if EZDXF_VERFUEGBAR:
+        _, _, texte, _, nach_layer = _elemente_ezdxf(daten)
+    else:
+        _, _, texte, _, nach_layer = _elemente_einfach(daten)
+        hinweise.append("ezdxf ist nicht installiert - Splines und Bloecke "
+                        "werden ignoriert.")
+    if not nach_layer:
+        hinweise.append("Keine Linien gefunden.")
+    return {"linien": nach_layer, "texte": texte, "hinweise": hinweise}
 
 
 def _f(wert) -> float:
@@ -387,9 +436,11 @@ def lade_dxf(daten: bytes, dateiname: str = "", toleranz: float = 0.1,
         daten = daten.encode("utf-8")
 
     if EZDXF_VERFUEGBAR:
-        kontur_seg, stich_seg, texte, layer_stat = _elemente_ezdxf(daten, layer_override)
+        kontur_seg, stich_seg, texte, layer_stat, _ = _elemente_ezdxf(
+            daten, layer_override)
     else:
-        kontur_seg, stich_seg, texte, layer_stat = _elemente_einfach(daten, layer_override)
+        kontur_seg, stich_seg, texte, layer_stat, _ = _elemente_einfach(
+            daten, layer_override)
         ergebnis.hinweise.append(
             "ezdxf ist nicht installiert - Splines und Bloecke werden ignoriert.")
 
@@ -490,6 +541,8 @@ _LAYER_FARBEN = {
     "KONTUR": 7,         # weiss/schwarz
     "FRAESLINIE": 1,     # rot
     "BESCHRIFTUNG": 3,   # gruen
+    "RASTER": 5,         # blau - Fassadenraster
+    "OEFFNUNG": 1,       # rot - Fenster und Entfall
 }
 
 
@@ -523,6 +576,27 @@ def _dxf_text(inhalt: str, x: float, y: float, hoehe: float, layer: str) -> list
     sauber = "".join(c for c in str(inhalt) if 32 <= ord(c) < 127) or "?"
     return ["0", "TEXT", "8", layer, "10", f"{x:.4f}", "20", f"{y:.4f}", "30", "0.0",
             "40", f"{hoehe:.4f}", "1", sauber]
+
+
+def zeichnung_als_dxf(polylinien, texte=()) -> str:
+    """
+    Schreibt eine einfache DXF-Zeichnung (R12).
+
+    polylinien  [(punkte, layer, geschlossen), ...]
+    texte       [(inhalt, x, y, hoehe, layer), ...]
+
+    Damit lassen sich auch Zeichnungen ausgeben, die nicht aus dem Nesting
+    kommen - zum Beispiel der Montageplan einer Fassade.
+    """
+    zeilen = _dxf_kopf()
+    for eintrag in polylinien:
+        punkte, layer = eintrag[0], eintrag[1]
+        geschlossen = eintrag[2] if len(eintrag) > 2 else True
+        zeilen += _dxf_polylinie(punkte, layer, geschlossen)
+    for inhalt, x, y, hoehe, layer in texte:
+        zeilen += _dxf_text(inhalt, x, y, hoehe, layer)
+    zeilen += ["0", "ENDSEC", "0", "EOF"]
+    return "\n".join(zeilen) + "\n"
 
 
 def plan_als_dxf(ergebnis, abstand: float = 200.0, mit_beschriftung: bool = True) -> str:

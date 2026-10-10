@@ -21,17 +21,69 @@ nachträglich geht das über `Desktop-Verknuepfung.bat`.
 Die Oberfläche läuft nur auf dem eigenen Rechner (`localhost`) – es gehen keine
 Daten nach außen.
 
-## Der Ablauf in drei Schritten
+## Der Ablauf in vier Schritten
 
 | Schritt | Was dort passiert |
 |---|---|
-| ① **Teile** | DXF einlesen oder Teile von Hand erfassen; Teileliste mit Sammelaktionen |
-| ② **Material & Nesting** | Tafelformate, Schnittfuge, Besäumung, Schnittart – dann schachteln |
-| ③ **Plan & Ausgabe** | Pläne ansehen, von Hand nachbessern, als PDF / Excel / CSV / DXF ausgeben |
+| ① **Raster (Fassade)** | Plattenraster zeichnen oder aus DXF holen, Felder zuordnen, Gleichteile suchen – *freiwillig* |
+| ② **Teile** | DXF einlesen oder Teile von Hand erfassen; Teileliste mit Sammelaktionen |
+| ③ **Material & Nesting** | Tafelformate, Schnittfuge, Besäumung, Schnittart – dann schachteln |
+| ④ **Plan & Ausgabe** | Pläne ansehen, von Hand nachbessern, als PDF / Excel / CSV / DXF ausgeben |
 
 Der Reiter **Hilfe** erklärt jeden Schritt mit Bildern.
 
-## Schritt ① – Teile
+## Schritt ① – Raster (Fassade)
+
+Aus dem Plattenraster einer Fassade entstehen die Platten von selbst. Wer die
+Teile schon hat, überspringt diesen Schritt.
+
+**Raster zeichnen.** Spaltenbreiten und Zeilenhöhen eintippen – `3x1250 900`
+heißt dreimal 1250 mm, dann 900 mm. Oder das Gesamtmaß angeben und in gleiche
+Felder teilen lassen.
+
+**Raster aus DXF.** Eine beliebige Ansicht einlesen. Die Linien werden
+**layerweise** gelesen; angekreuzt wird, welcher Layer das Raster zeichnet
+(z. B. `0`), alles andere bleibt liegen. Erkannt werden:
+
+* Felder aus einem Liniennetz – auch unregelmäßig, auch wenn ein Feld über
+  mehrere Rasterzellen geht (fehlende Trennlinie), auch L-förmige Felder;
+* geschlossene Polylinien als Feld, in beliebiger Form;
+* Flächen, deren Rand nicht vollständig gezeichnet ist, zählen **nicht** mit –
+  eine L-förmige Fassade bekommt so keine Scheinfelder in der offenen Ecke;
+* Fenster und Türen aus den Texten (`Fenster`, `Aussparung`, `Entfall` …),
+  wenn der Haken gesetzt ist.
+
+Die **Toleranz** überbrückt kleine Lücken zwischen den Linien (typisch 1–3 mm).
+
+**Fuge und Zugabe.** Die Rasterlinie gilt als **Fugenmitte**: zwischen zwei
+Platten geht die ganze Fugenbreite ab, je Seite die Hälfte. Am Außenrand geht
+die Platte bis zur Linie, umstellbar mit *Fuge auch am Rand*. Zur
+Fensteröffnung hin bleibt die Fuge erhalten. Die **Zugabe je Seite** schlägt
+danach wieder auf – zum Beispiel die Aufkantung einer Kassette:
+Sichtmaß + 2 × Zugabe = Zuschnitt.
+
+**Felder zuordnen.** Jedes Feld bekommt mit dem Pinsel einen Plattentyp
+(Farbe und eigenes Material) oder wird als **Öffnung** weggeklickt. Anklicken
+oder mit gedrückter Maustaste über mehrere Felder ziehen; Zifferntasten wählen
+den Pinsel, Strg+Z nimmt zurück. Erst *Zuordnung übernehmen* schreibt sie ins
+Raster.
+
+**Gleichteilsuche.** Deckungsgleiche Platten werden zu Positionen
+(P01, P02 …) gebündelt:
+
+| Einstellung | Wann |
+|---|---|
+| nur gleich ausgerichtet | Regelfall bei Walz- oder Dekorrichtung |
+| auch gedreht | wenn 90/180/270° gedreht eingebaut werden darf |
+| auch gespiegelt | nur bei beidseitig gleichem Material – die Sichtseite dreht sich |
+
+Platten verschiedener Typen werden nie zusammengefasst, auch wenn sie gleich
+groß sind. Zum Schluss gehen die Positionen mit Stückzahl und echter Kontur in
+die Teileliste. Dazu gibt es die **Positionsliste** als Excel (mit Feldliste)
+und den **Montageplan als DXF**: Rasterfelder, Plattenkonturen und
+Positionsnummern – die Zeichnung für die Baustelle.
+
+## Schritt ② – Teile
 
 **DXF-Import.** Eine oder mehrere Dateien hochladen. Erkannt werden
 Außenkontur, Ausschnitte (Löcher) und Fräs-/Falzlinien; identische Teile
@@ -56,7 +108,7 @@ DXF* lässt sich vor dem Nesting prüfen, was gelesen wurde.
 alle/keine Teile drehbar, Stückzahlen verdoppeln, Liste leeren. Teile mit Walz-
 oder Dekorrichtung (Alucobond metallic) bekommen *Keines drehbar*.
 
-## Schritt ② – Material & Nesting
+## Schritt ③ – Material & Nesting
 
 Tafelformate aus der Vorlagenliste übernehmen oder eintragen. **Anzahl** leer
 lassen heißt unbegrenzt verfügbar, **Material** leer lassen heißt „passt für
@@ -96,7 +148,7 @@ Zweifel steht etwas mehr Abstand, nie weniger.
 Stellschrauben: Rasterweite (5 mm ist ein guter Kompromiss), erlaubte Drehung
 (90°- oder 45°-Schritte oder keine), Ausschnitte mitnutzen, Suchtiefe.
 
-## Schritt ③ – Plan & Ausgabe
+## Schritt ④ – Plan & Ausgabe
 
 **Von Hand anpassen.** Jedes Teil lässt sich mit der Maus verschieben, drehen,
 ablegen und wieder einsetzen – auch von einer Tafel auf die andere. Wählbar
@@ -130,6 +182,8 @@ Tafelliste als Excel und CSV, kompletter Plan als DXF (Layer `TAFEL`,
 | `kontur_nesting.py` | Echtes Konturnesting, braucht numpy |
 | `dxf_import.py` | DXF lesen (HiCAD/Alucobond) und Schachtelplan schreiben |
 | `plan_editor.py` + `komponenten/plan_editor/` | Plan von Hand nachbessern |
+| `raster.py` | Plattenraster, Fugen, Gleichteilsuche, Montageplan |
+| `raster_editor.py` + `komponenten/raster_editor/` | Felder in der Ansicht zuordnen |
 | `zeichnung.py` | Pläne als SVG für den Bildschirm |
 | `pdf_export.py` | Werkstattdruck als PDF |
 | `hilfe_bilder.py` | Erklärbilder im Hilfe-Reiter |
@@ -145,6 +199,10 @@ Tafelliste als Excel und CSV, kompletter Plan als DXF (Layer `TAFEL`,
   die nur seitlich erreichbar wäre, bleibt frei.
 * Die Optimierung ist eine sehr gute Heuristik, kein mathematisches Optimum.
 * Der ausgegebene Plan ersetzt die Kontrolle in der Werkstatt nicht.
+* Das Fassadenraster wird als Ansicht behandelt: schräge Rasterlinien bilden
+  nur dann ein Feld, wenn sie als geschlossene Polylinie gezeichnet sind.
+* Gerechnet wird die Abwicklung in der Ebene – Gehrungen, Kantungen und
+  Befestigungen bleiben Sache der Konstruktion.
 
 Die frühere Stangen- und Profiloptimierung (1D) ist entfallen; sie steckt bei
 Bedarf noch in der Versionsgeschichte des Projekts.

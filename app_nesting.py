@@ -3,11 +3,13 @@ app_nesting.py - Verschnittoptimierung (Nesting) fuer Meingassner Metalltechnik
 
 Start:  streamlit run app_nesting.py
 
-Aufbau in drei Schritten:
+Aufbau in vier Schritten:
 
-  1  Teile      DXF einlesen (HiCAD / Alucobond) oder von Hand erfassen
-  2  Material   Tafeln und Schnittparameter, dann schachteln
-  3  Plan       Ergebnis ansehen, von Hand nachbessern, ausgeben
+  1  Raster     Plattenraster der Fassade zeichnen oder aus DXF holen,
+                Felder zuordnen, Gleichteile suchen   (freiwillig)
+  2  Teile      DXF einlesen (HiCAD / Alucobond) oder von Hand erfassen
+  3  Material   Tafeln und Schnittparameter, dann schachteln
+  4  Plan       Ergebnis ansehen, von Hand nachbessern, ausgeben
 """
 
 import datetime
@@ -19,8 +21,16 @@ import pandas as pd
 import streamlit as st
 
 from nesting import Tafel, Zuschnitt2D, optimize_2d, parse_2d_eingabe
-from zeichnung import farbkarte, legende, namen_aus_plan, svg_tafel, svg_teil
+from zeichnung import farbkarte, legende, namen_aus_plan, svg_fassade, svg_tafel, svg_teil
 import hilfe_bilder
+
+try:
+    import raster
+    import raster_editor
+    RASTER_OK = True
+except Exception as exc:
+    RASTER_OK = False
+    RASTER_FEHLER = str(exc)
 
 try:
     from kontur_nesting import FEINE_WINKEL, STANDARD_WINKEL, optimize_2d_kontur
@@ -163,6 +173,12 @@ def init():
         "dxf_hinweise": [],
         "dxf_layer": {},
         "projekt": "",
+        "raster_felder": [],
+        "raster_linien": {},
+        "raster_texte": [],
+        "raster_hinweise": [],
+        "raster_quelle": "",
+        "raster_material": {},
     }
     for schluessel, wert in vorgaben.items():
         if schluessel not in st.session_state:
@@ -259,6 +275,11 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("**Stand**")
+    if st.session_state.get("raster_felder"):
+        felder_jetzt = st.session_state.raster_felder
+        offen = sum(1 for f in felder_jetzt if f.aus)
+        st.write(f"Raster: **{len(felder_jetzt)}** Felder"
+                 + (f", {offen} Öffnungen" if offen else ""))
     teile_jetzt = stand("teile")
     anzahl_positionen = int((teile_jetzt["Anzahl"].fillna(0) > 0).sum()) \
         if "Anzahl" in teile_jetzt else 0
@@ -393,15 +414,324 @@ def zeige_editor(erg, farben):
 
 
 # ==========================================================
-# 6. DIE DREI SCHRITTE
+# 6. DIE VIER SCHRITTE
 # ==========================================================
 
-schritt1, schritt2, schritt3, hilfe = st.tabs([
-    "① Teile", "② Material & Nesting", "③ Plan & Ausgabe", "❔ Hilfe"])
+schritt_raster, schritt1, schritt2, schritt3, hilfe = st.tabs([
+    "① Raster (Fassade)", "② Teile", "③ Material & Nesting",
+    "④ Plan & Ausgabe", "❔ Hilfe"])
 
 
 # ---------------------------------------------------------
-# Schritt 1: Teile
+# Schritt 1: Plattenraster der Fassade
+# ---------------------------------------------------------
+with schritt_raster:
+    st.markdown('<div class="schritt">Plattenraster der Fassade</div>',
+                unsafe_allow_html=True)
+    st.markdown('<div class="merk">Raster zeichnen oder aus einem DXF holen, '
+                'Felder zuordnen, Fenster wegklicken – das Programm sucht die '
+                'Gleichteile und legt die Positionen in die Teileliste. '
+                'Wer seine Teile schon hat, überspringt diesen Schritt.</div>',
+                unsafe_allow_html=True)
+
+    if not RASTER_OK:
+        st.error(f"Rastermodul nicht verfügbar: {RASTER_FEHLER}")
+    else:
+        hand, aus_dxf = st.columns(2)
+
+        # ---------------- Raster zeichnen ----------------
+        with hand:
+            st.markdown("##### Raster zeichnen")
+            art = st.radio("Eingabeart", ["Einzelmaße", "Gesamtmaß teilen"],
+                           horizontal=True, key="raster_art",
+                           label_visibility="collapsed")
+            if art == "Einzelmaße":
+                spalten_text = st.text_input(
+                    "Spaltenbreiten (links → rechts)", "3x1250 900",
+                    key="raster_spalten",
+                    help="Achsmaße, durch Leerzeichen getrennt. "
+                         "`3x1250` heißt dreimal 1250 mm.")
+                zeilen_text = st.text_input(
+                    "Zeilenhöhen (oben → unten)", "4x1100", key="raster_zeilen")
+                spalten = raster.masse_lesen(spalten_text)
+                zeilen = raster.masse_lesen(zeilen_text)
+            else:
+                g1, g2 = st.columns(2)
+                gesamt_b = g1.number_input("Gesamtbreite (mm)", 100.0, 200000.0,
+                                           4700.0, 100.0, key="raster_gb")
+                anzahl_s = g2.number_input("Spalten", 1, 200, 4, 1, key="raster_as")
+                gesamt_h = g1.number_input("Gesamthöhe (mm)", 100.0, 200000.0,
+                                           4400.0, 100.0, key="raster_gh")
+                anzahl_z = g2.number_input("Zeilen", 1, 200, 4, 1, key="raster_az")
+                spalten = raster.gleiche_teilung(gesamt_b, anzahl_s)
+                zeilen = raster.gleiche_teilung(gesamt_h, anzahl_z)
+
+            if spalten and zeilen:
+                st.caption(f"{len(spalten)} × {len(zeilen)} = "
+                           f"**{len(spalten) * len(zeilen)} Felder**, "
+                           f"Gesamtmaß {sum(spalten):.0f} × {sum(zeilen):.0f} mm")
+            else:
+                st.caption("Noch keine gültigen Maße.")
+
+            if st.button("▦ Raster erzeugen", type="primary", key="btn_raster_hand",
+                         disabled=not (spalten and zeilen)):
+                st.session_state.raster_felder = raster.felder_aus_raster(spalten, zeilen)
+                st.session_state.raster_hinweise = []
+                st.session_state.raster_quelle = (
+                    f"von Hand, {len(spalten)} × {len(zeilen)} Felder")
+                st.session_state.raster_meldung = (
+                    "erfolg", f"{len(spalten) * len(zeilen)} Felder erzeugt.")
+                st.rerun()
+
+        # ---------------- Raster aus DXF ----------------
+        with aus_dxf:
+            st.markdown("##### Rasterplan aus DXF")
+            if not DXF_OK:
+                st.error(f"DXF-Modul nicht verfügbar: {DXF_FEHLER}")
+            else:
+                plan_datei = st.file_uploader(
+                    "Ansicht mit dem Plattenraster", type=["dxf"],
+                    key="raster_datei", label_visibility="collapsed",
+                    help="Beliebige Ansicht – das Programm liest die Linien "
+                         "layerweise ein.")
+                if plan_datei is not None and st.button(
+                        "📥 Linien einlesen", key="btn_raster_lesen"):
+                    try:
+                        gelesen = dxf.lade_linien(plan_datei.getvalue(), plan_datei.name)
+                        st.session_state.raster_linien = gelesen["linien"]
+                        st.session_state.raster_texte = gelesen["texte"]
+                        st.session_state.raster_hinweise = gelesen["hinweise"]
+                        st.session_state.raster_datei_name = plan_datei.name
+                    except Exception as exc:
+                        st.session_state.raster_linien = {}
+                        st.session_state.raster_hinweise = [
+                            f"{plan_datei.name}: Fehler beim Lesen – {exc}"]
+                    st.rerun()
+
+                linien = st.session_state.raster_linien
+                if linien:
+                    reihenfolge = sorted(linien, key=lambda n: -len(linien[n]))
+                    st.caption("Layer der Datei "
+                               f"**{st.session_state.get('raster_datei_name', '')}** – "
+                               "ankreuzen, was das Raster zeichnet:")
+                    gewaehlt = st.multiselect(
+                        "Rasterlayer",
+                        [f"{name}  ({len(linien[name])} Linien)" for name in reihenfolge],
+                        default=[f"{reihenfolge[0]}  ({len(linien[reihenfolge[0]])} Linien)"],
+                        key="raster_layer", label_visibility="collapsed")
+                    namen = [eintrag.rsplit("  (", 1)[0] for eintrag in gewaehlt]
+                    d1, d2 = st.columns(2)
+                    tol_raster = d1.number_input(
+                        "Toleranz (mm)", 0.1, 50.0, 2.0, 0.5, key="raster_toleranz",
+                        help="Überbrückt kleine Lücken und Ungenauigkeiten "
+                             "zwischen den Rasterlinien")
+                    min_feld = d2.number_input(
+                        "Kleinstes Feld (m²)", 0.001, 10.0, 0.01, 0.01,
+                        format="%.3f", key="raster_minflaeche",
+                        help="Kleinere Flächen gelten als Hilfslinien")
+                    fenster_auto = st.checkbox(
+                        "Fenster und Türen aus den Texten erkennen", True,
+                        key="raster_fenster_auto",
+                        help="Felder mit Texten wie „Fenster“ oder „Aussparung“ "
+                             "werden gleich als Öffnung markiert")
+
+                    if st.button("▦ Raster erkennen", type="primary",
+                                 key="btn_raster_dxf", disabled=not namen):
+                        zuege = [zug for name in namen for zug in linien.get(name, [])]
+                        felder_neu, hinweise_neu = raster.felder_aus_linien(
+                            zuege, toleranz=tol_raster,
+                            min_flaeche=min_feld * 1e6)
+                        treffer = 0
+                        if fenster_auto and felder_neu:
+                            treffer = raster.oeffnungen_aus_texten(
+                                felder_neu, st.session_state.raster_texte)
+                        st.session_state.raster_felder = felder_neu
+                        st.session_state.raster_hinweise = hinweise_neu
+                        st.session_state.raster_quelle = (
+                            f"DXF {st.session_state.get('raster_datei_name', '')}, "
+                            f"Layer {', '.join(namen)}")
+                        if felder_neu:
+                            text = f"{len(felder_neu)} Felder erkannt."
+                            if treffer:
+                                text += f" {treffer} davon als Öffnung markiert."
+                            st.session_state.raster_meldung = ("erfolg", text)
+                        else:
+                            st.session_state.raster_meldung = (
+                                "warnung", "Keine Felder erkannt – anderen Layer "
+                                "wählen oder die Toleranz erhöhen.")
+                        st.rerun()
+
+        if st.session_state.get("raster_meldung"):
+            art_meldung, text = st.session_state.pop("raster_meldung")
+            (st.warning if art_meldung == "warnung" else st.success)(text)
+        for hinweis in st.session_state.raster_hinweise:
+            st.warning(hinweis)
+
+        # ---------------- Felder zuordnen und rechnen ----------------
+        felder = st.session_state.raster_felder
+        if felder:
+            st.markdown("---")
+            st.markdown("##### Fugen und Plattentypen")
+            p1, p2, p3 = st.columns(3)
+            fuge = p1.number_input(
+                "Fugenbreite (mm)", 0.0, 500.0, 15.0, 1.0, key="raster_fuge",
+                help="Die Rasterlinie ist die Fugenmitte: je Seite wird die "
+                     "halbe Fuge abgezogen.")
+            zugabe = p2.number_input(
+                "Zugabe je Seite (mm)", 0.0, 500.0, 0.0, 1.0, key="raster_zugabe",
+                help="Aufkantung oder Falz der Kassette – wird auf das "
+                     "Sichtmaß aufgeschlagen (Abwicklung).")
+            rand_fuge = p3.checkbox(
+                "Fuge auch am Rand", False, key="raster_randfuge",
+                help="Aus: am Außenrand geht die Platte bis zur Rasterlinie. "
+                     "Ein: auch dort die halbe Fuge abziehen.")
+
+            t1, t2 = st.columns([3, 2])
+            typ_text = t1.text_input(
+                "Plattentypen (durch Komma getrennt)",
+                st.session_state.get("raster_typ_text", "Standard"),
+                key="raster_typ_text",
+                help="Je Typ eine Farbe und ein eigenes Material, z. B. "
+                     "`Anthrazit, Silber`. Gleich große Platten verschiedener "
+                     "Typen bleiben getrennte Positionen.")
+            modus = t2.selectbox(
+                "Gleichteile erkennen", list(raster.MODI),
+                format_func=lambda m: raster.MODI[m], key="raster_modus",
+                help="Gedreht und gespiegelt nur, wenn Sichtseite und "
+                     "Walzrichtung es zulassen.")
+            typen = raster_editor.typenliste(
+                [t.strip() for t in typ_text.split(",") if t.strip()])
+            # Wer die Typen umbenennt, soll nicht mit Feldern dastehen, die auf
+            # einen Typ zeigen, den es nicht mehr gibt: die bekommen den ersten.
+            bekannt = {t["name"] for t in typen}
+            for feld_eintrag in felder:
+                if feld_eintrag.typ not in bekannt:
+                    feld_eintrag.typ = typen[0]["name"]
+
+            st.markdown("##### Felder zuordnen")
+            st.caption("Pinsel wählen, dann Felder anklicken oder mit gedrückter "
+                       "Maustaste darüberziehen. Erst **Zuordnung übernehmen** "
+                       "schreibt sie in das Raster.")
+            rueckgabe = raster_editor.raster_editor(
+                felder, typen, key=f"raster_editor_{len(felder)}")
+
+            angewandt = st.session_state.setdefault("raster_staende", set())
+            stempel = rueckgabe.get("stand") if rueckgabe else None
+            if stempel is not None and stempel not in angewandt:
+                angewandt.add(stempel)
+                zahlen = raster_editor.uebernehme_zuordnung(felder, rueckgabe)
+                st.session_state.raster_meldung = (
+                    "erfolg",
+                    f"Zuordnung übernommen: {zahlen['geaendert']} Feld(er) geändert, "
+                    f"{zahlen['oeffnungen']} Öffnung(en).")
+                st.rerun()
+
+            # ---------------- Rechnen ----------------
+            platten, platten_hinweise = raster.platten_aus_feldern(
+                felder, fuge=fuge, zugabe=zugabe, rand_fuge=rand_fuge)
+            positionen = raster.gleichteile(platten, modus=modus)
+            for hinweis in platten_hinweise[:5]:
+                st.warning(hinweis)
+
+            zahlen = raster.kennzahlen(felder, platten, positionen)
+            k = st.columns(5)
+            k[0].metric("Felder", zahlen["felder"])
+            k[1].metric("Öffnungen", zahlen["oeffnungen"])
+            k[2].metric("Platten", zahlen["platten"])
+            k[3].metric("Positionen", zahlen["positionen"],
+                        help="Verschiedene Plattenformen – das ist das Ergebnis "
+                             "der Gleichteilsuche")
+            k[4].metric("Plattenfläche", f"{zahlen['flaeche']:.2f} m²")
+
+            nummern = raster.position_je_feld(positionen)
+            farben_pos = farbkarte([p.nummer for p in positionen])
+            ansicht, liste = st.columns([3, 2])
+            with ansicht:
+                st.markdown(svg_fassade(
+                    felder, nummern, farben_pos,
+                    titel=f"Fassadenansicht – {st.session_state.raster_quelle}"),
+                    unsafe_allow_html=True)
+            with liste:
+                st.markdown("**Positionen**")
+                st.dataframe(pd.DataFrame(raster.positionsliste(positionen)),
+                             hide_index=True, **BREITE)
+
+            with st.expander("Feldliste (welches Feld bekommt welche Position?)"):
+                st.dataframe(pd.DataFrame(raster.feldliste(positionen)),
+                             hide_index=True, **BREITE)
+
+            # ---------------- Uebergabe und Ausgabe ----------------
+            st.markdown("##### Positionen ins Nesting übernehmen")
+            vorhandene = {p.typ for p in positionen}
+            material = dict(st.session_state.get("raster_material", {}))
+            spalten_material = st.columns(max(len(vorhandene), 1))
+            for i, typ in enumerate(sorted(vorhandene)):
+                material[typ] = spalten_material[i].text_input(
+                    f"Material für {typ}", material.get(typ, ""),
+                    key=f"raster_mat_{typ}", placeholder="z. B. Alucobond 4 mm")
+            st.session_state.raster_material = material
+
+            u1, u2 = st.columns([3, 2])
+            ersetzen = u2.checkbox("Teileliste vorher leeren", True,
+                                   key="raster_ersetzen")
+            if u1.button("➡️ Positionen in die Teileliste", type="primary",
+                         key="btn_raster_uebernehmen", disabled=not positionen):
+                zeilen, konturen = [], dict(st.session_state.konturen)
+                for position in positionen:
+                    kontur = [[(float(x), float(y))
+                               for x, y in raster.in_nullpunkt(position.polygon)]]
+                    konturen[position.nummer] = {"kontur": kontur, "stichlinien": []}
+                    zeilen.append({
+                        "Bezeichnung": position.nummer,
+                        "Breite (mm)": round(position.breite, 1),
+                        "Höhe (mm)": round(position.hoehe, 1),
+                        "Anzahl": position.anzahl,
+                        "Material": material.get(position.typ, ""),
+                        "Drehbar": modus != "gleich",
+                        "Kontur": "ja"})
+                st.session_state.konturen = konturen
+                alt = pd.DataFrame(columns=SPALTEN_TEILE) if ersetzen else stand("teile")
+                setze_tabelle("teile", pd.concat(
+                    [alt, pd.DataFrame(zeilen, columns=SPALTEN_TEILE)],
+                    ignore_index=True))
+                # Die Meldung steht beim Knopf, nicht oben am Seitenanfang:
+                # nach dem Neuaufbau bleibt die Seite stehen, wo sie war.
+                st.session_state.raster_uebergabe = (
+                    f"{len(zeilen)} Positionen mit {sum(p.anzahl for p in positionen)} "
+                    f"Platten in die Teileliste übernommen – weiter mit Schritt "
+                    f"② Teile bzw. ③ Material & Nesting.")
+                st.rerun()
+
+            if st.session_state.get("raster_uebergabe"):
+                st.success(st.session_state.pop("raster_uebergabe"))
+
+            a1, a2, a3 = st.columns(3)
+            daten_excel = excel_bytes({
+                "Positionen": pd.DataFrame(raster.positionsliste(positionen)),
+                "Felder": pd.DataFrame(raster.feldliste(positionen))})
+            if daten_excel:
+                a1.download_button("📊 Positionsliste als Excel", daten_excel,
+                                   dateiname("Positionsliste", "xlsx"),
+                                   "application/vnd.openxmlformats-officedocument."
+                                   "spreadsheetml.sheet", **BREITE)
+            if DXF_OK:
+                a2.download_button(
+                    "📐 Montageplan als DXF",
+                    raster.montageplan_als_dxf(felder, positionen).encode("utf-8"),
+                    dateiname("Montageplan", "dxf"), "image/vnd.dxf", **BREITE)
+                a3.download_button(
+                    "📐 Positionen als DXF",
+                    raster.positionen_als_dxf(positionen).encode("utf-8"),
+                    dateiname("Positionen", "dxf"), "image/vnd.dxf", **BREITE)
+
+            if st.button("Raster verwerfen", key="btn_raster_weg"):
+                st.session_state.raster_felder = []
+                st.session_state.raster_quelle = ""
+                st.rerun()
+
+
+# ---------------------------------------------------------
+# Schritt 2: Teile
 # ---------------------------------------------------------
 with schritt1:
     st.markdown('<div class="schritt">Woraus soll geschnitten werden?</div>',
@@ -587,7 +917,7 @@ with schritt1:
 
 
 # ---------------------------------------------------------
-# Schritt 2: Material und Nesting
+# Schritt 3: Material und Nesting
 # ---------------------------------------------------------
 with schritt2:
     st.markdown('<div class="schritt">Worauf wird geschnitten?</div>',
@@ -677,7 +1007,7 @@ with schritt2:
         teile = teile_aus_tabelle(stand("teile"))
         tafeln = tafeln_aus_tabelle(stand("tafeln"))
         if not teile:
-            st.warning("Keine Teile erfasst – bitte zuerst Schritt 1.")
+            st.warning("Keine Teile erfasst – bitte zuerst Schritt ② Teile.")
         elif not tafeln:
             st.warning("Keine Tafel erfasst.")
         else:
@@ -697,20 +1027,20 @@ with schritt2:
             st.session_state.nesting_meldung = (
                 f"Fertig: {st.session_state.ergebnis.anzahl_tafeln} Tafeln, "
                 f"{st.session_state.ergebnis.ausnutzung_echt_prozent:.1f} % Ausnutzung "
-                f"– weiter in Schritt ③ Plan & Ausgabe.")
+                f"– weiter in Schritt ④ Plan & Ausgabe.")
             st.rerun()
 
 
 # ---------------------------------------------------------
-# Schritt 3: Plan und Ausgabe
+# Schritt 4: Plan und Ausgabe
 # ---------------------------------------------------------
 with schritt3:
     erg = st.session_state.ergebnis
     if erg is None:
         st.markdown('<div class="schritt">Noch kein Plan gerechnet</div>',
                     unsafe_allow_html=True)
-        st.info("Erst Teile erfassen (Schritt ①), dann Tafeln wählen und "
-                "**Nesting starten** (Schritt ②).")
+        st.info("Erst Teile erfassen (Schritt ②), dann Tafeln wählen und "
+                "**Nesting starten** (Schritt ③).")
         st.markdown(hilfe_bilder.bild_ablauf(), unsafe_allow_html=True)
     else:
         st.markdown('<div class="schritt">Schachtelplan</div>', unsafe_allow_html=True)
@@ -792,7 +1122,59 @@ with hilfe:
                 unsafe_allow_html=True)
     st.markdown(hilfe_bilder.bild_ablauf(), unsafe_allow_html=True)
 
-    st.markdown("#### Schritt ① – Teile")
+    st.markdown("#### Schritt ① – Raster (Fassade)")
+    st.markdown("""
+Dieser Schritt ist **freiwillig**: Wer die Teile schon hat, fängt bei Schritt ②
+an. Für eine Fassade spart er dagegen das halbe Aufmaß – aus dem Plattenraster
+entstehen die Platten von selbst.
+
+**Woher kommt das Raster?**
+
+* **Von Hand gezeichnet** – Spaltenbreiten und Zeilenhöhen eintippen.
+  `3x1250 900` heißt: dreimal 1250 mm, dann 900 mm. Oder das Gesamtmaß
+  angeben und in gleiche Felder teilen lassen.
+* **Aus einem DXF** – eine beliebige Ansicht einlesen. Das Programm liest die
+  Linien **layerweise**, man kreuzt an, welcher Layer das Raster zeichnet
+  (z. B. `0`), der Rest bleibt liegen. Es erkennt auch Felder, die über
+  mehrere Rasterzellen gehen, und L-förmige Felder. Flächen, deren Rand nicht
+  vollständig gezeichnet ist, zählen nicht mit – eine L-förmige Fassade
+  bekommt so keine Scheinfelder in der offenen Ecke.
+    """)
+    st.markdown(hilfe_bilder.bild_raster(), unsafe_allow_html=True)
+    st.markdown("""
+**Fuge und Zugabe.** Die Rasterlinie gilt als **Fugenmitte**: zwischen zwei
+Platten wird die ganze Fugenbreite abgezogen, je Seite die Hälfte. Am
+Außenrand geht die Platte bis zur Linie – das lässt sich mit *Fuge auch am
+Rand* umstellen. Zur Fensteröffnung hin bleibt die Fuge erhalten. Die
+**Zugabe** schlägt danach wieder auf, z. B. die Aufkantung einer Kassette:
+Sichtmaß + 2 × Zugabe = Zuschnitt.
+
+**Felder zuordnen.** Jedes Feld bekommt mit dem Pinsel einen Plattentyp
+(= Farbe und Material) oder wird als **Öffnung** weggeklickt. Anklicken oder
+mit gedrückter Maustaste über mehrere Felder ziehen; die Zifferntasten wählen
+den Pinsel, Strg+Z nimmt zurück.
+    """)
+    st.markdown(hilfe_bilder.bild_felder(), unsafe_allow_html=True)
+    st.markdown("""
+**Gleichteilsuche.** Zum Schluss sucht das Programm die deckungsgleichen
+Platten und fasst sie zu Positionen zusammen (P01, P02 …):
+    """)
+    st.markdown(hilfe_bilder.bild_gleichteile(), unsafe_allow_html=True)
+    st.markdown("""
+| Einstellung | Wann |
+|---|---|
+| nur gleich ausgerichtet | Regelfall bei Walz- oder Dekorrichtung |
+| auch gedreht | wenn die Platte um 90/180/270° gedreht eingebaut werden darf |
+| auch gespiegelt | nur bei beidseitig gleichem Material – die Sichtseite dreht sich |
+
+Platten verschiedener Typen werden nie zusammengefasst, auch wenn sie gleich
+groß sind. Zum Schluss gehen die Positionen mit Stückzahl und echter Kontur in
+die **Teileliste** – dort läuft alles weiter wie gewohnt. Zusätzlich gibt es
+die Positionsliste als Excel und den **Montageplan als DXF**: er zeigt, welche
+Position in welches Feld gehört.
+    """)
+
+    st.markdown("#### Schritt ② – Teile")
     st.markdown("""
 Die Teile kommen entweder aus **DXF-Dateien** (Abwicklungen aus HiCAD, z. B.
 Alucobond-Kassetten) oder werden **von Hand** erfasst. Beim DXF-Import erkennt
@@ -816,7 +1198,7 @@ eine größere **Konturtoleranz** (typisch 0,1 bis 1 mm).
 Walz- oder Dekorrichtung (Alucobond metallic) bekommen *Keines drehbar*.
     """)
 
-    st.markdown("#### Schritt ② – Material & Nesting")
+    st.markdown("#### Schritt ③ – Material & Nesting")
     st.markdown(hilfe_bilder.bild_schnittfuge(), unsafe_allow_html=True)
     st.markdown("Die drei Schnittarten unterscheiden sich so:")
     st.markdown(hilfe_bilder.bild_schnittarten(), unsafe_allow_html=True)
@@ -831,7 +1213,7 @@ Walz- oder Dekorrichtung (Alucobond metallic) bekommen *Keines drehbar*.
   einfache Verfahren mit und nimmt automatisch den besseren Plan.
     """)
 
-    st.markdown("#### Schritt ③ – Plan & Ausgabe")
+    st.markdown("#### Schritt ④ – Plan & Ausgabe")
     st.markdown(hilfe_bilder.bild_editor(), unsafe_allow_html=True)
     st.markdown("""
 Unter *Von Hand anpassen* lässt sich jedes Teil mit der Maus verschieben,

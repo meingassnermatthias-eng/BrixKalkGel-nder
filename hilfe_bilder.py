@@ -41,23 +41,26 @@ def _pfeil_markierung() -> str:
 
 def bild_ablauf() -> str:
     kaesten = [
-        (20, "1", "Teile", "DXF einlesen oder<br/>von Hand erfassen", HELLBLAU),
-        (250, "2", "Material", "Tafeln und<br/>Schnittparameter", GRUEN),
-        (480, "3", "Plan", "Schachteln, nachbessern,<br/>ausgeben", BLAU),
+        (14, "1", "Raster", "Fassadenraster zeichnen<br/>oder aus DXF holen", ORANGE),
+        (190, "2", "Teile", "Positionen, DXF-Abwicklungen<br/>oder von Hand", HELLBLAU),
+        (366, "3", "Material", "Tafeln und<br/>Schnittparameter", GRUEN),
+        (542, "4", "Plan", "Schachteln, nachbessern,<br/>ausgeben", BLAU),
     ]
     teile = [_pfeil_markierung()]
     for x, nummer, titel, zeile, farbe in kaesten:
-        teile.append(f'<rect x="{x}" y="22" width="190" height="86" rx="10" '
+        teile.append(f'<rect x="{x}" y="22" width="150" height="86" rx="10" '
                      f'fill="#FFFFFF" stroke="{farbe}" stroke-width="2"/>')
-        teile.append(f'<circle cx="{x + 26}" cy="48" r="14" fill="{farbe}"/>')
-        teile.append(_text(x + 26, 53, nummer, 15, "#FFFFFF", "middle", True))
-        teile.append(_text(x + 50, 53, titel, 15, "#111827", "start", True))
+        teile.append(f'<circle cx="{x + 24}" cy="48" r="13" fill="{farbe}"/>')
+        teile.append(_text(x + 24, 53, nummer, 14, "#FFFFFF", "middle", True))
+        teile.append(_text(x + 45, 53, titel, 14, "#111827", "start", True))
         for i, stueck in enumerate(zeile.split("<br/>")):
-            teile.append(_text(x + 16, 78 + i * 16, stueck, 12, GRAU))
-    for x in (215, 445):
-        teile.append(f'<line x1="{x}" y1="65" x2="{x + 30}" y2="65" stroke="{GRAU}" '
+            teile.append(_text(x + 12, 78 + i * 15, stueck, 10.5, GRAU))
+    for x in (166, 342, 518):
+        teile.append(f'<line x1="{x}" y1="65" x2="{x + 22}" y2="65" stroke="{GRAU}" '
                      f'stroke-width="2" marker-end="url(#spitze)"/>')
-    return _rahmen("".join(teile), 690, 125)
+    teile.append(_text(14, 124, "Schritt 1 ist freiwillig: wer die Teile schon hat, "
+                       "faengt bei Schritt 2 an.", 11, GRAU))
+    return _rahmen("".join(teile), 706, 132)
 
 
 # ==========================================================
@@ -241,7 +244,171 @@ def bild_editor() -> str:
     return _rahmen("".join(teile), 690, 260)
 
 
+# ==========================================================
+# 6. Plattenraster: Raster -> Platte
+# ==========================================================
+
+
+def bild_raster() -> str:
+    """Rasterlinie = Fugenmitte; die Platte ist um die halbe Fuge kleiner."""
+    teile = [_pfeil_markierung()]
+    x0, y0 = 30, 46
+    spalten = [150, 150]
+    zeilen = [96, 96]
+    fuge = 16
+
+    teile.append(_text(x0, 24, "Raster (Achsmasse, gestrichelt)", 12, GRAU,
+                       "start", True))
+    y = y0
+    for hoehe in zeilen:
+        x = x0
+        for breite in spalten:
+            teile.append(f'<rect x="{x}" y="{y}" width="{breite}" height="{hoehe}" '
+                         f'fill="#FFFFFF" stroke="{GRAU}" stroke-width="1.4" '
+                         f'stroke-dasharray="6 4"/>')
+            x += breite
+        y += hoehe
+    y = y0
+    for hoehe in zeilen:
+        x = x0
+        for breite in spalten:
+            teile.append(f'<rect x="{x + fuge / 2}" y="{y + fuge / 2}" '
+                         f'width="{breite - fuge}" height="{hoehe - fuge}" rx="2" '
+                         f'fill="{HELLBLAU}" fill-opacity="0.85" stroke="#111827" '
+                         f'stroke-width="1"/>')
+            x += breite
+        y += hoehe
+    teile.append(_text(x0 + spalten[0] / 2, y0 + zeilen[0] / 2 + 4, "Platte", 12,
+                       "#FFFFFF", "middle", True))
+
+    # Fugenmitte hervorheben
+    mx = x0 + spalten[0]
+    unten = y0 + sum(zeilen)
+    teile.append(f'<line x1="{mx}" y1="{y0 - 6}" x2="{mx}" y2="{unten + 6}" '
+                 f'stroke="{ROT}" stroke-width="1.4"/>')
+    rechts = x0 + sum(spalten) + 40
+    teile.append(f'<line x1="{mx}" y1="{y0 + 40}" x2="{rechts - 8}" y2="{y0 + 10}" '
+                 f'stroke="{ROT}" stroke-width="1" stroke-dasharray="3 3"/>')
+    teile.append(_text(rechts, y0 + 6, "Rasterlinie = Fugenmitte", 12, ROT,
+                       "start", True))
+    teile.append(_text(rechts, y0 + 26, "Je Seite wird die halbe Fuge", 11.5, GRAU))
+    teile.append(_text(rechts, y0 + 42, "abgezogen - zwischen zwei", 11.5, GRAU))
+    teile.append(_text(rechts, y0 + 58, "Platten also die ganze.", 11.5, GRAU))
+
+    # Fugenbreite bemassen
+    teile.append(f'<line x1="{mx - fuge / 2}" y1="{unten + 22}" '
+                 f'x2="{mx + fuge / 2}" y2="{unten + 22}" stroke="{ROT}" '
+                 f'stroke-width="1.4" marker-start="url(#spitze)" '
+                 f'marker-end="url(#spitze)"/>')
+    teile.append(_text(mx + 18, unten + 26, "Fuge (z. B. 15 mm)", 11.5, ROT))
+
+    # Aussenkante
+    teile.append(f'<line x1="{x0}" y1="{unten + 10}" x2="{x0}" y2="{unten + 30}" '
+                 f'stroke="{GRUEN}" stroke-width="1.6"/>')
+    teile.append(_text(x0 + 8, unten + 44,
+                       "Aussenkante: Platte geht bis zur Linie (umstellbar)",
+                       11.5, GRUEN))
+    teile.append(_text(x0, unten + 66,
+                       "Zugabe (Aufkantung der Kassette) kommt danach dazu "
+                       "und macht die Platte wieder groesser.", 11.5, GRAU))
+    return _rahmen("".join(teile), 690, 324)
+
+
+# ==========================================================
+# 7. Felder zuordnen
+# ==========================================================
+
+
+def bild_felder() -> str:
+    """Farbe je Plattentyp, Fenster weggeklickt."""
+    teile = ['<defs><pattern id="hilfe_schraeg" width="7" height="7" '
+             'patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
+             f'<line x1="0" y1="0" x2="0" y2="7" stroke="{GRAU}" stroke-width="2"/>'
+             '</pattern></defs>']
+    felder = [
+        (0, 0, HELLBLAU, ""), (1, 0, HELLBLAU, ""), (2, 0, ORANGE, ""),
+        (0, 1, HELLBLAU, ""), (1, 1, None, "Fenster"), (2, 1, ORANGE, ""),
+        (0, 2, GRUEN, ""), (1, 2, GRUEN, ""), (2, 2, ORANGE, ""),
+    ]
+    x0, y0, b, h = 30, 30, 112, 62
+    for sp, ze, farbe, text in felder:
+        x, y = x0 + sp * b, y0 + ze * h
+        if farbe is None:
+            teile.append(f'<rect x="{x}" y="{y}" width="{b}" height="{h}" '
+                         f'fill="{HELLGRAU}" stroke="#374151" stroke-width="1.2"/>')
+            teile.append(f'<rect x="{x}" y="{y}" width="{b}" height="{h}" '
+                         f'fill="url(#hilfe_schraeg)" fill-opacity="0.5"/>')
+            teile.append(_text(x + b / 2, y + h / 2 + 4, text, 11, "#374151",
+                               "middle", True))
+        else:
+            teile.append(f'<rect x="{x}" y="{y}" width="{b}" height="{h}" '
+                         f'fill="{farbe}" fill-opacity="0.85" stroke="#111827" '
+                         f'stroke-width="1.2"/>')
+    beschriftung = [(HELLBLAU, "Typ A (Alucobond anthrazit)"),
+                    (ORANGE, "Typ B (Alucobond silber)"),
+                    (GRUEN, "Typ C (Blech 2 mm)"),
+                    (HELLGRAU, "Oeffnung - keine Platte")]
+    for i, (farbe, text) in enumerate(beschriftung):
+        y = y0 + 8 + i * 22
+        teile.append(f'<rect x="{x0 + 3 * b + 24}" y="{y - 10}" width="14" height="14" '
+                     f'rx="3" fill="{farbe}" stroke="#111827" stroke-width="1"/>')
+        teile.append(_text(x0 + 3 * b + 44, y + 1, text, 11.5, "#111827"))
+    teile.append(_text(x0, y0 + 3 * h + 20,
+                       "Feld anklicken oder mit gedrueckter Maustaste "
+                       "ueber mehrere Felder ziehen", 11, GRAU))
+    return _rahmen("".join(teile), 690, 240)
+
+
+# ==========================================================
+# 8. Gleichteilsuche
+# ==========================================================
+
+
+def bild_gleichteile() -> str:
+    teile = [_pfeil_markierung()]
+    teile.append(_text(24, 20, "9 Felder", 12, GRAU, "start", True))
+    masse = [(96, 54), (96, 54), (70, 54), (96, 54), (96, 54), (70, 54),
+             (96, 40), (96, 40), (70, 40)]
+    farben = [HELLBLAU, HELLBLAU, ORANGE, HELLBLAU, HELLBLAU, ORANGE,
+              GRUEN, GRUEN, BLAU]
+    x, y = 24, 32
+    for i, ((b, h), farbe) in enumerate(zip(masse, farben)):
+        teile.append(f'<rect x="{x}" y="{y + (54 - h)}" width="{b}" height="{h}" '
+                     f'rx="2" fill="{farbe}" fill-opacity="0.85" stroke="#111827" '
+                     f'stroke-width="1"/>')
+        x += b + 8
+        if (i + 1) % 3 == 0:
+            x, y = 24, y + 62
+    teile.append(f'<line x1="300" y1="110" x2="340" y2="110" stroke="{GRAU}" '
+                 f'stroke-width="2" marker-end="url(#spitze)"/>')
+    teile.append(_text(302, 100, "Gleichteilsuche", 11, GRAU))
+
+    teile.append(_text(366, 20, "4 Positionen", 12, GRAU, "start", True))
+    posten = [("P01", 4, HELLBLAU, 96, 54), ("P02", 2, ORANGE, 70, 54),
+              ("P03", 2, GRUEN, 96, 40), ("P04", 1, BLAU, 70, 40)]
+    x, y = 366, 32
+    for i, (nummer, anzahl, farbe, b, h) in enumerate(posten):
+        teile.append(f'<rect x="{x}" y="{y + (54 - h)}" width="{b}" height="{h}" '
+                     f'rx="2" fill="{farbe}" fill-opacity="0.85" stroke="#111827" '
+                     f'stroke-width="1"/>')
+        teile.append(_text(x + b / 2, y + 54 - h / 2 + 4, nummer, 11, "#FFFFFF",
+                           "middle", True))
+        teile.append(_text(x + b + 6, y + 54 - h / 2 + 4, f"{anzahl}x", 12, "#111827",
+                           "start", True))
+        x += b + 44
+        if (i + 1) % 2 == 0:
+            x, y = 366, y + 62
+    teile.append(_text(24, 240, "Nur gleich grosse Platten desselben Typs werden "
+                       "zusammengefasst. Wahlweise zaehlen auch", 11.5, GRAU))
+    teile.append(_text(24, 258, "gedrehte Platten als Gleichteil - gespiegelte nur "
+                       "dann, wenn die Sichtseite es zulaesst.", 11.5, GRAU))
+    return _rahmen("".join(teile), 690, 272)
+
+
 BILDER = {
+    "raster": bild_raster,
+    "felder": bild_felder,
+    "gleichteile": bild_gleichteile,
     "ablauf": bild_ablauf,
     "schnittfuge": bild_schnittfuge,
     "schnittarten": bild_schnittarten,

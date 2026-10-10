@@ -178,3 +178,92 @@ def legende(namen, farben: dict | None = None) -> str:
             f'<span style="width:12px;height:12px;border-radius:2px;margin-right:5px;'
             f'background:{farbe_fuer(name, farben)};border:1px solid #111;"></span>{_esc(name)}</span>')
     return '<div style="margin:6px 0 10px 0;">' + "".join(eintraege) + '</div>'
+
+
+# ==========================================================
+# Fassadenansicht (Plattenraster)
+# ==========================================================
+
+
+def svg_fassade(felder, nummern: dict | None = None, farben: dict | None = None,
+                max_px: int = 900, max_hoehe: int = 700,
+                mit_massen: bool = True, titel: str = "") -> str:
+    """
+    Zeichnet die Fassadenansicht eines Plattenrasters.
+
+    nummern   Feldname -> Positionsnummer (dann wird nach Position gefaerbt)
+    farben    Farbkarte fuer die Positionsnummern bzw. Plattentypen
+    """
+    if not felder:
+        return '<div style="color:#6B7280">Kein Raster vorhanden.</div>'
+
+    xs = [p[0] for f in felder for p in f.polygon]
+    ys = [p[1] for f in felder for p in f.polygon]
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    mm_breit = max(x1 - x0, 1.0)
+    mm_hoch = max(y1 - y0, 1.0)
+    rand = 14
+    kopf = 22 if titel else 6
+    skala = min((max_px - 2 * rand) / mm_breit, (max_hoehe - 2 * rand) / mm_hoch)
+    b_px = mm_breit * skala
+    h_px = mm_hoch * skala
+    gesamt_b = b_px + 2 * rand
+    gesamt_h = h_px + 2 * rand + kopf
+
+    def sx(x):
+        return rand + (x - x0) * skala
+
+    def sy(y):
+        return kopf + rand + h_px - (y - y0) * skala
+
+    teile = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="100%" '
+        f'viewBox="0 0 {gesamt_b:.0f} {gesamt_h:.0f}" role="img">',
+        '<defs><pattern id="fassade_schraeg" width="8" height="8" '
+        'patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
+        '<line x1="0" y1="0" x2="0" y2="8" stroke="#6B7280" stroke-width="2"/>'
+        '</pattern></defs>',
+    ]
+    if titel:
+        teile.append(
+            f'<text x="{rand}" y="15" font-family="sans-serif" font-size="13" '
+            f'font-weight="600" fill="#111">{_esc(titel)}</text>')
+
+    for feld in felder:
+        punkte = " ".join(f"{sx(x):.2f},{sy(y):.2f}" for x, y in feld.polygon)
+        if feld.aus:
+            teile.append(f'<polygon points="{punkte}" fill="#E5E7EB" '
+                         f'stroke="#374151" stroke-width="1.2"/>')
+            teile.append(f'<polygon points="{punkte}" fill="url(#fassade_schraeg)" '
+                         f'fill-opacity="0.45" stroke="none"/>')
+            continue
+        marke = (nummern or {}).get(feld.name, feld.typ)
+        teile.append(f'<polygon points="{punkte}" fill="{farbe_fuer(marke, farben)}" '
+                     f'fill-opacity="0.85" stroke="#111827" stroke-width="1.2"/>')
+
+    for feld in felder:
+        b_feld, h_feld = feld.breite * skala, feld.hoehe * skala
+        if b_feld < 40 or h_feld < 18:
+            continue
+        mx, my = feld.mitte
+        mx, my = sx(mx), sy(my)
+        if feld.aus:
+            teile.append(
+                f'<text x="{mx:.1f}" y="{my + 4:.1f}" text-anchor="middle" '
+                f'font-family="sans-serif" font-size="10" font-weight="600" '
+                f'fill="#374151">&#214;ffnung</text>')
+            continue
+        marke = (nummern or {}).get(feld.name, feld.typ)
+        versatz = -3 if (mit_massen and h_feld > 34) else 4
+        teile.append(
+            f'<text x="{mx:.1f}" y="{my + versatz:.1f}" text-anchor="middle" '
+            f'font-family="sans-serif" font-size="11" font-weight="700" '
+            f'fill="#FFFFFF">{_esc(marke)}</text>')
+        if mit_massen and h_feld > 34:
+            teile.append(
+                f'<text x="{mx:.1f}" y="{my + 11:.1f}" text-anchor="middle" '
+                f'font-family="sans-serif" font-size="9" fill="#F9FAFB">'
+                f'{feld.name} &#183; {feld.breite:.0f} &#215; {feld.hoehe:.0f}</text>')
+
+    teile.append("</svg>")
+    return "".join(teile)
