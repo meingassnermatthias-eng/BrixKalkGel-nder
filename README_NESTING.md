@@ -1,228 +1,42 @@
 # Nesting – Verschnittoptimierung
 
-Zuschnittoptimierung für die Werkstatt: Stangen und Profile (1D), Bleche und
-Platten (2D) sowie DXF-Import von Abwicklungen aus HiCAD (z. B.
-Alucobond-Kassetten).
+Blech- und Plattenzuschnitt für die Werkstatt, mit DXF-Import aus HiCAD
+(z. B. Alucobond-Kassetten). Alle Maße in Millimeter.
 
 ## Am eigenen Rechner starten
 
 **Windows:** Ordner entpacken (nicht aus der ZIP heraus starten), dann
-Doppelklick auf `start_nesting.bat`. Das Skript
+Doppelklick auf `start_nesting.bat`. Das Skript sucht Python, bietet die
+Installation über `winget` an, falls es fehlt, richtet beim ersten Start eine
+eigene Umgebung ein und öffnet die Oberfläche im Browser. Beim ersten Start
+wird außerdem angeboten, einen **Startknopf auf dem Desktop** anzulegen;
+nachträglich geht das über `Desktop-Verknuepfung.bat`.
 
-1. sucht Python und bietet die Installation über `winget` an, falls es fehlt,
-2. legt beim ersten Start eine eigene Umgebung im Unterordner `.venv` an und
-   lädt die Pakete (dauert ein paar Minuten),
-3. startet die Oberfläche im Browser.
+**macOS / Linux:** `chmod +x start_nesting.sh` (einmalig), dann
+`./start_nesting.sh`.
 
-Jeder weitere Start geht sofort. Das schwarze Fenster muss während der Arbeit
-offen bleiben. Ohne `winget` (ältere Windows-Versionen) Python von Hand von
-[python.org](https://www.python.org/downloads/) installieren und dabei
-**„Add Python to PATH"** ankreuzen.
-
-**Startknopf auf dem Desktop:** Beim ersten Start wird danach gefragt;
-nachträglich jederzeit per Doppelklick auf `Desktop-Verknuepfung.bat`. Die
-Verknüpfung bekommt das Symbol aus `nesting.ico` und zeigt auf
-`start_nesting.bat` im Programmordner — der Ordner darf danach nicht mehr
-verschoben oder umbenannt werden.
-
-**macOS / Linux:**
-
-```bash
-chmod +x start_nesting.sh    # nur einmal nötig
-./start_nesting.sh
-```
-
-**Von Hand:**
-
-```bash
-pip install -r requirements.txt
-streamlit run app_nesting.py
-```
-
-**Ohne Installation ausprobieren:** Das Projekt auf GitHub öffnen, oben rechts
-*Code → Codespaces → Create codespace* wählen und im Terminal
-`streamlit run app_nesting.py` eingeben. Läuft komplett im Browser.
+**Von Hand:** `pip install -r requirements.txt` und
+`streamlit run app_nesting.py`.
 
 Die Oberfläche läuft nur auf dem eigenen Rechner (`localhost`) – es gehen keine
 Daten nach außen.
 
-Die mitgelieferte `.streamlit/config.toml` schaltet Streamlits Begrüßung mit
-der E-Mail-Abfrage ab (`showEmailPrompt = false`) und sendet keine
-Nutzungsstatistik. Ohne sie bleibt der erste Start unter Windows und macOS bei
-`Email:` stehen und wartet auf eine Eingabe – unter Linux fällt das nicht auf,
-weil Streamlit dort automatisch im Headless-Modus läuft und gar nicht fragt.
-Fehlt die Datei, legt `start_nesting.bat` bzw. `start_nesting.sh` sie an.
+## Der Ablauf in drei Schritten
 
-## Dateien
-
-| Datei | Inhalt |
+| Schritt | Was dort passiert |
 |---|---|
-| `app_nesting.py` | Streamlit-Oberfläche (1D, 2D, DXF-Import, Hilfe) |
-| `nesting.py` | Rechenkern 1D und 2D (Bounding-Box), ohne Fremdbibliotheken |
-| `kontur_nesting.py` | Echtes Konturnesting (True Shape Nesting), braucht numpy |
-| `dxf_import.py` | DXF lesen (HiCAD/Alucobond) und Schachtelplan als DXF schreiben |
-| `zeichnung.py` | Schnittpläne als SVG für die Oberfläche |
-| `pdf_export.py` | Werkstattdruck als PDF |
-| `test_nesting.py` | Tests des Rechenkerns – `python3 test_nesting.py` |
-| `test_dxf.py` | Tests des DXF-Wegs – `python3 test_dxf.py` |
-| `test_kontur.py` | Tests des Konturnestings – `python3 test_kontur.py` |
-| `plan_editor.py` | Plan von Hand nachbessern (Streamlit-Komponente) |
-| `komponenten/plan_editor/` | Oberfläche des Editors (HTML/SVG) |
-| `test_plan_editor.py` | Tests des Editors – `python3 test_plan_editor.py` |
-| `start_nesting.bat` / `.sh` | Startet das Programm (Windows / macOS, Linux) |
-| `Desktop-Verknuepfung.bat` | Legt den Startknopf auf den Windows-Desktop |
-| `nesting.ico` | Symbol für die Verknüpfung |
+| ① **Teile** | DXF einlesen oder Teile von Hand erfassen; Teileliste mit Sammelaktionen |
+| ② **Material & Nesting** | Tafelformate, Schnittfuge, Besäumung, Schnittart – dann schachteln |
+| ③ **Plan & Ausgabe** | Pläne ansehen, von Hand nachbessern, als PDF / Excel / CSV / DXF ausgeben |
 
-Alle Maße in Millimeter.
+Der Reiter **Hilfe** erklärt jeden Schritt mit Bildern.
 
-## 1D – Stangen und Profile
+## Schritt ① – Teile
 
-Teile und Lagerlängen erfassen, „Zuschnitt optimieren“ drücken. Berücksichtigt
-werden Sägeblattstärke, Anschnitt am Stangenanfang, Reserve am Stangenende und
-die Grenze, ab der ein Reststück als verwertbar gilt.
-
-* Für jede Stange wird die bestmögliche Belegung exakt gerechnet (begrenztes
-  Rucksackproblem, 1-mm-Raster), danach die nächste Stange.
-* Teile werden nur mit Teilen desselben **Profils** kombiniert. Ein leeres
-  Profilfeld heißt „passt auf jede Stange“, eine Lagerstange ohne Profil
-  „passt für alle Teile“.
-* Reststücke aus dem Lager (Haken *Reststück*) werden bevorzugt verbraucht.
-* Ausgabe: Schnittplan als PDF, Schnitt-/Stangen-/Bestellliste als Excel, CSV.
-
-Schnellerfassung statt Tabelle:
-
-```
-1050 x 9 Pfosten
-1980;6;Handlauf;Rohr 42,4x2
-```
-
-## 2D – Bleche und Platten
-
-Drei Schnittarten:
-
-* **Guillotine** – durchgehende Schnitte in Streifen, passend für Tafelschere,
-  Plattensäge und Kreissäge.
-* **Frei** – dichte Verschachtelung der Außenmaße (MaxRects), nur sinnvoll, wenn
-  die Maschine Konturen fährt (Laser, Plasma, CNC-Fräse).
-* **Kontur** – echtes Nesting mit der tatsächlichen Teileform (siehe unten).
-
-Schnittfuge (bzw. Fräserdurchmesser) und umlaufende Besäumung werden
-mitgerechnet. Teile können um 90° gedreht werden; bei Walz- oder Dekorrichtung
-(z. B. Alucobond metallic) den Haken *Drehbar* entfernen.
-
-Ausgabe: Schachtelplan als PDF, Teileliste als Excel/CSV und der komplette
-Schachtelplan als DXF (Layer `TAFEL`, `KONTUR`, `FRAESLINIE`, `BESCHRIFTUNG`).
-
-## Konturnesting (True Shape Nesting)
-
-Schachtelt mit der echten Teileform statt mit dem umschreibenden Rechteck.
-Teile greifen ineinander, Ausklinkungen werden mitgenutzt und kleine Teile
-landen bei Bedarf in den Fensterausschnitten großer Teile.
-
-Was es bringt (gemessen in `test_kontur.py`, Tafel 1250×2500 bzw. 1500×3000):
-
-| Auftrag | Außenmaß-Nesting | Konturnesting |
-|---|---|---|
-| 16 Dreiecke 600×400 | 2 Tafeln, 31 % | **1 Tafel, 61 %** |
-| 10 L-Winkel 800×800 | 4 Tafeln, 22 % | **2 Tafeln, 43 %** |
-| Rahmen mit Ausschnitt + Einleger | 2 Tafeln | **1 Tafel** |
-| Reine Rechtecke | 2 Tafeln, 57 % | 2 Tafeln, 57 % |
-| Kassetten mit 30-mm-Eckausklinkung | 3 Tafeln, 58 % | 3 Tafeln, 58 % |
-
-Kurz: Je stärker die Teile von der Rechteckform abweichen, desto größer der
-Gewinn. Bei Rechtecken und bei Kassetten mit nur kleinen Eckausklinkungen
-bringt es nichts – dort begrenzt die Tafelbreite, nicht die Teileform.
-
-**So rechnet das Verfahren.** Jede Kontur wird je Drehwinkel in ein Raster
-übersetzt (Scanline-Füllung nach der Even-Odd-Regel, dadurch sind Ausschnitte
-automatisch frei) und um die halbe Schnittfuge aufgeweitet. Anschließend fällt
-jedes Teil an der günstigsten Stelle nach unten und rutscht dabei in vorhandene
-Taschen; bewertet wird nach eingeschlossener Restfläche. Teile, die so nicht
-mehr unterkommen, werden über eine Kreuzkorrelation (FFT) auf der ganzen Tafel
-gesucht – so finden sie auch in Fensterausschnitte hinein.
-
-**Die Schnittfuge ist garantiert.** Gerastert wird nach außen (eine Zelle gilt
-als belegt, sobald die Kontur sie berührt), aufgeweitet wird um die halbe
-Schnittfuge. Überschneidungsfreie Masken bedeuten deshalb zwingend, dass die
-echten Konturen mindestens die volle Schnittfuge auseinanderliegen. Im Zweifel
-steht etwas mehr Abstand, nie weniger. `test_kontur.py` rechnet jeden erzeugten
-Plan exakt nach – Kantenschnitt, Einschluss und kleinster Abstand.
-
-**Einstellungen:**
-
-* **Rasterweite** – 5 mm ist ein guter Kompromiss; 1–2 mm schachtelt dichter,
-  rechnet aber deutlich länger. Bei sehr großen Tafeln vergröbert das Programm
-  automatisch und sagt Bescheid.
-* **Erlaubte Drehung** – 90°-Schritte (Standard), zusätzlich 45°-Schritte, oder
-  keine Drehung. Teile mit Walz- oder Dekorrichtung bleiben über den Haken
-  *Drehbar* ohnehin ungedreht (auch 180° würde die Laufrichtung umkehren).
-* **Ausschnitte und Taschen mitnutzen** – schaltet die Vollsuche zu.
-* **Suchtiefe** – Anzahl durchprobierter Schachtelstrategien (1–5).
-
-**Sicherheitsnetz:** Das Programm rechnet zusätzlich das schnelle
-Außenmaß-Verfahren mit und übernimmt dessen Plan, falls er mit weniger Tafeln
-auskommt (kommt bei reinen Rechteckaufträgen vor). Konturnesting kann dadurch
-nie schlechter ausfallen als *Frei*; der Wechsel wird im Ergebnis angezeigt.
-
-## Plan von Hand nachbessern
-
-Unter dem Schachtelplan liegt der Bereich **Plan von Hand anpassen**. Dort
-lässt sich jedes Teil mit der Maus auf der Tafel verschieben – für die Fälle,
-in denen der Zuschneider es besser weiß als die Rechnung.
-
-**Wie viele Tafeln gleichzeitig?** Über *Tafeln gleichzeitig anzeigen* wählt
-man 1, 2, 4, 6, 10, 15 oder **Alle**. Bei mehreren Tafeln werden sie
-nebeneinander in ein Raster gelegt und gemeinsam skaliert, sodass sie
-vergleichbar bleiben; bei einer Auswahl unter „Alle" bestimmt der Regler
-*ab Tafel*, wo die Anzeige beginnt. Liegen mehrere Tafeln nebeneinander, lässt
-sich ein Teil **direkt von einer Tafel auf die andere ziehen** – es sucht sich
-dort selbst einen freien Platz.
-
-| Bedienung | Wirkung |
-|---|---|
-| Teil anklicken und ziehen | verschieben, auch auf eine andere Tafel |
-| **R** oder die Drehknöpfe | 90° drehen (Winkelfeld für beliebige Grad) |
-| Pfeiltasten | 1 mm schieben, mit Umschalt 10 mm |
-| **Entf** oder *Ablegen* | Teil neben die Tafel legen |
-| Knopf in der Ablage | Teil auf die zuletzt angeklickte Tafel einsetzen |
-| **Strg+Z** / *Zurück* | Schritt zurück |
-| *Verwerfen* | zurück auf den gerechneten Plan |
-
-Beim Ziehen fangen sich die Teile an der Tafelkante und an den Nachbarn –
-genau im Abstand der eingestellten Schnittfuge; zusätzlich greift ein frei
-wählbares Raster (Standard 5 mm). Das Fangen lässt sich abschalten.
-
-Der Editor rechnet laufend mit: Teile, die sich überschneiden, die Schnittfuge
-unterschreiten oder über den Tafelrand ragen, werden rot umrandet und in der
-Statuszeile gezählt. Die Ausnutzung wird live mitgeführt.
-
-**Einrücken.** Wird ein Teil auf einem Nachbarn oder über dem Tafelrand
-losgelassen, rückt es von selbst auf die nächste freie Stelle – dasselbe nach
-dem Drehen. Gesucht wird in wachsenden Ringen um die abgelegte Stelle, also mit
-der kürzestmöglichen Verschiebung; die Statuszeile nennt den Weg in Millimetern.
-Reicht die Nachbarschaft nicht, wird die ganze Tafel abgesucht. Findet sich
-nirgends Platz, bleibt das Teil liegen und sagt es. Die Drehung bleibt dabei
-immer so, wie sie eingestellt ist. Wer von Hand exakt setzen will, schaltet
-*Einrücken* in der Werkzeugleiste ab – dann bleibt das Teil rot liegen.
-
-Erst **Änderungen übernehmen** schreibt den Plan um. Danach nutzen Teileliste,
-PDF, Excel und DXF-Export den angepassten Plan. Abgelegte Teile wandern in die
-Liste der nicht eingeplanten Teile und können auf einer anderen Tafel wieder
-eingesetzt werden – so lassen sich Teile zwischen Tafeln umhängen.
-
-Wird ein Teil eingesetzt, sucht der Editor selbst einen freien Platz und
-probiert dafür alle vier Drehlagen durch. Findet er keinen, legt er das Teil
-in die linke untere Ecke und sagt es in der Statuszeile – dann hilft nur
-Schieben von Hand oder eine andere Tafel.
-
-## DXF-Import (HiCAD / Alucobond)
-
-Eine oder mehrere DXF-Dateien hochladen. Erkannt werden Außenkontur,
-Ausschnitte (Löcher) und Fräs-/Falzlinien; identische Teile werden zu einer
-Position mit Stückzahl gebündelt, ein Text innerhalb der Kontur wird als
-Positionsbezeichnung übernommen.
-
-Zuordnung der Layer:
+**DXF-Import.** Eine oder mehrere Dateien hochladen. Erkannt werden
+Außenkontur, Ausschnitte (Löcher) und Fräs-/Falzlinien; identische Teile
+werden zu einer Position mit Stückzahl gebündelt, ein Text innerhalb der
+Kontur wird als Positionsbezeichnung übernommen.
 
 | Layername enthält | Bedeutung |
 |---|---|
@@ -230,30 +44,107 @@ Zuordnung der Layer:
 | Fräs, Falz, Biege, Nut, Kant, Knick, Fold, Bend | Fräs-/Falzlinie, kein Schnitt |
 | Bemaßung, Maß, Text, Beschriftung, Achse, Defpoints | wird ignoriert |
 
-Unbekannte Layer gelten im Zweifel als Kontur. Jede Zuordnung lässt sich unter
-*Layer-Zuordnung anpassen* von Hand ändern.
+Unbekannte Layer gelten im Zweifel als Kontur; jede Zuordnung lässt sich unter
+*Einleseoptionen* von Hand ändern. Meldet das Programm offene Konturzüge, hilft
+eine größere **Konturtoleranz** (typisch 0,1 bis 1 mm). Mit *Erkannte Teile als
+DXF* lässt sich vor dem Nesting prüfen, was gelesen wurde.
 
-Weitere Stellschrauben:
+**Von Hand erfassen:** eine Zeile je Position, `Breite x Höhe x Anzahl` oder
+`Breite;Höhe;Anzahl;Bezeichnung;Material`.
 
-* **Konturtoleranz** – maximale Lücke zwischen zwei Elementen, die noch als
-  geschlossene Kontur gilt. Meldet das Programm offene Konturzüge, hilft ein
-  größerer Wert (typisch 0,1–1 mm).
-* **Kleinste Teilefläche** – kleinere Konturen (Symbole, Bohrbilder) werden
-  ignoriert.
+**Sammelaktionen** wirken auf alle Zeilen der Teileliste: Material setzen,
+alle/keine Teile drehbar, Stückzahlen verdoppeln, Liste leeren. Teile mit Walz-
+oder Dekorrichtung (Alucobond metallic) bekommen *Keines drehbar*.
 
-Mit *Erkannte Teile als DXF* lässt sich vor dem Nesting prüfen, was das
-Programm gelesen hat.
+## Schritt ② – Material & Nesting
+
+Tafelformate aus der Vorlagenliste übernehmen oder eintragen. **Anzahl** leer
+lassen heißt unbegrenzt verfügbar, **Material** leer lassen heißt „passt für
+alle Teile". Dazu Schnittfuge (Sägeblatt oder Fräser), Besäumung des
+Tafelrands und die Schnittart:
+
+* **Guillotine** – jeder Schnitt geht durch die ganze Tafel. Tafelschere,
+  Plattensäge, Kreissäge.
+* **Frei** – Rechtecke dicht gepackt (MaxRects). Für Laser, Plasma, CNC-Fräse.
+* **Kontur** – echtes Nesting mit der tatsächlichen Teileform.
+
+### Konturnesting
+
+Teile greifen ineinander, Ausklinkungen werden mitgenutzt und kleine Teile
+landen bei Bedarf in den Fensterausschnitten großer Teile. Gemessen in
+`test_kontur.py`:
+
+| Auftrag | Außenmaß-Nesting | Konturnesting |
+|---|---|---|
+| 16 Dreiecke 600×400 | 2 Tafeln, 31 % | **1 Tafel, 61 %** |
+| 10 L-Winkel 800×800 | 4 Tafeln, 22 % | **2 Tafeln, 43 %** |
+| Rahmen mit Ausschnitt + Einleger | 2 Tafeln | **1 Tafel** |
+| Reine Rechtecke | 2 Tafeln, 57 % | 2 Tafeln, 57 % |
+
+Je stärker die Teile von der Rechteckform abweichen, desto größer der Gewinn.
+Bei Rechtecken bringt es nichts – dort rechnet das Programm zusätzlich das
+schnelle Verfahren mit und übernimmt automatisch den besseren Plan.
+
+**So rechnet es:** Jede Kontur wird je Drehwinkel gerastert (Scanline,
+Even-Odd-Regel, dadurch sind Ausschnitte automatisch frei) und um die halbe
+Schnittfuge aufgeweitet. Jedes Teil fällt an der günstigsten Stelle nach unten
+und rutscht in vorhandene Taschen; Teile, die so nicht unterkommen, werden über
+eine Kreuzkorrelation (FFT) auf der ganzen Tafel gesucht. Weil nach außen
+gerundet wird, ist die eingestellte **Schnittfuge garantiert** eingehalten – im
+Zweifel steht etwas mehr Abstand, nie weniger.
+
+Stellschrauben: Rasterweite (5 mm ist ein guter Kompromiss), erlaubte Drehung
+(90°- oder 45°-Schritte oder keine), Ausschnitte mitnutzen, Suchtiefe.
+
+## Schritt ③ – Plan & Ausgabe
+
+**Von Hand anpassen.** Jedes Teil lässt sich mit der Maus verschieben, drehen,
+ablegen und wieder einsetzen – auch von einer Tafel auf die andere. Wählbar
+ist, wie viele Tafeln gleichzeitig zu sehen sind (1 bis alle).
+
+| Bedienung | Wirkung |
+|---|---|
+| Teil anklicken und ziehen | verschieben, auch auf eine andere Tafel |
+| **R** oder die Drehknöpfe | 90° drehen (Winkelfeld für beliebige Grad) |
+| Pfeiltasten | 1 mm schieben, mit Umschalt 10 mm |
+| **Entf** oder *Ablegen* | Teil neben die Tafel legen |
+| Knopf in der Ablage | Teil auf die aktive Tafel einsetzen |
+| **Strg+Z** / *Verwerfen* | Schritt zurück bzw. auf den gerechneten Plan |
+
+Beim Ziehen fangen sich die Teile an der Tafelkante und an den Nachbarn – genau
+im Abstand der Schnittfuge – und an einem einstellbaren Raster. Überschneidungen
+werden rot markiert; ein rot losgelassenes Teil **rückt selbst auf die nächste
+freie Stelle** (abschaltbar über *Einrücken*). Erst **Änderungen übernehmen**
+schreibt den Plan um; PDF, Excel und DXF nutzen danach den angepassten Plan.
+
+**Ausgabe:** Schachtelplan als PDF (mit Zeichnung je Tafel), Teile- und
+Tafelliste als Excel und CSV, kompletter Plan als DXF (Layer `TAFEL`,
+`KONTUR`, `FRAESLINIE`, `BESCHRIFTUNG`).
+
+## Dateien
+
+| Datei | Inhalt |
+|---|---|
+| `app_nesting.py` | Oberfläche (die Datei wird gestartet) |
+| `nesting.py` | Rechenkern über die Außenmaße, ohne Fremdbibliotheken |
+| `kontur_nesting.py` | Echtes Konturnesting, braucht numpy |
+| `dxf_import.py` | DXF lesen (HiCAD/Alucobond) und Schachtelplan schreiben |
+| `plan_editor.py` + `komponenten/plan_editor/` | Plan von Hand nachbessern |
+| `zeichnung.py` | Pläne als SVG für den Bildschirm |
+| `pdf_export.py` | Werkstattdruck als PDF |
+| `hilfe_bilder.py` | Erklärbilder im Hilfe-Reiter |
+| `test_*.py` | Tests, ohne pytest ausführbar (`python3 test_nesting.py` usw.) |
 
 ## Grenzen
 
-* Die Schnittarten *Guillotine* und *Frei* schachteln über die **Außenmaße**.
-  Wer die echte Teileform ausnutzen will, nimmt die Schnittart *Kontur*.
-* Das Konturnesting rechnet im Raster: die Teile stehen gelegentlich ein paar
-  Millimeter weiter auseinander als nötig – nie enger als die Schnittfuge.
+* Geschachtelt wird in der Ebene; Biegeteile werden als Abwicklung behandelt.
+* Gedreht wird in 90°- oder 45°-Schritten, nicht in beliebigen Winkeln.
+* Das Konturnesting rechnet im Raster – die Teile stehen gelegentlich ein paar
+  Millimeter weiter auseinander als nötig, nie enger als die Schnittfuge.
 * Teile werden von oben eingelegt, nicht seitlich eingeschoben. Eine Tasche,
   die nur seitlich erreichbar wäre, bleibt frei.
-* Gedreht wird in 90°- oder 45°-Schritten, nicht in beliebigen Winkeln.
 * Die Optimierung ist eine sehr gute Heuristik, kein mathematisches Optimum.
-  Bei gemischten Rechteckaufträgen liegt sie erfahrungsgemäß wenige Prozent
-  über dem theoretischen Bestwert.
 * Der ausgegebene Plan ersetzt die Kontrolle in der Werkstatt nicht.
+
+Die frühere Stangen- und Profiloptimierung (1D) ist entfallen; sie steckt bei
+Bedarf noch in der Versionsgeschichte des Projekts.

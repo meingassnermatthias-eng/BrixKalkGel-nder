@@ -1,11 +1,9 @@
 """
-Tests fuer den Nesting-Rechenkern. Ausfuehren mit:  python3 test_nesting.py
+Tests fuer den Rechenkern (Bounding-Box-Nesting).
+Ausfuehren mit:  python3 test_nesting.py
 """
 
-from nesting import (
-    Teil, Stange, Tafel, Zuschnitt2D,
-    optimize_1d, optimize_2d, parse_1d_eingabe, parse_2d_eingabe,
-)
+from nesting import Tafel, Zuschnitt2D, optimize_2d, parse_2d_eingabe
 
 fehler = []
 
@@ -16,94 +14,6 @@ def pruefe(bedingung, text):
     else:
         print(f"  FEHL {text}")
         fehler.append(text)
-
-
-def test_1d_grundfall():
-    print("1D: exakte Aufteilung ohne Saegeblatt")
-    teile = [Teil(2000, 3, "A"), Teil(1000, 3, "B")]
-    stangen = [Stange(6000, None, "Stange 6 m")]
-    e = optimize_1d(teile, stangen, saegeblatt=0, min_reststueck=99999)
-    pruefe(e.anzahl_stangen == 2, f"2 Stangen erwartet, erhalten {e.anzahl_stangen}")
-    pruefe(not e.fehlende, "keine fehlenden Teile")
-    pruefe(abs(e.gesamt_nutzteil - 9000) < 1e-6, f"9000 mm Nutzteil, erhalten {e.gesamt_nutzteil}")
-    pruefe(e.verschnitt_prozent < 26, f"Verschnitt {e.verschnitt_prozent:.1f} % < 26 %")
-    for plan in e.plaene:
-        summe = sum(p.laenge for p in plan.platzierungen)
-        pruefe(summe <= plan.nutzlaenge + 1e-6, "Stange nicht ueberfuellt")
-
-
-def test_1d_saegeblatt_und_positionen():
-    print("1D: Saegeblatt wird beruecksichtigt")
-    teile = [Teil(2000, 3, "A")]
-    stangen = [Stange(6000, None, "Stange 6 m")]
-    e = optimize_1d(teile, stangen, saegeblatt=5, min_reststueck=99999)
-    # 3 x (2000+5) = 6015 > 6000 -> passt nicht auf eine Stange
-    pruefe(e.anzahl_stangen == 2, f"2 Stangen wegen Schnittfuge, erhalten {e.anzahl_stangen}")
-    plan = e.plaene[0]
-    for a, b in zip(plan.platzierungen, plan.platzierungen[1:]):
-        pruefe(abs(b.start - a.ende - 5) < 1e-6, "Schnittfuge zwischen den Teilen")
-
-
-def test_1d_anschnitt_und_rest():
-    print("1D: Anschnitt, Endschnitt und Restverwertung")
-    teile = [Teil(1000, 4, "A")]
-    stangen = [Stange(6000, None, "Stange 6 m")]
-    e = optimize_1d(teile, stangen, saegeblatt=3, anschnitt=20, endschnitt=10,
-                    min_reststueck=1500)
-    plan = e.plaene[0]
-    pruefe(plan.platzierungen[0].start == 20, "erstes Teil startet nach dem Anschnitt")
-    pruefe(plan.rest >= 1500 and plan.rest_verwertbar, f"Rest {plan.rest:.0f} mm ist verwertbar")
-    # verwertbarer Rest zaehlt nicht als Verschnitt
-    pruefe(e.verschnitt < 600, f"Verschnitt {e.verschnitt:.0f} mm ohne verwertbaren Rest")
-
-
-def test_1d_reststuecke_zuerst():
-    print("1D: Reststuecke aus dem Lager werden bevorzugt")
-    teile = [Teil(1400, 2, "A")]
-    stangen = [
-        Stange(6000, None, "Neuware 6 m"),
-        Stange(3000, 1, "Rest 3 m", reststueck=True),
-    ]
-    e = optimize_1d(teile, stangen, saegeblatt=3, reste_zuerst=True, min_reststueck=500)
-    pruefe(any(p.reststueck for p in e.plaene), "Reststueck wurde verwendet")
-    pruefe(e.anzahl_stangen == 1, f"1 Stange reicht, erhalten {e.anzahl_stangen}")
-
-
-def test_1d_mehrere_profile():
-    print("1D: getrennte Optimierung je Profil")
-    teile = [
-        Teil(2500, 2, "Pfosten", "Rohr 40x40"),
-        Teil(1800, 2, "Handlauf", "Rohr 42,4"),
-    ]
-    stangen = [
-        Stange(6000, None, "Rohr 40x40 - 6 m", profil="Rohr 40x40"),
-        Stange(6000, None, "Rohr 42,4 - 6 m", profil="Rohr 42,4"),
-    ]
-    e = optimize_1d(teile, stangen, saegeblatt=3)
-    profile = {p.profil for p in e.plaene}
-    pruefe(profile == {"Rohr 40x40", "Rohr 42,4"}, f"beide Profile geplant: {profile}")
-    for plan in e.plaene:
-        for pl in plan.platzierungen:
-            passend = ("Pfosten" if plan.profil == "Rohr 40x40" else "Handlauf")
-            pruefe(pl.bezeichnung == passend, "kein Profilmix auf einer Stange")
-
-
-def test_1d_zu_langes_teil():
-    print("1D: uebergrosses Teil wird gemeldet")
-    teile = [Teil(7000, 1, "Zu lang"), Teil(1000, 2, "OK")]
-    stangen = [Stange(6000, None, "Stange 6 m")]
-    e = optimize_1d(teile, stangen, saegeblatt=3)
-    pruefe(len(e.fehlende) == 1 and e.fehlende[0][0] == "Zu lang", f"fehlend: {e.fehlende}")
-    pruefe(e.anzahl_stangen == 1, "restliche Teile trotzdem geplant")
-
-
-def test_1d_begrenzter_bestand():
-    print("1D: begrenzter Lagerbestand")
-    teile = [Teil(2000, 6, "A")]
-    stangen = [Stange(6000, 1, "Stange 6 m")]
-    e = optimize_1d(teile, stangen, saegeblatt=0)
-    pruefe(e.anzahl_stangen == 1, "nur die vorhandene Stange verwendet")
-    pruefe(e.fehlende and e.fehlende[0][2] == 3, f"3 Teile offen, erhalten {e.fehlende}")
 
 
 def _keine_ueberlappung(plan):
@@ -168,7 +78,7 @@ def test_2d_besaeumung():
 
 
 def test_material_zuordnung():
-    print("Zuordnung: leere Material-/Profilangabe passt auf alles")
+    print("Zuordnung: leere Materialangabe passt auf alles")
     # 2D: Teil ohne Material, Tafel mit Material
     e = optimize_2d([Zuschnitt2D(500, 400, 2, "DXF-Teil", material="")],
                     [Tafel(1250, 2500, None, "Tafel", material="Alucobond 4 mm")],
@@ -186,21 +96,9 @@ def test_material_zuordnung():
         for p in plan.platzierungen:
             pruefe(p.bezeichnung == "Alu", "kein Materialmix auf einer Tafel")
 
-    # 1D: Teil ohne Profil, Stange mit Profil
-    e3 = optimize_1d([Teil(1000, 3, "Teil", profil="")],
-                     [Stange(6000, None, "Rohr", profil="Rohr 40x40")], saegeblatt=0)
-    pruefe(not e3.fehlende and e3.anzahl_stangen == 1,
-           f"Teil ohne Profil platziert: {e3.fehlende}")
-
 
 def test_parser():
     print("Parser: Schnellerfassung")
-    t = parse_1d_eingabe("1250 x 4\n2000*2 Pfosten\n3000;2;Handlauf;Rohr 42,4\n# Kommentar\n")
-    pruefe(len(t) == 3, f"3 Positionen, erhalten {len(t)}")
-    pruefe(t[0].laenge == 1250 and t[0].anzahl == 4, f"{t[0]}")
-    pruefe(t[1].anzahl == 2 and t[1].bezeichnung == "Pfosten", f"{t[1]}")
-    pruefe(t[2].profil == "Rohr 42,4" and t[2].anzahl == 2, f"{t[2]}")
-
     z = parse_2d_eingabe("1000 x 500 x 3\n800;600;2;Wange;Blech 2 mm")
     pruefe(len(z) == 2, f"2 Positionen, erhalten {len(z)}")
     pruefe(z[0].breite == 1000 and z[0].hoehe == 500 and z[0].anzahl == 3, f"{z[0]}")
@@ -208,33 +106,26 @@ def test_parser():
 
 
 def test_realistischer_fall():
-    print("Praxisfall: Gelaender 12 lfm")
-    teile = [
-        Teil(1050, 9, "Pfosten", "Rohr 40x40x2"),
-        Teil(1980, 6, "Handlauf", "Rohr 42,4x2"),
-        Teil(940, 24, "Fuellstab", "Rundstahl 12"),
-    ]
-    stangen = [
-        Stange(6000, None, "Rohr 40x40x2 - 6 m", profil="Rohr 40x40x2", preis=48.0),
-        Stange(6000, None, "Rohr 42,4x2 - 6 m", profil="Rohr 42,4x2", preis=39.0),
-        Stange(6000, None, "Rundstahl 12 - 6 m", profil="Rundstahl 12", preis=12.5),
-    ]
-    e = optimize_1d(teile, stangen, saegeblatt=3, anschnitt=10, endschnitt=10,
-                    min_reststueck=400)
+    print("Praxisfall: Fassadenblech")
+    teile = [Zuschnitt2D(1060, 660, 12, "Kassette", "Alucobond 4 mm", drehbar=False),
+             Zuschnitt2D(600, 500, 8, "Blende", "Alucobond 4 mm"),
+             Zuschnitt2D(1200, 300, 6, "Attika", "Alucobond 4 mm")]
+    tafeln = [Tafel(1500, 3200, None, "Alucobond 1500x3200", "Alucobond 4 mm",
+                    preis=310.0)]
+    e = optimize_2d(teile, tafeln, saegeblatt=6, besaeumung=10, modus="frei")
     pruefe(not e.fehlende, f"alles geplant, fehlend: {e.fehlende}")
-    pruefe(e.ausnutzung_prozent > 85, f"Ausnutzung {e.ausnutzung_prozent:.1f} % > 85 %")
-    print(f"       -> {e.anzahl_stangen} Stangen, {e.gesamt_kosten:.2f} EUR, "
-          f"Verschnitt {e.verschnitt_prozent:.1f} %, verwertbare Reste "
-          f"{e.verwertbare_reste:.0f} mm")
+    pruefe(e.ausnutzung_prozent > 60, f"Ausnutzung {e.ausnutzung_prozent:.1f} %")
+    for plan in e.plaene:
+        pruefe(_keine_ueberlappung(plan), "keine Ueberlappung")
+    print(f"       -> {e.anzahl_tafeln} Tafeln, {e.gesamt_kosten:.2f} EUR, "
+          f"Verschnitt {e.verschnitt_prozent:.1f} %")
 
 
 if __name__ == "__main__":
     for fn in [
-        test_1d_grundfall, test_1d_saegeblatt_und_positionen, test_1d_anschnitt_und_rest,
-        test_1d_reststuecke_zuerst, test_1d_mehrere_profile, test_1d_zu_langes_teil,
-        test_1d_begrenzter_bestand, test_2d_guillotine, test_2d_frei_und_drehung,
-        test_2d_nicht_drehbar, test_2d_besaeumung, test_material_zuordnung,
-        test_parser, test_realistischer_fall,
+        test_2d_guillotine, test_2d_frei_und_drehung, test_2d_nicht_drehbar,
+        test_2d_besaeumung, test_material_zuordnung, test_parser,
+        test_realistischer_fall,
     ]:
         fn()
     print()

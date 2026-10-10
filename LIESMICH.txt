@@ -18,6 +18,8 @@ SO STARTEST DU DAS PROGRAMM (Windows)
      - Danach laedt es die benoetigten Pakete. Das dauert
        ein paar Minuten. Das schwarze Fenster bitte offen
        lassen, bis sich der Browser oeffnet.
+     - Es wird gefragt, ob ein Startknopf auf dem Desktop
+       angelegt werden soll -> mit J bestaetigen.
 
   Jeder weitere Start geht sofort.
   Das schwarze Fenster muss waehrend der Arbeit offen bleiben -
@@ -27,14 +29,8 @@ SO STARTEST DU DAS PROGRAMM (Windows)
 STARTKNOPF AUF DEM DESKTOP
 ---------------------------------------------------------------
 
-  Beim ersten Start wird gefragt, ob ein Knopf auf dem Desktop
-  angelegt werden soll -> mit J bestaetigen.
-
-  Nachtraeglich geht das jederzeit mit einem Doppelklick auf
+  Nachtraeglich jederzeit mit einem Doppelklick auf
   Desktop-Verknuepfung.bat
-
-  Danach startet das Programm per Doppelklick auf das Symbol
-  "Nesting - Verschnittoptimierung" auf dem Desktop.
 
   WICHTIG: Den Programmordner danach nicht mehr verschieben
   oder umbenennen - sonst findet die Verknuepfung ihr Ziel
@@ -42,43 +38,29 @@ STARTKNOPF AUF DEM DESKTOP
   doppelklicken.
 
 
-WAS DAS PROGRAMM KANN
+DER ABLAUF - DREI SCHRITTE
 ---------------------------------------------------------------
 
-  Reiter "Stangen & Profile (1D)"
-     Zuschnitt von Rohren, Flachstahl, Handlauf.
-     Beruecksichtigt Saegeblattstaerke, Anschnitt und
-     verwertbare Reststuecke.
+  1  TEILE
+     DXF-Dateien aus HiCAD einlesen (Alucobond-Kassetten
+     und andere Abwicklungen) oder Teile von Hand erfassen.
+     Sammelaktionen setzen Material oder Drehbarkeit fuer
+     alle Teile auf einmal.
 
-  Reiter "Bleche & Platten (2D)"
-     Schachtelplan fuer Tafeln. Drei Schnittarten:
-       Guillotine - durchgehende Schnitte (Tafelschere, Saege)
-       Frei       - Rechtecke dicht verschachtelt (Laser, Plasma)
-       Kontur     - echtes Nesting mit der wirklichen Teileform,
-                    Teile greifen ineinander
+  2  MATERIAL & NESTING
+     Tafelformate waehlen, Schnittfuge und Besaeumung
+     eintragen, Schnittart waehlen:
+        Guillotine - durchgehende Schnitte (Tafelschere, Saege)
+        Frei       - Rechtecke dicht gepackt (Laser, Plasma)
+        Kontur     - echte Teileform, Teile greifen ineinander
+     Dann "Nesting starten".
 
-  Reiter "DXF-Import"
-     Abwicklungen aus HiCAD einlesen (z. B. Alucobond-
-     Kassetten). Erkennt Aussenkontur, Ausschnitte und
-     Fraes-/Falzlinien. Der fertige Plan laesst sich wieder
-     als DXF ausgeben.
+  3  PLAN & AUSGABE
+     Plan ansehen, von Hand nachbessern (Teile mit der Maus
+     ziehen, auch von Tafel zu Tafel) und ausgeben als
+     PDF, Excel, CSV oder DXF.
 
-  Plan von Hand nachbessern
-     Unter dem Schachtelplan: "Plan von Hand anpassen".
-     Oben waehlbar, wie viele Tafeln gleichzeitig zu sehen
-     sind (1, 2, 4, 6, 10, 15 oder Alle). Liegen mehrere
-     nebeneinander, kann man Teile von einer Tafel auf die
-     andere ziehen.
-     Teile mit der Maus ziehen, R dreht um 90 Grad,
-     Entf legt ein Teil neben die Tafel, Pfeiltasten
-     schieben millimeterweise. Ueberschneidungen werden
-     rot angezeigt. Teile, die rot liegen, ruecken beim
-     Loslassen selbst auf die naechste freie Stelle
-     (abschaltbar ueber "Einruecken"). Erst
-     "Aenderungen uebernehmen" schreibt den Plan um.
-
-  Ausgabe ueberall: PDF fuer die Werkstatt, Excel und CSV
-  fuer die Listen, DXF fuer die Maschine.
+  Der Reiter HILFE erklaert alles noch einmal mit Bildern.
 
 
 WENN ETWAS HAKT
@@ -87,10 +69,14 @@ WENN ETWAS HAKT
   Das Fenster bleibt stehen bei
      "Welcome to Streamlit! ... Email:"
   -> Einfach Enter druecken, das Feld bleibt leer.
-     (Ab dieser Fassung kommt die Frage nicht mehr.)
 
   Der Browser oeffnet sich nicht
   -> Im Browser von Hand aufrufen:  http://localhost:8501
+
+  Teile stehen unter "Nicht eingeplant"
+  -> Meist stimmt das Material nicht ueberein: in der
+     Teileliste und bei den Tafeln dieselbe Schreibweise
+     verwenden, oder das Materialfeld leer lassen.
 
   Der Desktop-Knopf findet sein Ziel nicht
   -> Der Programmordner wurde verschoben. Einmal
